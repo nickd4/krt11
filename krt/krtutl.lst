@@ -1,0 +1,1558 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   1	KRTDEF	Packet types (edited from VMS Kermit)
+    8-  11	Protocol V1.0 message types
+    8-  22	Protocol V2.0 message types
+    8-  29	Protocol V4.0 message types
+    8-  35	Generic Kermit commands
+    8-  57	Acknowledgment modifiers (V4.0)
+    8-  63	End of file packet modifier
+    8-  67	Send/receive states
+   10-   2	Local data		; /63/ consolidated here..
+   11-   3	The real work of MOUNT	; /BBS/ added
+   12-   2	The real work of RENAME
+   13-   2	The real work of DELETE
+   14-   2	The real work of COPY	; /BBS/ heavily modified..
+   15-   2	Parse device and file name
+   16-   2	Check file name(s)
+   17-   2	Like bufemp, but return data to a buffer
+   18-   2	Calculate time used to send last packet	; /62/ all new..
+   19-   2	Print received error packet on terminal
+   20-   2	Get time of day		; /62/ use cvttim to include ticks
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTUTL	Mount, rename, delete, copy, paksta, asctim, etc..
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5
+      6					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      7					;
+      8					;	modify asctim to output ticks, restored optional time value pointer
+      9					;	move various items here from root to save space
+     10
+     11					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     12					;
+     13					;	added logical disk mount using TSX+ emts
+     14					;	50/60Hz test added to asctim
+     15					;	cleaned up the delete, rename and copy subroutines..
+     16					;	move copy file name checking to c$copy, now shared with PRINT
+     17					;	try to mount .DEV logical disk if .DSK default fails
+     18					;	fixed COPY error handling when out file is too small
+     19
+     20					;	Copyright 1984 Change Software, Inc.
+     21					;
+     22					;	18-Jul-84  16:14:46 Brian Nelson
+     23
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2						.include "IN:KRTDEF.MAC"
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 8
+KRTDEF	Packet types (edited from VMS Kermit)
+
+      1						.sbttl	KRTDEF	Packet types (edited from VMS Kermit)
+      2					;	.ident	"V03.63"	; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7
+      8					;	Note the use of the "=:" direct assignment ensures these
+      9					;	rather long names are unique in the first 6 characters.
+     10
+     11						.sbttl	Protocol V1.0 message types
+     12
+     13		000131 			MSG$ACK		=: 'Y&137	; acknowledgment (ACK)
+     14		000102 			MSG$BREAK	=: 'B&137	; break transmission (EOT)
+     15		000104 			MSG$DATA	=: 'D&137	; data packet
+     16		000132 			MSG$EOF		=: 'Z&137	; end of file (EOF)
+     17		000105 			MSG$ERROR	=: 'E&137	; error
+     18		000106 			MSG$FILE	=: 'F&137	; file header
+     19		000116 			MSG$NAK		=: 'N&137	; negative acknowledgment (NAK)
+     20		000123 			MSG$SND		=: 'S&137	; send initiate
+     21
+     22						.sbttl	Protocol V2.0 message types
+     23
+     24		000103 			MSG$COMMAND	=: 'C&137	; host command
+     25		000107 			MSG$GENERIC	=: 'G&137	; generic Kermit command
+     26		000113 			MSG$KERMIT	=: 'K&137	; perform Kermit command (text)
+     27		000122 			MSG$RCV		=: 'R&137	; receive initiate
+     28
+     29						.sbttl	Protocol V4.0 message types
+     30
+     31		000101 			MSG$ATR		=: 'A&137	; attribute packet
+     32		000111 			MSG$SER		=: 'I&137	; server initialization
+     33		000130 			MSG$TEXT	=: 'X&137	; text header message
+     34
+     35						.sbttl	Generic Kermit commands
+     36
+     37		000114 			GN$BYE		=: 'L&137	; logout
+     38		000103 			GN$CONNECT	=: 'C&137	; connect to a directory
+     39		000113 			GN$COPY		=: 'K&137	; copy file
+     40		000105 			GN$DELETE	=: 'E&137	; delete a file
+     41		000104 			GN$DIRECTORY	=: 'D&137	; directory
+     42		000125 			GN$DISK		=: 'U&137	; disk usage
+     43		000106 			GN$EXIT		=: 'F&137	; finish (stop the server)
+     44		000110 			GN$HELP		=: 'H&137	; help
+     45		000112 			GN$JOURNAL	=: 'J&137	; perform journal functions
+     46		000111 			GN$LOGIN	=: 'I&137	; login
+     47		000120 			GN$PRINT	=: 'P&137	; print
+     48		000120 			GN$PROGRAM	=: 'P&137	; run program and pass data
+     49		000121 			GN$QUERY	=: 'Q&137	; query status
+     50		000122 			GN$RENAME	=: 'R&137	; rename file
+     51		000115 			GN$SEND		=: 'M&137	; send a message to a user
+     52		000123 			GN$SUBMIT	=: 'S&137	; submit
+     53		000124 			GN$TYPE		=: 'T&137	; type a file specification
+     54		000126 			GN$VARIABLE	=: 'V&137	; return/set variable state
+     55		000127 			GN$WHO		=: 'W&137	; who's logged in?
+     56
+     57						.sbttl	Acknowledgment modifiers (V4.0)
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 8-1
+Acknowledgment modifiers (V4.0)
+
+     58
+     59		000132 			ABT$ALL		=: 'Z&137	; abort entire stream of files
+     60		000130 			ABT$CUR		=: 'X&137	; abort current file
+     61		000105 			ABT$ERROR	=: 'E&137	; abort because an error occured
+     62
+     63						.sbttl	End of file packet modifier
+     64
+     65		000104 			EOF$DISCARD	=: 'D&137	; discard data from previous file
+     66
+     67						.sbttl	Send/receive states
+     68
+     69		000100 			STA.CCA		=:  100		; ^C from keyboard abort
+     70		000101 			STA.ABO		=: 'A&137	; abort
+     71		000110 			STA.ATR		=: 'H&137	; send attributes
+     72		000102 			STA.BRK		=: 'B&137	; break link
+     73		000103 			STA.COM		=: 'C&137	; transaction complete
+     74		000104 			STA.DAT		=: 'D&137	; data
+     75		000132 			STA.EOF		=: 'Z&137	; end of file or reply
+     76		000106 			STA.FIL		=: 'F&137	; file name header
+     77		000111 			STA.INI		=: 'I&137	; init
+     78		000122 			STA.RIN		=: 'R&137	; receive init
+     79		000123 			STA.SIN		=: 'S&137	; send init
+     80		000130 			STA.TYP		=: 'X&137	; extended reply
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 9
+Send/receive states
+
+      1						.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+      2
+      3
+      4						.mcall	.CSISPC	,.DELETE,.GTIM	,.RENAME
+      5
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 10
+Send/receive states
+
+      1
+      2						.sbttl	Local data		; /63/ consolidated here..
+      3
+      4	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+      5	000000	   000G	   163 		mntemt:	.byte	lun.ld ,163		; emt args to mount a logical device..
+      6	000002	   000 	   000 		ldunit:	.byte	0 ,0			; second byte is read/write flag
+      7	000004	000006'			elfmop:	.word	elfmo			; pointer to .rad50 file name
+      8	000006	000000 	000000 	000000 	elfmo:	.word	0 ,0 ,0 ,0		; .rad50 file name lives here
+      9	000016	000000 			dfflag:	.word	0			; try default extents (.DSK,.DEV) flag
+     10	000020	   003 	   135 		dismnt:	.byte	3 ,135			; dump the LDn assign for..
+     11	000022	   000 	   000 		disunit:.byte	0 ,0			; ..this unit number
+     12	000024	000000 			dkflag:	.word	0			; assign this mount DK if <>
+     13					;nocache:.byte	2 ,135			; dismount the world,
+     14					;	.word	0			; cache wise..
+     15	000026	   114 	   104 	   156 	newdk:	.asciz	"LDn:"			; defdir string is loaded from here
+     16						.even
+     17	000034	000000 	000000 	000000 	csiext:	.word	0 ,0 ,0 ,0		; .csispc default extents
+     18	000044	000000 	000000 	000000 	renlst:	.word	0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ; rename list is built here
+     19	000074	000000 			hitime:	.word	0			; /62/ high word of time
+     20	000076	000000 			lotime:	.word	0			; /62/ low word
+     21	000100	000000 			hours:	.word	0			; /62/ output integer hours
+     22	000102	000000 			mins:	.word	0			; /62/ minutes
+     23	000104	000000 			secs:	.word	0			; /62/ seconds
+     24	000106	000000 			ticks:	.word	0			; /62/ ticks
+     25	000110	   005 			timemt:	.byte	5			; /62/ number of arguments
+     26	000111	   000 				.byte	0			; /62/ reserved
+     27	000112	000074'				.word	hitime			; /62/ cvttim input time address
+     28	000114	000100'				.word	hours			; /62/ hours address
+     29	000116	000102'				.word	mins			; /62/ mins
+     30	000120	000104'				.word	secs			; /62/ secs
+     31	000122	000106'				.word	ticks			; /62/ ticks
+     32
+     33	000000					.psect	$pdata
+     34	000000	   105 	   162 	   162 	pepmsg:	.asciz	"Error message from remote:"<cr><lf>  ; /63/
+     35	000035	   100 	   101 	   102 	sta.0:	.byte	STA.CCA	,STA.ABO,STA.BRK,STA.COM,STA.DAT,STA.FIL
+     36	000043	   110 	   111 	   122 		.byte	STA.ATR	,STA.INI,STA.RIN,STA.SIN,STA.TYP,STA.EOF
+     37	000051	   000 				.byte	0
+     38						.even
+     39	000052	000104'			sta.1:	.word	10$
+     40	000054	000127'	000145'	000160'		.word	20$	,30$	,40$	,50$	,60$	,70$
+     41	000070	000273'	000313'	000334'		.word	80$	,90$	,100$	,110$	,120$	,130$
+     42	000104	   102 	   101 	   104 	 10$:	.asciz	"BAD  Unknown State"
+     43	000127	   103 	   103 	   101 	 20$:	.asciz	"CCA  ^C Abort"
+     44	000145	   101 	   102 	   117 	 30$:	.asciz	"ABO  Abort"
+     45	000160	   102 	   122 	   113 	 40$:	.asciz	"BRK  Break Transmission"
+     46	000210	   103 	   117 	   115 	 50$:	.asciz	"COM  Transaction Complete"
+     47	000242	   104 	   101 	   124 	 60$:	.asciz	"DAT  Data"
+     48	000254	   106 	   111 	   114 	 70$:	.asciz	"FIL  File Name"
+     49	000273	   101 	   124 	   122 	 80$:	.asciz	"ATR  Attributes"
+     50	000313	   111 	   116 	   111 	 90$:	.asciz	"INI  Server Init"
+     51	000334	   122 	   111 	   116 	 100$:	.asciz	"RIN  Receive Init"
+     52	000356	   123 	   111 	   116 	 110$:	.asciz	"SIN  Send Init"
+     53	000375	   124 	   131 	   120 	 120$:	.asciz	"TYP  Extended Reply"
+     54	000421	   105 	   117 	   106 	 130$:	.asciz	"EOF  End of File"
+     55	000442	   124 	   117 	   104 	sta.2:	.asciz	"TOD "			; "Time Of Day" header for log entry
+     56	000447	   040 	   040 	   000 	sta.3:	.asciz	"  "
+     57	000452	   110 	   172 	   040 	sta.4:	.asciz	"Hz   Elapsed-Time: "
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 10-1
+Local data		; /63/ consolidated here..
+
+     58	000476	   015 	   012 		sta.5:	.ascii	<cr><lf>		; two newlines from here
+     59	000500	   015 	   012 	   000 	sta.6:	.asciz	<cr><lf>
+     60	000503	   040 	   075 	   040 	sta.7:	.asciz	" = STA."
+     61						.even
+     62
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 11
+Local data		; /63/ consolidated here..
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	The real work of MOUNT	; /BBS/ added
+      4
+      5					;	input:	argbuf	= entire argument string, unparsed
+      6					;		 r1	= if <> then dismount
+      7
+      8	000000				mount::	upcase	argbuf			; upper case all args
+	000000	016700 	000000G			mov	argbuf	,r0
+	000004	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      9	000010	016702 	000000G			mov	argbuf	,r2		; pointer to LDn:
+     10	000014	001426 				beq	20$			; not there..
+     11	000016	122722 	000114 			cmpb	#'L	,(r2)+		; is first byte an "L" ?
+     12	000022	001023 				bne	20$			; nope..
+     13	000024	122722 	000104 			cmpb	#'D	,(r2)+		; is second byte a "D" ?
+     14	000030	001020 				bne	20$			; nope..
+     15
+     16	000032	121227 	000072 			cmpb	(r2)	,#':		; is there a colon after LD?
+     17	000036	001420 				beq	30$			; ya
+     18	000040	005701 				tst	r1			; /62/ dismount?
+     19	000042	001402 				beq	10$			; no
+     20	000044	105712 				tstb	(r2)			; ya, thus a
+     21	000046	001414 				beq	30$			; null here = unit 0
+     22	000050	121227 	000040 		10$:	cmpb	(r2)	,#space		; is there a space delimiter?
+     23	000054	001411 				beq	30$			; ya
+     24	000056	112200 				movb	(r2)+	,r0		; get unit #, sign bit should be zero
+     25	000060	162700 	000070 			sub	#'7+1	,r0		; check unit is 0 - 7 only, and..
+     26	000064	062700 	000010 			add	#7+1	,r0		; ..turn ascii into integer
+     27	000070	103404 				bcs	40$			; good number crosses 0, "LD:" won't
+     28	000072	012700 	000007 		20$:	mov	#7	,r0		; bad num, insert error code
+     29	000076	000561 				br	130$			; and bail out
+     30
+     31	000100	005000 			30$:	clr	r0			; set LD unit number to 0
+     32	000102	110067 	000002'		40$:	movb	r0	,ldunit		; save LD unit number
+     33	000106	062700 	000060 			add	#'0	,r0		; turn it into an ascii digit
+     34	000112	110067 	000030'			movb	r0	,newdk+2	; and stick that into "LDn:"
+     35
+     36	000116	005701 				tst	r1			; /62/ dismount this one?
+     37	000120	001402 				beq	50$			; no
+     38	000122	000167 	000356 			jmp	170$			; ya..
+     39
+     40	000126	012703 	000006'		50$:	mov	#elfmo	,r3		; where to write .rad50 file name
+     41	000132	121227 	000072 			cmpb	(r2)	,#':		; is there a colon after LDn?
+     42	000136	001001 				bne	60$			; no
+     43	000140	105722 				tstb	(r2)+			; ya, bump past it..
+     44	000142	121227 	000040 		60$:	cmpb	(r2)	,#space		; is there a space delimiter?
+     45	000146	001001 				bne	78$			; no
+     46	000150	105722 				tstb	(r2)+			; ya, bump past it..
+     47	000152	010246 			78$:	mov	r2	,-(sp)		; save pointer
+     48	000154					scan	#space	,r2		; look for a trailing space
+	000154	010246 				mov	r2	,-(sp)
+	000156	005046 				clr	-(sp)
+	000160	152716 	000040 			bisb	#space	,@sp
+	000164	004767 	000000G			call	scanch
+     49	000170	005700 				tst	r0			; find one?
+     50	000172	001427 				beq	100$			; not found
+     51	000174	060200 				add	r2	,r0		; point one byte past the space
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 11-1
+The real work of MOUNT	; /BBS/ added
+
+     52	000176	105040 				clrb	-(r0)			; bump back to space and hose it
+     53	000200	105720 				tstb	(r0)+			; point at first char after delimiter
+     54	000202	122027 	000104 			cmpb	(r0)+	,#'D		; iz it a "D" ?
+     55	000206	001015 				bne	90$			; nope..
+     56	000210	122027 	000113 			cmpb	(r0)+	,#'K		; iz it a "K"
+     57	000214	001012 				bne	90$			; nope
+     58	000216	105710 				tstb	@r0			; end of the line?
+     59	000220	001405 				beq	80$			; ya, it's "DK"  (no colon)
+     60	000222	122027 	000072 			cmpb	(r0)+	,#':		; no, is it "DK:" ?  (with colon)
+     61	000226	001005 				bne	90$			; no, so wutever it is, it's no good
+     62	000230	105710 				tstb	@r0			; anything else there?
+     63	000232	001003 				bne	90$			; ya, thus it's a bad assign
+     64
+     65	000234	010667 	000024'		80$:	mov	sp	,dkflag		; set flag to make it DK:
+     66	000240	000404 				br	100$			; and continue
+     67
+     68	000242	012700 	000000G		90$:	mov	#er$dk	,r0		; logical assign not supported..
+     69	000246	005726 				tst	(sp)+			; pop now useless pointer
+     70	000250	000514 				br	160$			; bail out
+     71
+     72	000252	005067 	000016'		100$:	clr	dfflag			; init try default extents flag
+     73	000256	012602 				mov	(sp)+	,r2		; recover pointer to csi input string
+     74	000260					calls	fparse	,<r2,#srcnam>	; make "DK:name.dsk"="DEV:name.dsk"
+	000260	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000262	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	000266	010246 				        mov	r2	,-(sp)	; push it
+	000270	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000272	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	000276	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000300	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     75	000302	012700 	000000G			mov	#srcnam	,r0		; pass pointer to docsi
+     76	000306	004767 	001204 			call	docsi			; see if it'll fly
+     77	000312	103473 				bcs	160$			; oops, err mapped by docsi
+     78	000314	005743 				tst	-(r3)			; is there an extent??
+     79	000316	001004 				bne	110$			; ya..
+     80	000320	010667 	000016'			mov	sp	,dfflag		; flag to try .DSK and .DEV defaults
+     81	000324	012713 	016003 			mov	#^rDSK	,@r3		; and insert default .DSK extent
+     82	000330	012700 	000000'		110$:	mov	#mntemt	,r0		; load emt args to
+     83	000334	104375 				emt	375			; attempt to mount specified device
+     84	000336	103045 				bcc	140$			; no problem
+     85	000340	113700 	000052 			movb	@#errbyt,r0		; get the mount error
+     86	000344	116767 	000002'	000022'		movb	ldunit	,disunit	; prep to dump bogus logical device
+     87	000352	022700 	000003 			cmp	#3	,r0		; is LDn already in use?
+     88	000356	001011 				bne	120$			; no
+     89	000360	012700 	000020'			mov	#dismnt	,r0		; ya, load args to
+     90	000364	104375 				emt	375			; dump it then mount new one
+     91	000366	103360 				bcc	110$			; it worked
+     92
+     93	000370	113700 	000052 			movb	@#errbyt,r0		; it didn't work, get the error
+     94	000374	022700 	000003 			cmp	#3	,r0		; is LDn already in use?
+     95	000400	001353 				bne	110$			; no
+     96	000402	022700 	000006 		120$:	cmp	#6	,r0		; file not found?
+     97	000406	001015 				bne	130$			; no
+     98	000410	010046 				mov	r0	,-(sp)		; ya, save the error code
+     99	000412	012700 	000020'			mov	#dismnt	,r0		; don't leave not avail dev lurking
+    100	000416	104375 				emt	375			; no errors possible here..
+    101	000420	012600 				mov	(sp)+	,r0		; recover the error code
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 11-2
+The real work of MOUNT	; /BBS/ added
+
+    102
+    103	000422	005767 	000016'			tst	dfflag			; couldn't find .DSK default?
+    104	000426	001405 				beq	130$			; no
+    105	000430	012713 	014736 			mov	#^rDEV	,@r3		; ya, now try .DEV extent
+    106	000434	005067 	000016'			clr	dfflag			; but only try it once
+    107	000440	000733 				br	110$			; go back for .DEV attempt
+    108
+    109	000442	006300 			130$:	asl	r0			; error mapping uses word indexing
+    110	000444	016000 	000000G			mov	mnterr(r0),r0		; simple
+    111	000450	000414 				br	160$
+    112	000452	005767 	000024'		140$:	tst	dkflag			; make this mount DK?
+    113	000456	001410 				beq	150$			; no
+    114	000460					strcpy	#defdir	,#newdk		; /62/ ya, copy "LDn:" to defdir
+	000460	012746 	000026'			mov	#newdk	,-(sp)
+	000464	012746 	000000G			mov	#defdir	,-(sp)
+	000470	004767 	000000G			jsr	pc	,strcpy
+    115	000474	005067 	000024'			clr	dkflag			; and reset flag
+    116
+    117	000500	005000 			150$:	clr	r0			; no errors
+    118	000502				160$: ;	mov	r0	,-(sp)		; save any error
+    119					;	mov	#nocache,r0		; don't leave anything cached
+    120					;	emt	375			; no errors possible here..
+    121					;	mov	(sp)+	,r0		; restore saved error
+    122	000502	000207 				return
+    123
+    124	000504	116767 	000002'	000022'	170$:	movb	ldunit	,disunit	; prep to dump logical disk
+    125	000512	012700 	000020'			mov	#dismnt	,r0		; load dismount emt arguments
+    126	000516	104375 				emt	375			; dump it
+    127	000520	103007 				bcc	180$			; it worked
+    128	000522	123727 	000052 	000003 		cmpb	@#errbyt,#3		; didn't happen, which error?
+    129	000530	001003 				bne	180$			; ignore error other than channel open
+    130	000532	012700 	000000G			mov	#ld$bsy	,r0		; pointer to appropriate error msg
+    131	000536	000761 				br	160$			; and bail out
+    132
+    133	000540	012700 	000000G		180$:	mov	#defdir	,r0		; string to check
+    134	000544	012701 	000026'			mov	#newdk	,r1		; what it can no longer be
+    135	000550	012702 	000005 			mov	#5	,r2		; number of bytes to compare
+    136	000554	122021 			190$:	cmpb	(r0)+	,(r1)+		; check one, bump for next time
+    137	000556	001350 				bne	150$			; no match
+    138	000560					sob	r2	,190$		; match, try next one
+	000560	005302 				dec	r2
+	000562	001374 				bne	190$
+    139	000564					strcpy	#defdir	,#dkname	; /62/ dismounted DK, so goto HOME dir
+	000564	012746 	000000G			mov	#dkname	,-(sp)
+	000570	012746 	000000G			mov	#defdir	,-(sp)
+	000574	004767 	000000G			jsr	pc	,strcpy
+    140	000600	000737 				br	150$			; done..
+    141
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 12
+The real work of MOUNT	; /BBS/ added
+
+      1
+      2						.sbttl	The real work of RENAME
+      3
+      4					;	input:	 (r5)	= first file name, .asciz
+      5					;		2(r5)	= second file name, .asciz
+      6
+      7	000602				rename::save	<r2,r3>
+	000602	010246 				 mov	r2	,-(sp)
+	000604	010346 				 mov	r3	,-(sp)
+      8	000606	004767 	001012 			call	check2			; /BBS/ check file names
+      9	000612	005700 				tst	r0			; /BBS/ ok?
+     10	000614	001052 				bne	20$			; /BBS/ no
+     11	000616	005001 				clr	r1			; /BBS/ init # of files renamed count
+     12	000620	012703 	000044'			mov	#renlst	,r3		; where to build the .rename list
+     13	000624	012700 	000000G			mov	#srcnam	,r0		; string address
+     14	000630	004767 	000662 			call	docsi			; do the first one
+     15	000634	103442 				bcs	20$			; /BBS/ oops
+     16	000636	012700 	000000G			mov	#filnam	,r0		; now do the second file name
+     17	000642	004767 	000650 			call	docsi			; ok
+     18	000646	103435 				bcs	20$			; /BBS/ oops
+     19	000650	016700 	000044'			mov	renlst	,r0		; get the device name
+     20	000654					calls	fetch	,<r0>		; /62/ try to fetch the handler
+	000654	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000656	010046 				  mov	r0	,-(sp)		; doing it thusly generates less code
+	000660	010605 				  mov	sp	,r5		; set pointer to argument list
+	000662	004767 	000000G			  jsr	pc	,fetch		; call the subroutine
+	000666	005726 				  tst	(sp)+			; pop parameter list from stack
+	000670	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     21	000672	005700 				tst	r0			; /62/ did it work?
+     22	000674	001022 				bne	20$			; /62/ no
+     23	000676					.rename	#rtwork,#lun.in,#renlst	; do the rename please
+	000676	012700 	000000G			MOV	#rtwork,R0
+	000702	012710 	002000G			MOV	#lun.in+<4.*^O400>,@R0
+	000706	012760 	000044'	000002 		MOV	#renlst,2.(R0)
+	000714	104375 				EMT	^O375
+     24	000716	103006 				bcc	10$			; /BBS/ ok..
+     25	000720	113700 	000052 			movb	@#errbyt,r0		; map the rename error
+     26	000724	006300 				asl	r0			; word indexing
+     27	000726	016000 	000000G			mov	renerr(r0),r0		; simple
+     28	000732	000403 				br	20$
+     29	000734	012701 	000001 		10$:	mov	#1	,r1		; /BBS/ only one file renamed here..
+     30	000740	005000 				clr	r0			; no errors
+     31	000742				20$:	unsave	<r3,r2>
+	000742	012603 				 mov	(sp)+	,r3
+	000744	012602 				 mov	(sp)+	,r2
+     32	000746	000207 				return
+     33
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 13
+The real work of RENAME
+
+      1
+      2						.sbttl	The real work of DELETE
+      3
+      4					;	input:	 (r5)	= file name, .asciz
+      5
+      6	000750				delete::save	<r3>
+	000750	010346 				 mov	r3	,-(sp)
+      7	000752	004767 	000722 			call	check1			; /BBS/ check file name
+      8	000756	005700 				tst	r0			; /BBS/ ok?
+      9	000760	001042 				bne	20$			; /BBS/ no
+     10	000762	012703 	000044'			mov	#renlst	,r3		; where to build the .delete list
+     11	000766	012700 	000000G			mov	#srcnam,r0		; string address
+     12	000772	004767 	000520 			call	docsi			; do the first one
+     13	000776	103433 				bcs	20$			; /BBS/ oops
+     14	001000	016700 	000044'			mov	renlst	,r0		; get the device name
+     15	001004					calls	fetch	,<r0>		; /62/ try to fetch the handler
+	001004	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001006	010046 				  mov	r0	,-(sp)		; doing it thusly generates less code
+	001010	010605 				  mov	sp	,r5		; set pointer to argument list
+	001012	004767 	000000G			  jsr	pc	,fetch		; call the subroutine
+	001016	005726 				  tst	(sp)+			; pop parameter list from stack
+	001020	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     16	001022	005700 				tst	r0			; /62/ did it work?
+     17	001024	001020 				bne	20$			; /62/ no
+     18	001026					.delete	#rtwork,#lun.ou,#renlst	; /BBS/ do the delete using lun.ou
+	001026	012700 	000000G			MOV	#rtwork,R0
+	001032	012710 	000000G			MOV	#lun.ou,@R0
+	001036	012760 	000044'	000002 		MOV	#renlst,2.(R0)
+	001044	104375 				EMT	^O375
+     19	001046	103006 				bcc	10$			; /BBS/ ok..
+     20	001050	113700 	000052 			movb	@#errbyt,r0		; map the delete error
+     21	001054	006300 				asl	r0			; word indexing
+     22	001056	016000 	000000G			mov	renerr(r0),r0		; rename errors are the same as delete
+     23	001062	000401 				br	20$			; /BBS/ bail out..
+     24	001064	005000 			10$:	clr	r0			; no errors
+     25	001066				20$:	unsave	<r3>
+	001066	012603 				 mov	(sp)+	,r3
+     26	001070	000207 				return
+     27
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 14
+The real work of DELETE
+
+      1
+      2						.sbttl	The real work of COPY	; /BBS/ heavily modified..
+      3
+      4		100000 				PROT	= 100000		; /62/ protected file bit
+      5
+      6					;	input:	 (r5)	= input file name
+      7					;		2(r5)	= output file name
+      8
+      9	001072				copy::	save	<r2,r3,r4>
+	001072	010246 				 mov	r2	,-(sp)
+	001074	010346 				 mov	r3	,-(sp)
+	001076	010446 				 mov	r4	,-(sp)
+     10	001100	005002 				clr	r2			; number of blocks = 0
+     11	001102	004767 	000516 			call	check2			; check file names
+     12	001106	005700 				tst	r0			; ok?
+     13	001110	001175 				bne	done			; /63/ no
+     14	001112					calls	open	,<#srcnam,#lun.in,#binary> ; get the input file
+	001112	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001114	012746 	000001 			        mov	#binary	,-(sp)	; push it
+	001120	012746 	000000G			        mov	#lun.in	,-(sp)	; push it
+	001124	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	001130	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001132	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	001136	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001142	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	001144	005700 				tst	r0			; did it work?
+     16	001146	001156 				bne	done			; /63/ no
+     17	001150	012700 	000000G			mov	#lun.out,r0		; /62/ output file channel
+     18	001154	006300 				asl	r0			; /62/ word indexing
+     19	001156	016760 	000000G	000000G		mov	lokdate	,date.a(r0)	; /62/ save create date
+     20	001164	016760 	000000G	000000G		mov	loktime	,time.a(r0)	; /62/ and time
+     21	001172	005060 	000000G			clr	prot.a(r0)		; /62/ preset as unprotected file
+     22	001176	032767 	100000 	000000G		bit	#prot	,lokstat	; /62/ protected?
+     23	001204	001402 				beq	10$			; /62/ nope..
+     24	001206	005260 	000000G			inc	prot.a(r0)		; /62/ ya
+     25	001212	012701 	000000G		10$:	mov	#lun.in	,r1		; input file channel
+     26	001216	006301 				asl	r1			; word indexing
+     27	001220	016167 	000000G	000000G		mov	sizof(r1),at$len	; pass input file size to file opener
+     28	001226					calls	create	,<#filnam,#lun.out,#binary> ; create destination file
+	001226	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001230	012746 	000001 			        mov	#binary	,-(sp)	; push it
+	001234	012746 	000000G			        mov	#lun.out	,-(sp)	; push it
+	001240	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	001244	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001246	004767 	000000G			  jsr	pc	,create		; and go to the routine
+	001252	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001256	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     29	001260	005700 				tst	r0			; did it work?
+     30	001262	001056 				bne	purge			; no
+     31
+     32	001264	012703 	001000 		20$:	mov	#1000	,r3		; init 512. byte counter (1 block)
+     33	001270				30$:	calls	getc	,<#lun.in>	; get the next char from the file
+	001270	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001272	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	001276	010605 				  mov	sp	,r5		; set pointer to argument list
+	001300	004767 	000000G			  jsr	pc	,getc		; call the subroutine
+	001304	005726 				  tst	(sp)+			; pop parameter list from stack
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 14-1
+The real work of COPY	; /BBS/ heavily modified..
+
+	001306	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     34	001310	005700 				tst	r0			; did it work?
+     35	001312	001017 				bne	inerr			; no, check for EOF condition
+     36	001314					calls	putc	,<r1,#lun.ou>	; yes, copy to output file
+	001314	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001316	012746 	000000G			        mov	#lun.ou	,-(sp)	; push it
+	001322	010146 				        mov	r1	,-(sp)	; push it
+	001324	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001326	004767 	000000G			  jsr	pc	,putc		; and go to the routine
+	001332	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001334	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	001336	005700 				tst	r0			; did that work?
+     38	001340	001022 				bne	outerr			; no
+     39	001342					sob	r3	,30$		; next char please
+	001342	005303 				dec	r3
+	001344	001351 				bne	30$
+     40	001346	005202 				inc	r2			; blocks := succ(blocks)
+     41	001350	000745 				br	20$			; copy the next block now
+     42
+     43	001352	020027 	000000G		inerr:	cmp	r0	,#er$eof	; normal exit should be EOF
+     44	001356	001020 				bne	purge			; it's not
+     45	001360					calls	close	,<#lun.ou>	; try to close output file
+	001360	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001362	012746 	000000G			  mov	#lun.ou	,-(sp)		; doing it thusly generates less code
+	001366	010605 				  mov	sp	,r5		; set pointer to argument list
+	001370	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	001374	005726 				  tst	(sp)+			; pop parameter list from stack
+	001376	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     46	001400					save	<r0>			; save error code
+	001400	010046 				 mov	r0	,-(sp)
+     47	001402	001427 				beq	p.clo			; no error, go close in file
+     48	001404	000416 				br	p.del			; error, go dump bad file first
+     49
+     50	001406	020027 	000000G		outerr:	cmp	r0	,#er$eof	; out file full?
+     51	001412	001002 				bne	purge			; no, it's something else
+     52	001414	012700 	000000G			mov	#er$ful	,r0		; ya, say not enuff free space..
+     53	001420				purge:	save	<r0>			; save error
+	001420	010046 				 mov	r0	,-(sp)
+     54	001422					calls	close	,<#lun.ou>	; flush buffer, close out file
+	001422	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001424	012746 	000000G			  mov	#lun.ou	,-(sp)		; doing it thusly generates less code
+	001430	010605 				  mov	sp	,r5		; set pointer to argument list
+	001432	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	001436	005726 				  tst	(sp)+			; pop parameter list from stack
+	001440	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     55	001442				p.del:	calls	delete	,<#filnam>	; then dump it, it's no good now
+	001442	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001444	012746 	000000G			  mov	#filnam	,-(sp)		; doing it thusly generates less code
+	001450	010605 				  mov	sp	,r5		; set pointer to argument list
+	001452	004767 	177272 			  jsr	pc	,delete		; call the subroutine
+	001456	005726 				  tst	(sp)+			; pop parameter list from stack
+	001460	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     56	001462				p.clo:	calls	close	,<#lun.in>	; close input file
+	001462	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001464	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	001470	010605 				  mov	sp	,r5		; set pointer to argument list
+	001472	004767 	000000G			  jsr	pc	,close		; call the subroutine
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 14-2
+The real work of COPY	; /BBS/ heavily modified..
+
+	001476	005726 				  tst	(sp)+			; pop parameter list from stack
+	001500	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     57	001502					unsave	<r0>			; restore error code
+	001502	012600 				 mov	(sp)+	,r0
+     58
+     59	001504	010201 			done:	mov	r2	,r1		; return number of blocks copied
+     60	001506					unsave	<r4,r3,r2>
+	001506	012604 				 mov	(sp)+	,r4
+	001510	012603 				 mov	(sp)+	,r3
+	001512	012602 				 mov	(sp)+	,r2
+     61	001514	000207 				return
+     62
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 15
+The real work of COPY	; /BBS/ heavily modified..
+
+      1
+      2						.sbttl	Parse device and file name
+      3
+      4					;	input:	 r0	= address of file name
+      5					;		 r3	= pointer to result of parse
+      6
+      7	001516				docsi:	save	<r1>
+	001516	010146 				 mov	r1	,-(sp)
+      8	001520	162706 	000122 			sub	#ln$max+2,sp		; /63/ a local file name buffer
+      9	001524	010601 				mov	sp	,r1		; and a pointer to it please
+     10
+     11	001526	112021 			10$:	movb	(r0)+	,(r1)+		; /BBS/ copy it to the csi buffer
+     12	001530	001376 				bne	10$			; until a null byte is found
+     13	001532	112761 	000075 	177777 		movb	#'=	,-1(r1)		; fake an output filespec here
+     14	001540	105011 				clrb	@r1			; and .asciz
+     15	001542	010601 				mov	sp	,r1		; reset pointer (also saving sp)
+     16	001544					.csispc	r1,#csiext,r1		; and try to parse the name
+	001544	010146 				MOV	r1,-(SP)
+	001546	012746 	000034'			MOV	#csiext,-(SP)
+	001552	010146 				MOV	r1,-(SP)
+	001554	104345 				EMT	^O<345>
+     17	001556	010106 				mov	r1	,sp		; restore from any switches
+     18	001560	103407 				bcs	20$			; it's ok
+     19	001562	012123 				mov	(r1)+	,(r3)+		; copy the
+     20	001564	012123 				mov	(r1)+	,(r3)+		; device
+     21	001566	012123 				mov	(r1)+	,(r3)+		; and
+     22	001570	012123 				mov	(r1)+	,(r3)+		; file name
+     23	001572	062706 	000122 			add	#ln$max+2,sp		; /63/ restore the stack, clears carry
+     24	001576	000410 				br	30$
+     25
+     26	001600	113700 	000052 		20$:	movb	@#errbyt,r0		; get the error mapping for .csispc
+     27	001604	006300 				asl	r0			; index to word offsets
+     28	001606	016000 	000000G			mov	csierr(r0),r0		; simple
+     29	001612	062706 	000122 			add	#ln$max+2,sp		; /63/ restore the stack
+     30	001616	000261 				sec				; flag the error and exit
+     31	001620				30$:	unsave	<r1>
+	001620	012601 				 mov	(sp)+	,r1
+     32	001622	000207 				return
+     33
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 16
+Parse device and file name
+
+      1
+      2						.sbttl	Check file name(s)
+      3
+      4	001624				check2:	calls	fparse	,<2(r5),#filnam> ; /BBS/ added this..
+	001624	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001626	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	001632	016546 	000002 			        mov	2(r5)	,-(sp)	; push it
+	001636	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001640	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	001644	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001646	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      5	001650	005700 				tst	r0			; ok?
+      6	001652	001035 				bne	ck.fin			; no
+      7	001654					calls	iswild	,<#filnam>	; check second file name
+	001654	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001656	012746 	000000G			  mov	#filnam	,-(sp)		; doing it thusly generates less code
+	001662	010605 				  mov	sp	,r5		; set pointer to argument list
+	001664	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	001670	005726 				  tst	(sp)+			; pop parameter list from stack
+	001672	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      8	001674	005700 				tst	r0			; wild?
+      9	001676	001023 				bne	ck.fin			; ya..
+     10	001700				check1:	calls	fparse	,<@r5,#srcnam>	; check first file name
+	001700	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001702	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	001706	011546 				        mov	@r5	,-(sp)	; push it
+	001710	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001712	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	001716	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001720	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	001722	005700 				tst	r0			; ok?
+     12	001724	001010 				bne	ck.fin			; no
+     13	001726					calls	iswild	,<#srcnam>	; return with
+	001726	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001730	012746 	000000G			  mov	#srcnam	,-(sp)		; doing it thusly generates less code
+	001734	010605 				  mov	sp	,r5		; set pointer to argument list
+	001736	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	001742	005726 				  tst	(sp)+			; pop parameter list from stack
+	001744	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	001746	000207 			ck.fin:	return				; /63/ any error will be in r0
+     15
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 17
+Check file name(s)
+
+      1
+      2						.sbttl	Like bufemp, but return data to a buffer
+      3
+      4					;	input:	  (r5)	= source buffer, .asciz
+      5					;	output:	 2(r5)	= destination buffer
+      6					;		   r0	= zero (no errors are possible)
+      7					;		   r1	= string length
+      8					;
+      9					;	No 8-bit prefixing will be done as RT-11 does not support 8-bit data
+     10					;	in file names or any where else that would make any difference here.
+     11					;	This routine is used to decode strings received for generic commands
+     12					;	to the server.
+     13					;
+     14					; /63/	 NOTE:  This subroutine, as it now exists, can process all unprefixed
+     15					;	control chars as C-Kermit 5A(189) might emit if given the command SET
+     16					;	CONTROL UNPREFIX ALL.  The NULL char is used as the record terminator
+     17					;	here and thus MUST be prefixed.  C-Kermit always prefixes nulls.
+     18
+     19	001750				bufunp::save	<r2,r3,r4,r5>
+	001750	010246 				 mov	r2	,-(sp)
+	001752	010346 				 mov	r3	,-(sp)
+	001754	010446 				 mov	r4	,-(sp)
+	001756	010546 				 mov	r5	,-(sp)
+     20	001760	011502 				mov	@r5	,r2		; input record address
+     21	001762	005003 				clr	r3			; length := 0
+     22	001764	016504 	000002 			mov	2(r5)	,r4		; resultant string
+     23
+     24	001770	112200 			10$:	movb	(r2)+	,r0		; /63/ get next ch in convenient place
+     25	001772	042700 	177600 			bic	#^c<177>,r0		; /53/ always seven bit data
+     26	001776	001454 				beq	50$			; /63/ all done
+     27	002000	012705 	000001 			mov	#1	,r5		; /53/ assume character not repeated
+     28	002004	005767 	000000G			tst	dorpt			; /53/ repeat processing off?
+     29	002010	001422 				beq	30$			; /53/ yes, ignore
+     30	002012	120067 	000000G			cmpb	r0	,rptquo		; /53/ is this a repeated char?
+     31	002016	001017 				bne	30$			; /53/ no, normal processing
+     32	002020	112205 				movb	(r2)+	,r5		; /63/ yes, get the repeat count
+     33	002022	042705 	177600 			bic	#^c<177>,r5		; /53/ always seven bit data
+     34	002026					unchar	r5	,r5		; /53/ get the value
+	002026	005046 				clr	-(sp)
+	002030	150516 				bisb	r5	,@sp
+	002032	162716 	000040 			sub	#40	,@sp
+	002036	112605 				movb	(sp)+	,r5
+     35	002040	005705 				tst	r5			; /53/ good data
+     36	002042	003002 				bgt	20$			; /53/ yes
+     37	002044	012705 	000001 			mov	#1	,r5		; /53/ no, fix it
+     38	002050	112200 			20$:	movb	(r2)+	,r0		; /63/ now get the real data
+     39	002052	042700 	177600 			bic	#^c<177>,r0		; /53/ always seven bit data
+     40	002056	120067 	000005G		30$:	cmpb	r0	,senpar+p.qctl	; is this a quoted character?
+     41	002062	001015 				bne	40$			; no
+     42	002064	005000 				clr	r0			; yes, get the next character
+     43	002066	152200 				bisb	(r2)+	,r0		; must be one you know  avoid sxt here
+     44	002070	010001 				mov	r0	,r1		; /63/ copy to compare
+     45	002072	042701 	177600 			bic	#^c<177>,r1		; lower 7 bits against the quote char
+     46	002076	120167 	000005G			cmpb	r1	,senpar+p.qctl	; if ch <> myquote
+     47	002102	001405 				beq	40$			;  then
+     48	002104					ctl	r0	,r0		;   ch := ctl(ch)
+	002104	005046 				clr	-(sp)
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 17-1
+Like bufemp, but return data to a buffer
+
+	002106	150016 				bisb	r0	,@sp
+	002110	004767 	000000G			call	l$xor
+	002114	112600 				movb	(sp)+	,r0
+     49	002116	110024 			40$:	movb	r0	,(r4)+		; copy the byte over now
+     50	002120	005203 				inc	r3			; length := succ(length)
+     51	002122					sob	r5	,40$		; /53/ perhaps data was repeated
+	002122	005305 				dec	r5
+	002124	001374 				bne	40$
+     52	002126	000720 				br	10$			; next character please
+     53
+     54	002130	105014 			50$:	clrb	@r4			; make the string .asciz
+     55	002132	010301 				mov	r3	,r1		; return the length
+     56	002134	005000 				clr	r0			; fake no errors please
+     57	002136					unsave	<r5,r4,r3,r2>
+	002136	012605 				 mov	(sp)+	,r5
+	002140	012604 				 mov	(sp)+	,r4
+	002142	012603 				 mov	(sp)+	,r3
+	002144	012602 				 mov	(sp)+	,r2
+     58	002146	000207 				return
+     59
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 18
+Like bufemp, but return data to a buffer
+
+      1
+      2						.sbttl	Calculate time used to send last packet	; /62/ all new..
+      3
+      4	002150	010246 			paksta::mov	r2	,-(sp)		; save ptr to "REC.SW" or "SEN.SW"
+      5	002152	016746 	000004G			mov	pkrate+4,-(sp)		; save to test for first time through
+      6	002156	016767 	000000G	000004G		mov	pkrate+0,pkrate+4	; start of last packet time hi word
+      7	002164	016767 	000002G	000006G		mov	pkrate+2,pkrate+6	; and time lo word
+      8	002172					.gtim	#rtwork	,#pkrate	; get start time of next packet
+	002172	012700 	000000G			MOV	#rtwork,R0
+	002176	012710 	010400 			MOV	#17.*^O400+0.,@R0
+	002202	012760 	000000G	000002 		MOV	#pkrate,2.(R0)
+	002210	104375 				EMT	^O375
+      9	002212	005726 				tst	(sp)+			; first pass on this transaction?
+     10	002214	002003 				bge	10$			; no
+     11	002216	012702 	000500'			mov	#sta.6	,r2		; ya, kick off with a newline..
+     12	002222	000472 				br	30$			; ..by jumping in here
+     13	002224	012702 	000442'		10$:	mov	#sta.2	,r2		; point to "TOD "
+     14	002230	004767 	000222 			call	sta.cp			; copy into output string
+     15	002234					calls	asctim	,<r1,#pkrate>	; make it ascii, insert in buff
+	002234	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002236	012746 	000000G			        mov	#pkrate	,-(sp)	; push it
+	002242	010146 				        mov	r1	,-(sp)	; push it
+	002244	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002246	004767 	000270 			  jsr	pc	,asctim		; and go to the routine
+	002252	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002254	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     16	002256	062701 	000013 			add	#11.	,r1		; bump past time just written
+     17	002262	012702 	000447'			mov	#sta.3	,r2		; point to "  "
+     18	002266	004767 	000164 			call	sta.cp			; copy into output string
+     19	002272	016700 	000000G			mov	clkflg	,r0		; pass clock rate
+     20	002276	004767 	000000G			call	L10012			; write same to out string
+     21	002302	012702 	000452'			mov	#sta.4	,r2		; point to "Hz   Elapsed-Time "
+     22	002306	004767 	000144 			call	sta.cp			; copy into output string
+     23	002312	016746 	000002G			mov	pkrate+2,-(sp)		; time now low word
+     24	002316	016746 	000000G			mov	pkrate+0,-(sp)		; and high word
+     25	002322	166766 	000006G	000002 		sub	pkrate+6,2(sp)		; subtract time then low word
+     26	002330	005616 				sbc	(sp)			; watch the carry
+     27	002332	166716 	000004G			sub	pkrate+4,(sp)		; now do the high word
+     28	002336	002006 				bge	20$			; didn't cross midnight
+     29	002340	062766 	015000 	000002 		add	#6656.	,2(sp)		; did, low word of # ticks in 24 hours
+     30	002346	005516 				adc	(sp)			; add carry to 32-bit hi word
+     31	002350	062716 	000117 			add	#79.	,(sp)		; hi word of # ticks in 24 hours
+     32	002354	010602 			20$:	mov	sp	,r2		; pointer to time data on stack
+     33	002356					calls	asctim	,<r1,r2>	; make it ascii, insert in buff
+	002356	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002360	010246 				        mov	r2	,-(sp)	; push it
+	002362	010146 				        mov	r1	,-(sp)	; push it
+	002364	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002366	004767 	000150 			  jsr	pc	,asctim		; and go to the routine
+	002372	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002374	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     34	002376	022626 				cmp	(sp)+	,(sp)+		; pop duration buffer
+     35	002400	062701 	000013 			add	#11.	,r1		; bump past time just written
+     36	002404	012702 	000476'			mov	#sta.5	,r2		; point to <cr><lf><cr><lf>
+     37	002410	004767 	000042 		30$:	call	sta.cp			; copy into output string
+     38	002414	012602 				mov	(sp)+	,r2		; get ptr to "REC.SW" or "SEN.SW"
+     39	002416	004767 	000034 			call	sta.cp			; copy into output string
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 18-1
+Calculate time used to send last packet	; /62/ all new..
+
+     40	002422	012702 	000503'			mov	#sta.7	,r2		; point to ".SW = STA."
+     41	002426	004767 	000024 			call	sta.cp			; copy into output string
+     42	002432					scan	state	,#sta.0		; look for a match
+	002432	012746 	000035'			mov	#sta.0	,-(sp)
+	002436	005046 				clr	-(sp)
+	002440	156716 	000000G			bisb	state	,@sp
+	002444	004767 	000000G			call	scanch
+     43	002450	006300 				asl	r0			; word indexing
+     44	002452	016002 	000052'			mov	sta.1(r0),r2		; pointer to description of function
+     45	002456					.br	sta.cp			; /63/
+     46
+     47	002456	112221 			sta.cp:	movb	(r2)+	,(r1)+		; /63/ copy some text..
+     48	002460	001376 				bne	sta.cp			; until we find a null
+     49	002462	005301 				dec	r1			; backup over it
+     50	002464	000207 				return
+     51
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 19
+Calculate time used to send last packet	; /62/ all new..
+
+      1
+      2						.sbttl	Print received error packet on terminal
+      3
+      4					;	P R E R R P
+      5					;
+      6					;	input:	 (r5)	= address of .asciz string to print
+      7
+      8	002466	005767 	000000G		prerrp::tst	remote			; /BBS/ if running as remote..
+      9	002472	001022 				bne	20$			; /BBS/ ..there's no term to type this
+     10	002474	105715 				tstb	(r5)			; /62/ anything to print?
+     11	002476	001420 				beq	20$			; /62/ no
+     12	002500	005767 	000000G			tst	logini			; /BBS/ need a .newline if this is set
+     13	002504	001402 				beq	10$			; /BBS/ no, this line is clean
+     14	002506					.newline			; start on a fresh line
+	002506	004767 	000000G			call	l$pcrlf
+     15	002512				10$:	wrtall	#pepmsg			; a prefix line
+	002512	012746 	000000'			mov	#pepmsg	,-(sp)		; pass the address
+	002516	004767 	000000G			call	wrtall			; do it
+     16	002522					wrtall	@r5			; the actual error message
+	002522	011546 				mov	@r5	,-(sp)		; pass the address
+	002524	004767 	000000G			call	wrtall			; do it
+     17	002530					.newline
+	002530	004767 	000000G			call	l$pcrlf
+     18	002534	005067 	000000G			clr	logini			; ensure logging header is retyped
+     19	002540	000207 			20$:	return
+     20
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 20
+Print received error packet on terminal
+
+      1
+      2						.sbttl	Get time of day		; /62/ use cvttim to include ticks
+      3
+      4					;	input:	 (r5)	= buffer address for .asciz string
+      5					;		2(r5)	= if <>, location of time value to process	; /62/
+      6
+      7	002542				asctim::save	<r0,r1,r2,r3>
+	002542	010046 				 mov	r0	,-(sp)
+	002544	010146 				 mov	r1	,-(sp)
+	002546	010246 				 mov	r2	,-(sp)
+	002550	010346 				 mov	r3	,-(sp)
+      8	002552	016503 	000002 			mov	2(r5)	,r3		; /62/ was a pointer passed?
+      9	002556	001012 				bne	10$			; /62/ ya, do it instead of curr. time
+     10	002560	024646 				cmp	-(sp)	,-(sp)		; allocate two word buffer
+     11	002562	010603 				mov	sp	,r3		; and point to the small buffer
+     12	002564					.gtim	#rtwork	,r3		; and get the time, ticks past midnite
+	002564	012700 	000000G			MOV	#rtwork,R0
+	002570	012710 	010400 			MOV	#17.*^O400+0.,@R0
+	002574	010360 	000002 			MOV	r3,2.(R0)
+	002600	104375 				EMT	^O375
+     13	002602	022626 				cmp	(sp)+	,(sp)+		; /62/ pop here, save a couple words..
+     14	002604	012367 	000074'		10$:	mov	(r3)+	,hitime		; /62/ hi word for divide
+     15	002610	011367 	000076'			mov	(r3)	,lotime		; /62/ and lo word
+     16	002614					save	<r5>			; /63/ save this pointer
+	002614	010546 				 mov	r5	,-(sp)
+     17	002616	012705 	000110'			mov	#timemt,r5		; /62/ give cvttim its arguments
+     18	002622	004767 	000000G			call	cvttim			; /62/ convert to hrs/mins/secs/ticks
+     19	002626					unsave	<r5>			; /63/ restore pointer
+	002626	012605 				 mov	(sp)+	,r5
+     20	002630	011501 				mov	@r5	,r1		; buffer address please
+     21	002632	016703 	000100'			mov	hours	,r3		; convert hours to ascii
+     22	002636	004767 	000000G			call	i2toa			; simple
+     23	002642	112721 	000072 			movb	#':	,(r1)+		; a delimiter
+     24	002646	016703 	000102'			mov	mins	,r3		; the minutes next please
+     25	002652	004767 	000000G			call	i2toa			; simple
+     26	002656	112721 	000072 			movb	#':	,(r1)+		; and a delimiter please
+     27	002662	016703 	000104'			mov	secs	,r3		; /62/ pass seconds to i2toa
+     28	002666	004767 	000000G			call	i2toa			; and convert to ascii
+     29	002672	112721 	000056 			movb	#'.	,(r1)+		; /62/ use a dot delimiter
+     30	002676	016703 	000106'			mov	ticks	,r3		; /62/ pass ticks to i2toa
+     31	002702	004767 	000000G			call	i2toa			; /62/ convert to ascii
+     32	002706	105011 				clrb	@r1			; all done, make it .asciz
+     33	002710					unsave	<r3,r2,r1,r0>
+	002710	012603 				 mov	(sp)+	,r3
+	002712	012602 				 mov	(sp)+	,r2
+	002714	012601 				 mov	(sp)+	,r1
+	002716	012600 				 mov	(sp)+	,r0
+     34	002720	000207 				return
+     35
+     36		000001 				.end
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 20-1
+Symbol table
+
+ABT$AL  000132   	DFFLAG  000016R     004	I2TOA = ****** GX	NEWDK   000026R     004	SRCNAM= ****** GX
+ABT$CU  000130   	DISMNT  000020R     004	JSW   = 000044   	NONEIS= 000001   	STATE = ****** GX
+ABT$ER  000105   	DISUNI  000022R     004	KRTINC= 000001   	NOSCOP= 000000   	STA.AB  000101
+ALSIZE= 001000   	DKFLAG  000024R     004	LDUNIT  000002R     004	OPEN  = ****** GX	STA.AT  000110
+ARGBUF= ****** GX	DKNAME= ****** GX	LD$BSY= ****** GX	OUTERR  001406R     002	STA.BR  000102
+ASCTIM  002542RG    002	DOCSI   001516R     002	LF    = 000012   	PAKSTA  002150RG    002	STA.CC  000100
+AT$LEN= ****** GX	DONE    001504R     002	LN$CNT= 000003   	PAR$EV  000002   	STA.CO  000103
+AT.ALL  000177   	DORPT = ****** GX	LN$MAX= 000120   	PAR$MA  000003   	STA.CP  002456R     002
+AT.CDT  000001   	DOT   = 000056   	LOGINI= ****** GX	PAR$NO  000000   	STA.DA  000104
+AT.INF  000002   	ELFMO   000006R     004	LOG$AL= 000003   	PAR$OD  000001   	STA.EO  000132
+AT.LEN  000004   	ELFMOP  000004R     004	LOG$CO= 000002   	PAR$SP  000004   	STA.FI  000106
+AT.ON   100000   	EOF$DI  000104   	LOG$DE= 000020   	PEPMSG  000000R     003	STA.IN  000111
+AT.PRO  000010   	ERBFSI= 000170   	LOG$IO= 000010   	PKRATE= ****** GX	STA.RI  000122
+AT.SYS  000020   	ERRBYT= 000052   	LOG$ON= 040000   	PRERRP  002466RG    002	STA.SI  000123
+AT.TYP  000040   	ERROR$= 000004   	LOG$OP= 100000   	PROT  = 100000   	STA.TY  000130
+AT.XLE  000100   	ER$DK = ****** GX	LOG$PA= 000001   	PROT.A= ****** GX	STA.0   000035R     003
+BELL  = 000007   	ER$EOF= ****** GX	LOG$RP= 000004   	PURGE   001420R     002	STA.1   000052R     003
+BINARY  000001   	ER$FUL= ****** GX	LOKDAT= ****** GX	PUTC  = ****** GX	STA.2   000442R     003
+BS    = 000010   	ESC   = 000033   	LOKSTA= ****** GX	P.CAPA= 000011   	STA.3   000447R     003
+BUFUNP  001750RG    002	FATAL$= 000020   	LOKTIM= ****** GX	P.CHKT= 000007   	STA.4   000452R     003
+CAPA.A= 000010   	FETCH = ****** GX	LOTIME  000076R     004	P.CLO   001462R     002	STA.5   000476R     003
+CAPA.L= 000002   	FF    = 000014   	LUN.IN= ****** GX	P.DEL   001442R     002	STA.6   000500R     003
+CAPA.S= 000004   	FILNAM= ****** GX	LUN.LD= ****** GX	P.EOL = 000004   	STA.7   000503R     003
+CHECK1  001700R     002	FPARSE= ****** GX	LUN.OU= ****** GX	P.MXL1= 000013   	STRCPY= ****** GX
+CHECK2  001624R     002	GETC  = ****** GX	L$PCRL= ****** GX	P.MXL2= 000014   	SUCCS$= 000001
+CK.FIN  001746R     002	GN$BYE  000114   	L$XOR = ****** GX	P.NPAD= 000002   	TAB   = 000011
+CLKFLG= ****** GX	GN$CON  000103   	L10012= ****** GX	P.PADC= 000003   	TERMIN  177777
+CLOSE = ****** GX	GN$COP  000113   	MAXLNG= 001130   	P.QBIN= 000006   	TEXT    000000
+COMMA = 000054   	GN$DEL  000105   	MAXPAK  000136   	P.QCTL= 000005   	TICKS   000106R     004
+CON$ES= 000034   	GN$DIR  000104   	MINS    000102R     004	P.REPT= 000010   	TILDE = 000176
+COPY    001072RG    002	GN$DIS  000125   	MNTEMT  000000R     004	P.SPSI= 000000   	TIMEMT  000110R     004
+CR    = 000015   	GN$EXI  000106   	MNTERR= ****** GX	P.TIME= 000001   	TIME.A= ****** GX
+CREATE= ****** GX	GN$HEL  000110   	MOUNT   000000RG    002	P.VEND= 000017   	TTY   = 000001
+CSIERR= ****** GX	GN$JOU  000112   	MSG$AC  000131   	P.WIND= 000012   	UPCASE= ****** GX
+CSIEXT  000034R     004	GN$LOG  000111   	MSG$AT  000101   	REMOTE= ****** GX	USERRB= 000053
+CTRL$N= 000016   	GN$PRI  000120   	MSG$BR  000102   	RENAME  000602RG    002	VT100 = 000002
+CTRL$O= 000017   	GN$PRO  000120   	MSG$CO  000103   	RENERR= ****** GX	VT200 = 000003
+CVTTIM= ****** GX	GN$QUE  000121   	MSG$DA  000104   	RENLST  000044R     004	WARN$ = 000002
+C.CRLF= 000004   	GN$REN  000122   	MSG$EO  000132   	RPTQUO= ****** GX	WRTALL= ****** GX
+C.LCUC= 000040   	GN$SEN  000115   	MSG$ER  000105   	RTWORK= ****** GX	XOFF  = 000023
+C.LSPA= 000010   	GN$SUB  000123   	MSG$FI  000106   	SCANCH= ****** GX	XON   = 000021
+C.SSPA= 000020   	GN$TYP  000124   	MSG$GE  000107   	SCOLON= 000073   	$ALLSI= 001144
+C.TSPA= 000200   	GN$VAR  000126   	MSG$KE  000113   	SECS    000104R     004	$$    = 000002
+DATE.A= ****** GX	GN$WHO  000127   	MSG$NA  000116   	SENPAR= ****** GX	$$1   = 000001
+DECNAT  000002   	HITIME  000074R     004	MSG$RC  000122   	SEVER$= 000010   	$$2   = 000000
+DEFDIR= ****** GX	HOURS   000100R     004	MSG$SE  000111   	SIZOF = ****** GX	$$5   = 000001
+DEL   = 000177   	INERR   001352R     002	MSG$SN  000123   	SOH   = 000001   	...V1 = 000003
+DELETE  000750RG    002	ISWILD= ****** GX	MSG$TE  000130   	SPACE = 000040   	...V2 = 000027
+
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	002722    002	(RO,I,LCL,REL,CON)
+$PDATA	000514    003	(RO,D,LCL,REL,CON)
+$RWDAT	000124    004	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+KRTUTL	Mount, rename, delete, 	MACRO V05.03b  00:01  Page 20-2
+Symbol table
+
+*** Assembler statistics
+
+
+Work  file  reads: 38
+Work  file writes: 44
+Size of work file: 14160 Words  ( 56 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.30
+KRTUTL,KRTUTL=KRTNHD,KRTUTL

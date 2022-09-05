@@ -1,0 +1,1835 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   2	Data offsets
+    9-   2	Data definitions
+   10-   3	Wildcarded lookup
+   11-   2	Replace "?" with "%" for RSTS/E users ; /BBS/ from K11RMS.MAC
+   12-   2	Display directory listing on terminal
+   13-   2	Server directory	; /62/ condensed a bit..
+   14-   2	Copy (r0) to (r2)	; /62/ replaces strcat here
+   15-   2	Open device, build name list to search directory
+   16-   2	Read in the home block
+   17-   2	Read in a segment, get header data
+   18-   2	Convert a directory entry to .asciz
+   19-   2	Wildcarded file name match test
+   20-   2	Convert date to .asciz
+   21-   2	Display TSX+ file creation time	; /BBS/ all new
+   22-   2	Unsigned 16-bit integer conversion  ; /BBS/ all new
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTDIR	RT-11 directory services
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	buffil back to root (KRTPAK), for speed and room now available
+      7					;	add support for SET WILDCARDS
+      8
+      9					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     10					;
+     11					;	reorganized and substantially sped up
+     12					;	added .csispc comma delimiter parsing
+     13					;	fixed wildcard "%" match to no longer match on blanks
+     14					;	add version testing to support RT-11 V4
+     15					;	moved buffil here, has to be if not in root for getcr0 @sdodir..
+     16					;	make hd$fir=:6 so badly initted disks don't crash DIR
+     17
+     18					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     19					;
+     20					;	this module has been extensively modified, please refer to it..
+     21					;	add TSX+ create time, date slug, prot status, summary lines, etc
+     22					;	corrected bugs in error handling
+     23					;	added d$cvtnum for file sizes/sums larger than 32767.
+     24					;	"DK" now uses defdir, not op system DK, needs fparse in krtrms
+     25					;	ascdat patched for RT-11 V5.5, now also used for cvtdat
+     26					;	add dirflg to control embedded blanks in file name
+     27					;	getnth used to reread until context=diridx, now context saves it
+     28					;	added summary only flag, for use with SPACE and REM SPACE
+     29					;	force USR to re-read dir segment, allowing one to swap floppies..
+     30
+     31					;	17-Sep-86  13:23:00  Handle Labels stuffed in by VMS Exchange
+     32					;	18-Jun-84  16:33:01  Brian Nelson
+     33					;
+     34					;	Copyright 1984 Change Software, Inc
+     35
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3					; /62/	.PVAL bypassed for V4, also expanded to allow assembly under same
+      4
+      5						.mcall	.CSISPC ,.DATE	,.GTIM	,.LOCK	,.LOOKUP
+      6						.mcall	.READW	,.PURGE	,.RCTRLO,.UNLOCK
+      7
+      8
+      9						.macro	R0toR2	ptr		; /62/ added..
+     10						.if nb ptr
+     11						mov	ptr	,r0		; load r0 if an arg is supplied
+     12						.endc
+     13						call	R0toR2			; copy string in (r0) to (r2)
+     14						.endm	R0toR2
+     15
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 8
+Utility macros
+
+      1
+      2						.sbttl	Data offsets
+      3
+      4		000054 				SYSPTR	=	54		; /62/ pointer to RMON base
+      5		000256 					BLKEY	=	256	; /BBS/ RMON dir seg number in memory
+      6
+      7						; directory home block
+      8		000001 				HD$BLK	=	1		; vbn of the home block
+      9		000006 				HD$FIR	=	6		; /62/ first dir segment block number
+     10		000760 				HD$SYS	=	760		; volume id (DECRT11, DECVMSEX)
+     11
+     12						; directory segment header
+     13		000002 				H$NEXT	=	2		; next logical dir segment
+     14		000006 				H$EXT	=	6		; number of extra bytes per entry
+     15
+     16						; current directory entry
+     17		000000 				F.STAT	=	0		; status word
+     18		000002 				F.NAM1	=	2		; first three rad50 chars of name
+     19		000004 				F.NAM2	=	4		; last three rad50 chars of name
+     20		000006 				F.TYPE	=	6		; all three rad50 chars of type
+     21		000010 				F.LEN	=	10		; file size
+     22		000012 				F.TIME	=	12		; /BBS/ TSX+ file creation time
+     23		000014 				F.DATE	=	14		; creation date
+     24
+     25						; entry status word bits
+     26		002000 				PERM	=	2000		; permanent file
+     27		004000 				ENDSEG	=	4000		; end of a segment
+     28		100000 				PROT	=	100000		; /BBS/ protected entry
+     29
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 9
+Data offsets
+
+      1
+      2						.sbttl	Data definitions
+      3
+      4					;	STAR	=	134745		; RTEM (RSTS) .csispc for a "*"
+      5		132500 				STAR	=	132500		; real RT-11 .csispc for a "*"
+      6
+      7	000000					.psect	rtdir	,rw,d,gbl,rel,con
+      8	000000	000000 	000000 	000000 	csidev:	.word	0 ,0 ,0 ,0		; /62/ rad50 dev name + 3 null words..
+      9	000010	000000 			dirsiz: .word	0			; length of a file's dir entry
+     10	000012				dirbuf:	.blkw	1000			; 2 block buffer for one dir segment
+     11		002000 			dbsize	= .-dirbuf			; /62/ need this to prevent overruns..
+     12	002012	000000 			dirptr: .word	0			; server dirbfr read pointer
+     13	002014	000000 			endflg:	.word	0			; /BBS/ end of server dir listing flag
+     14	002016	000000 			h.next: .word	0			; link to next directory segment
+     15	002020				name1:	.blkb	56.			; /62/ ascii'd csinam(s), null, .even
+     16	002110				name2:	.blkb	12			; /62/ disk file name, for matching
+     17	002122	000000 			numblks:.word	0			; /BBS/ total blocks of listed files
+     18	002124	000000 			numfree:.word	0			; /BBS/ total blocks empty+tent files
+     19
+     20	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+     21	000000	000000 			L310$:	.word	0			; /58/ searched string base address
+     22	000002	000000 			L311$:	.word	0			; /58/ string width
+     23	000004				sluggy:	.blkw	41.			; /62/ slug buffer, .csispc, etc, etc.
+     24
+     25	000000					.psect	$pdata			; /BBS/ all new..
+     26	000000	132500 	000000 	000000 	defext:	.word	star ,0 ,0 ,0		; /62/ input default extent is wild
+     27	000010	   055 	   105 	   122 	months:	.ascii "-ERR-Jan-Feb-Mar-Apr-May-Jun-Jul-Aug-Sep-Oct-Nov-Dec-" ; /BBS/
+     28	000075	   040 	   116 	   157 	nodate:	.asciz " No Date "		; /BBS/
+     29	000107	   040 	   102 	   154 	blocks:	.asciz	" Block"		; /62/ # of blocks for summary
+     30	000116	   015 	   012 	   000 	dcrlf:	.asciz	<cr><lf>		; a new line
+     31	000121	   040 	   106 	   151 	files:	.asciz	" File"			; /62/ tag line at end of dir list
+     32	000127	   040 	   106 	   162 	free:	.asciz	" Free block"		; /62/ free space..
+     33	000143	   163 	   000 		plural:	.asciz	"s"			; /63/ this allow easier translation..
+     34	000145	   120 	   040 	   040 	protspc:.asciz	"P  "			; where the P in protect lives
+     35	000151	   104 	   105 	   103 	rt:	.asciz	"DECRT11"		; /54/ home block disk id
+     36	000161	   040 			unpspc:	.ascii	" "			; come here for three blanks
+     37	000162	   040 	   040 	   000 	 prospc:.asciz	"  "			; or, come here for just two
+     38	000165	   104 	   105 	   103 	vms:	.asciz	"DECVMSEX"		; /54/ from EXCHANGE under VMS4.x
+     39						.even
+     40
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 10
+Data definitions
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Wildcarded lookup
+      4
+      5					;	L O O K U P			; /62/ merged getnth into this..
+      6					;
+      7					;	 (r5)	= possibly wildcarded input file specification
+      8					;	2(r5)	= output file spec, name of file matching input spec
+      9					;	index	= count of files found, init to 0 before first call
+     10					;	  r0	= if <>, error code
+     11
+     12	000000				lookup::save	<r1,r2,r3>
+	000000	010146 				 mov	r1	,-(sp)
+	000002	010246 				 mov	r2	,-(sp)
+	000004	010346 				 mov	r3	,-(sp)
+     13	000006	005767 	000000G			tst	index			; /62/ new call sequence today?
+     14	000012	003004 				bgt	10$			; /62/ no, already found a file
+     15	000014	004767 	001562 			call	opndev			; ya, get the disk opened up please
+     16	000020	005700 				tst	r0			; any errors?
+     17	000022	001132 				bne	120$			; /62/ yes, we will have to die then
+     18	000024	016703 	000000G		10$:	mov	context	,r3		; /BBS/ recover where we were
+     19	000030	001016 				bne	30$			; /BBS/ dir is already in progress
+     20	000032	004767 	002242 			call	gethom			; read in the home block
+     21	000036	005700 				tst	r0			; did it work?
+     22	000040	001123 				bne	120$			; /62/ no, exit with the error please
+     23
+     24	000042	012701 	000006 			mov	#hd$fir	,r1		; /62/ the first directory segment
+     25	000046	004767 	002400 		20$:	call	gethdr			; read in a dir segment
+     26	000052	005700 				tst	r0			; did this work?
+     27	000054	001115 				bne	120$			; /62/ no, return mapped error code
+     28	000056	012703 	000012'			mov	#dirbuf ,r3		; point to the directory buffer
+     29	000062	062703 	000012 			add	#5*2	,r3		; skip past the header information
+     30
+     31	000066	012700 	000012'		30$:	mov	#dirbuf	,r0		; /62/ top of the dir buffer
+     32	000072	062700 	002000 			add	#dbsize	,r0		; /62/ end of the buffer
+     33	000076	020300 				cmp	r3	,r0		; /62/ room for one more?
+     34	000100	103101 				bhis	110$			; /62/ no, so avoid a trap to 4 here!
+     35	000102	032763 	004000 	000000 		bit	#endseg ,f.stat(r3)	; end of this segment?
+     36	000110	001072 				bne	100$			; yes, try the next one please
+     37	000112	032763 	002000 	000000 		bit	#perm	,f.stat(r3)	; /62/ is this a real file?
+     38	000120	001004 				bne	40$			; /62/ ya
+     39	000122	066367 	000010 	002124'		add	f.len(r3),numfree	; /62/ no, add to total free blocks
+     40	000130	000457 				br	90$			; /62/ next..
+     41	000132	004767 	002614 		40$:	call	match			; see if the file matches up
+     42	000136	005700 				tst	r0			; well?
+     43	000140	001453 				beq	90$			; no, try again please
+     44	000142	005267 	000000G			inc	index			; /62/ ya, bump caller's match count
+     45	000146	066367 	000010 	002122'		add	f.len(r3) ,numblks	; /62/ add size to total blocks
+     46	000154	005767 	000000G			tst	summary			; /62/ need to do any file data?
+     47	000160	001043 				bne	90$			; /62/ no
+     48	000162	016502 	000002 			mov	2(r5)	,r2		; /62/ ya, pass buffer location
+     49	000166	004767 	002402 			call	convert			; and convert name to asciz
+     50	000172	010200 				mov	r2	,r0		; copy to process embedded spaces
+     51	000174	105710 			50$:	tstb	(r0)			; end of the string yet?
+     52	000176	001411 				beq	80$			; yes
+     53	000200	005767 	000000G			tst	dirflg			; /BBS/ retain embedded blanks?
+     54	000204	001003 				bne	60$			; /BBS/ ya, this is for a dir display
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 10-1
+Wildcarded lookup
+
+     55	000206	121027 	000040 			cmpb	(r0)	,#space		; no, if it's a space
+     56	000212	001401 				beq	70$			; then ignore it
+     57	000214	111022 			60$:	movb	(r0)	,(r2)+		; copy one byte
+     58	000216	005200 			70$:	inc	r0			; then point to the next char
+     59	000220	000765 				br	50$			; and go check it
+     60	000222	105012 			80$:	clrb	(r2)			; ensure returned string is .asciz
+     61	000224	016367 	000014 	000000G		mov	f.date(r3),lokdate	; /38/ save create date
+     62	000232	016367 	000010 	000000G		mov	f.len(r3) ,loklen	; /38/ save file size
+     63	000240	016367 	000000 	000000G		mov	f.stat(r3),lokstat	; /BBS/ file status word
+     64	000246	016367 	000012 	000000G		mov	f.time(r3),loktime	; /BBS/ TSX+ file create time
+     65	000254	066703 	000010'			add	dirsiz	,r3		; /BBS/ next time, try next one
+     66	000260	010367 	000000G			mov	r3	,context	; /BBS/ save where next one is..
+     67	000264	005000 				clr	r0			; success
+     68	000266	000434 				br	130$
+     69
+     70	000270	066703 	000010'		90$:	add	dirsiz	,r3		; skip to the next entry please
+     71	000274	000674 				br	30$			; and check it
+     72	000276	016701 	002016'		100$:	mov	h.next	,r1		; end of segment, check the next one
+     73	000302	001261 				bne	20$			; /62/ if one is there
+     74	000304	012700 	000000G		110$:	mov	#er$nmf ,r0		; /BBS/ no more files..
+     75
+     76	000310				120$:	save	<r0>			; /63/ save the incoming error
+	000310	010046 				 mov	r0	,-(sp)
+     77	000312					.purge	#lun.sr			; /62/ dump the device on any error
+	000312	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	000316	104374 				EMT	^O374
+     78	000320	005067 	000000G			clr	lokdate			; /62/ clear
+     79	000324	005067 	000000G			clr	lokstat			; /62/ these
+     80	000330	005067 	000000G			clr	loktime			; /62/ on
+     81	000334	005067 	000000G			clr	loklen			; /62/ failure..
+     82	000340	005067 	000000G			clr	dirflg			; /62/ done with this now
+     83	000344					strcpy	2(r5)	,(r5)		; /62/ return input name causing error
+	000344	011546 				mov	(r5)	,-(sp)
+	000346	016546 	000002 			mov	2(r5)	,-(sp)
+	000352	004767 	000000G			jsr	pc	,strcpy
+     84	000356					unsave	<r0>			; /63/ restore the error code now
+	000356	012600 				 mov	(sp)+	,r0
+     85	000360				130$:	unsave	<r3,r2,r1>
+	000360	012603 				 mov	(sp)+	,r3
+	000362	012602 				 mov	(sp)+	,r2
+	000364	012601 				 mov	(sp)+	,r1
+     86	000366	000207 				return
+     87
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 11
+Wildcarded lookup
+
+      1
+      2						.sbttl	Replace "?" with "%" for RSTS/E users ; /BBS/ from K11RMS.MAC
+      3
+      4					;	input:	(r5)	= address of string to process
+      5
+      6	000370				fixwil::save	<r2>
+	000370	010246 				 mov	r2	,-(sp)
+      7	000372	011502 				mov	@r5	,r2		; get the string address
+      8	000374	105712 			10$:	tstb	@r2			; done with the file name yet?
+      9	000376	001407 				beq	30$			; yes, exit
+     10	000400	121227 	000077 			cmpb	@r2	,#'?		; check for a "?" character
+     11	000404	001002 				bne	20$			; no
+     12	000406	112712 	000045 			movb	#'%	,@r2		; yes, replace with a percent sign
+     13	000412	005202 			20$:	inc	r2			; next please
+     14	000414	000767 				br	10$			; back again
+     15	000416				30$:	unsave	<r2>
+	000416	012602 				 mov	(sp)+	,r2
+     16	000420	005000 				clr	r0			; no error
+     17	000422	000207 				return
+     18
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 12
+Replace "?" with "%" for RSTS/E users ; /BBS/ from K11RMS.MAC
+
+      1
+      2						.sbttl	Display directory listing on terminal
+      3
+      4					;	 D O D I R			; /62/ major rewrite using server code
+      5					;
+      6					;	 (r5)	= wildcarded filespec
+      7					;	  r0	= if <>, error code
+      8
+      9	000424	004767 	000042 		dodir::	call	sdirini			; init directory lookup and
+     10	000430	005700 				tst	r0			; pre-load output buffer
+     11	000432	001016 				bne	40$			; an error occurred
+     12	000434	000407 				br	20$			; enter loop writing..
+     13
+     14	000436	004767 	000306 		10$:	call	dirnex			; look for a matching file
+     15	000442	103411 				bcs	30$			; done..
+     16	000444	005767 	002014'			tst	endflg			; about to type the summary lines?
+     17	000450	001401 				beq	20$			; no
+     18	000452					.rctrlo				; ya, ensure totals are visible
+	000452	104355 				EMT	^O355
+     19	000454				20$:	wrtall	dirbfr			; dump matching file spec to terminal
+	000454	016746 	000000G			mov	dirbfr	,-(sp)		; pass the address
+	000460	004767 	000000G			call	wrtall			; do it
+     20	000464	000764 				br	10$			; try for another match
+     21
+     22	000466	005000 			30$:	clr	r0			; no error
+     23	000470	000207 			40$:	return
+     24
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 13
+Display directory listing on terminal
+
+      1
+      2						.sbttl	Server directory	; /62/ condensed a bit..
+      3
+      4					;	S D I R I N I  -  Initialization
+      5					;	S D O D I R    -  Get next char
+      6					;
+      7					;	input:   (r5)	= wildcarded name
+      8					;	output:   r1	= next character in the directory listing
+      9					;		  r0	= if <>, error code
+     10					;
+     11					;	SDODIR is called by the server to respond to a remote directory
+     12					;	command, returning one char at a time so BUFFIL can use it, via
+     13					;	the GETCR0 routine.  SDIRINI must be called first, to check for
+     14					;	a valid device and file spec, and to pre-load the date slug.
+     15
+     16	000472				sdirini::copyz	(r5)	,dirnam	,#80.	; /62/ copy name over, don't overwrite
+	000472	012746 	000120 			mov	#80.	,-(sp)
+	000476	011546 				mov	(r5)	,-(sp)
+	000500	016746 	000000G			mov	dirnam	,-(sp)
+	000504	004767 	000000G			call	copyz$
+     17	000510	005067 	000000G			clr	index			; /62/ init to
+     18	000514					calls	lookup	,<dirnam,@r5>	; /62/ open device and check file spec
+	000514	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000516	011546 				        mov	@r5	,-(sp)	; push it
+	000520	016746 	000000G			        mov	dirnam	,-(sp)	; push it
+	000524	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000526	004767 	177246 			  jsr	pc	,lookup		; and go to the routine
+	000532	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000534	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     19	000536	005700 				tst	r0			; /62/ well?
+     20	000540	001403 				beq	10$			; /62/ no error
+     21	000542	020027 	000000G			cmp	r0	,#er$nmf	; /62/ no good, but
+     22	000546	001050 				bne	40$			; /62/ ignore no more files error
+     23	000550	005067 	000000G		10$:	clr	index			; /62/ reset match counter
+     24	000554	010667 	000000G			mov	sp	,dirflg		; /62/ keep blanks in name
+     25	000560	005067 	002014'			clr	endflg			; clear all done looking flag
+     26	000564	016702 	000000G			mov	dirbfr	,r2		; the output buffer
+     27	000570	010267 	002012'			mov	r2	,dirptr		; reset its pointer
+     28	000574	012700 	000004'			mov	#sluggy	,r0		; /62/ scratch buff
+     29	000600					calls	ascdat	,<r0,#-1>	; /62/ get date into a buffer
+	000600	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000602	012746 	177777 			        mov	#-1	,-(sp)	; push it
+	000606	010046 				        mov	r0	,-(sp)	; push it
+	000610	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000612	004767 	002514 			  jsr	pc	,ascdat		; and go to the routine
+	000616	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000620	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     30	000622	122710 	000040 			cmpb	#space	,(r0)		; leading space in date?
+     31	000626	001402 				beq	20$			; ya, so skip adding one
+     32	000630	112722 	000040 			movb	#space	,(r2)+		; no, so blank col. 1 ala RT-11
+     33	000634				20$:	R0toR2				; /62/ copy the date
+	000634	004767 	000732 			call	R0toR2			; copy string in (r0) to (r2)
+     34	000640	005767 	000000G			tst	summary			; doing a summary only?
+     35	000644	001410 				beq	30$			; /62/ nope
+     36	000646					R0toR2	#dcrlf			; /62/ ya, prefix with <cr><lf>
+	000646	012700 	000116'			mov	#dcrlf	,r0		; load r0 if an arg is supplied
+	000652	004767 	000714 			call	R0toR2			; copy string in (r0) to (r2)
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 13-1
+Server directory	; /62/ condensed a bit..
+
+     37	000656					R0toR2	dirnam			; /62/ display file spec for SPACE cmd
+	000656	016700 	000000G			mov	dirnam	,r0		; load r0 if an arg is supplied
+	000662	004767 	000704 			call	R0toR2			; copy string in (r0) to (r2)
+     38	000666	005000 			30$:	clr	r0			; /62/ no error
+     39	000670	000207 			40$:	return
+     40
+     41	000672				sdodir::save	<r2,r3>
+	000672	010246 				 mov	r2	,-(sp)
+	000674	010346 				 mov	r3	,-(sp)
+     42	000676	117701 	002012'		10$:	movb	@dirptr ,r1		; get the next char please
+     43	000702	001404 				beq	20$			; /63/ nothing left, reload buffer
+     44	000704	005267 	002012'			inc	dirptr			; pointer++, something was there
+     45	000710	005000 				clr	r0			; no errors
+     46	000712	000413 				br	40$
+     47	000714	016767 	000000G	002012'	20$:	mov	dirbfr	,dirptr		; /63/ reset the pointer
+     48	000722	105077 	002012'			clrb	@dirptr			; init the buffer
+     49	000726	004767 	000016 			call	dirnex			; load next file's data into buffer
+     50	000732	103361 				bcc	10$			; /63/ back to get next char loop
+     51	000734	012700 	000000G		30$:	mov	#er$eof ,r0		; failure, return(EOF)
+     52	000740	005001 				clr	r1			; return no data also
+     53	000742				40$:	unsave	<r3,r2>
+	000742	012603 				 mov	(sp)+	,r3
+	000744	012602 				 mov	(sp)+	,r2
+     54	000746	000207 				return
+     55
+     56	000750	016702 	000000G		dirnex:	mov	dirbfr	,r2		; pointer to buffer
+     57	000754	012703 	000004'			mov	#sluggy	,r3		; /62/ local scratch buffer
+     58	000760	005767 	002014'			tst	endflg			; /BBS/ done the tally lines yet?
+     59	000764	001125 				bne	50$			; /BBS/ ya, time to bail out
+     60	000766					calls	lookup	,<dirnam,r3>	; /62/ try to find a matching file
+	000766	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000770	010346 				        mov	r3	,-(sp)	; push it
+	000772	016746 	000000G			        mov	dirnam	,-(sp)	; push it
+	000776	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001000	004767 	176774 			  jsr	pc	,lookup		; and go to the routine
+	001004	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001006	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     61	001010	005700 				tst	r0			; successful?
+     62	001012	001103 				bne	30$			; no
+     63	001014					R0toR2	#dcrlf			; /62/ ya, prefix with <cr><lf>
+	001014	012700 	000116'			mov	#dcrlf	,r0		; load r0 if an arg is supplied
+	001020	004767 	000546 			call	R0toR2			; copy string in (r0) to (r2)
+     64	001024					R0toR2	r3			; /62/ copy file spec into buff
+	001024	010300 				mov	r3	,r0		; load r0 if an arg is supplied
+	001026	004767 	000540 			call	R0toR2			; copy string in (r0) to (r2)
+     65	001032					calls	d$cvtnum,<r3,loklen,#0>	; /BBS/ file size
+	001032	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001034	012746 	000000 			        mov	#0	,-(sp)	; push it
+	001040	016746 	000000G			        mov	loklen	,-(sp)	; push it
+	001044	010346 				        mov	r3	,-(sp)	; push it
+	001046	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001050	004767 	002656 			  jsr	pc	,d$cvtnum		; and go to the routine
+	001054	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001060	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     66	001062					R0toR2	r3			; /62/ append it please
+	001062	010300 				mov	r3	,r0		; load r0 if an arg is supplied
+	001064	004767 	000502 			call	R0toR2			; copy string in (r0) to (r2)
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 13-2
+Server directory	; /62/ condensed a bit..
+
+     67	001070	032767 	100000 	000000G		bit	#prot	,lokstat	; /BBS/ protected file?
+     68	001076	001405 				beq	10$			; /BBS/ nope..
+     69	001100					R0toR2	#protspc		; /62/ ya, so flag it accordingly
+	001100	012700 	000145'			mov	#protspc	,r0		; load r0 if an arg is supplied
+	001104	004767 	000462 			call	R0toR2			; copy string in (r0) to (r2)
+     70	001110	000404 				br	20$			; /BBS/ and continue
+     71	001112				10$:	R0toR2	#unpspc			; /62/ three spaces..
+	001112	012700 	000161'			mov	#unpspc	,r0		; load r0 if an arg is supplied
+	001116	004767 	000450 			call	R0toR2			; copy string in (r0) to (r2)
+     72	001122				20$:	calls	ascdat	,<r3,lokdate>	; /62/ convert date to asciz
+	001122	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001124	016746 	000000G			        mov	lokdate	,-(sp)	; push it
+	001130	010346 				        mov	r3	,-(sp)	; push it
+	001132	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001134	004767 	002172 			  jsr	pc	,ascdat		; and go to the routine
+	001140	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001142	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     73	001144					R0toR2	r3			; /62/ append the date please
+	001144	010300 				mov	r3	,r0		; load r0 if an arg is supplied
+	001146	004767 	000420 			call	R0toR2			; copy string in (r0) to (r2)
+     74	001152	005767 	000000G			tst	tsxsav			; /BBS/ if not TSX
+     75	001156	001426 				beq	40$			; /63/ skip the file time
+     76	001160					R0toR2	#prospc			; /62/ two blanks
+	001160	012700 	000162'			mov	#prospc	,r0		; load r0 if an arg is supplied
+	001164	004767 	000402 			call	R0toR2			; copy string in (r0) to (r2)
+     77	001170					calls	filtim	,<r3,loktime>	; /BBS/ make it displayable
+	001170	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001172	016746 	000000G			        mov	loktime	,-(sp)	; push it
+	001176	010346 				        mov	r3	,-(sp)	; push it
+	001200	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001202	004767 	002362 			  jsr	pc	,filtim		; and go to the routine
+	001206	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001210	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     78	001212					R0toR2	r3			; /62/ copy that into dir string
+	001212	010300 				mov	r3	,r0		; load r0 if an arg is supplied
+	001214	004767 	000352 			call	R0toR2			; copy string in (r0) to (r2)
+     79	001220	000405 				br	40$
+     80
+     81	001222	020027 	000000G		30$:	cmp	r0	,#er$nmf	; no more files error?
+     82	001226	001006 				bne	60$			; no
+     83	001230	004767 	000014 			call	dirsum			; /63/ ya, do summary lines now
+     84	001234	005000 			40$:	clr	r0			; success
+     85	001236	000403 				br	70$
+     86	001240	012700 	000000G		50$:	mov	#er$eof ,r0		; failure, return(EOF)
+     87	001244	000261 			60$:	sec				; indicate there was some error
+     88	001246	000207 			70$:	return
+     89
+     90	001250	010667 	002014'		dirsum:	mov	sp	,endflg		; /63/ flag it's all over
+     91	001254					R0toR2	#dcrlf			; /62/ prefix with <cr><lf>
+	001254	012700 	000116'			mov	#dcrlf	,r0		; load r0 if an arg is supplied
+	001260	004767 	000306 			call	R0toR2			; copy string in (r0) to (r2)
+     92	001264	005767 	000000G			tst	summary			; doing a SPACE summary only?
+     93	001270	001007 				bne	10$			; ya, skip the newline here
+     94	001272	005767 	000000G			tst	index			; anything listed?
+     95	001276	003004 				bgt	10$			; ya
+     96	001300					R0toR2	#dcrlf			; no, so blank a line ala RT-11
+	001300	012700 	000116'			mov	#dcrlf	,r0		; load r0 if an arg is supplied
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 13-3
+Server directory	; /62/ condensed a bit..
+
+	001304	004767 	000262 			call	R0toR2			; copy string in (r0) to (r2)
+     97	001310				10$:	calls	d$cvtnum,<r3,index,#-1>	; number of files listed
+	001310	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001312	012746 	177777 			        mov	#-1	,-(sp)	; push it
+	001316	016746 	000000G			        mov	index	,-(sp)	; push it
+	001322	010346 				        mov	r3	,-(sp)	; push it
+	001324	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001326	004767 	002400 			  jsr	pc	,d$cvtnum		; and go to the routine
+	001332	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001336	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     98	001340					R0toR2	r3			; copy to buffer
+	001340	010300 				mov	r3	,r0		; load r0 if an arg is supplied
+	001342	004767 	000224 			call	R0toR2			; copy string in (r0) to (r2)
+     99	001346					R0toR2	#files			; " File"
+	001346	012700 	000121'			mov	#files	,r0		; load r0 if an arg is supplied
+	001352	004767 	000214 			call	R0toR2			; copy string in (r0) to (r2)
+    100	001356	005367 	000000G			dec	index			; singular or plural?
+    101	001362	001404 				beq	20$			; singular
+    102	001364					R0toR2	#plural			; /63/ not 1, so make it plural
+	001364	012700 	000143'			mov	#plural	,r0		; load r0 if an arg is supplied
+	001370	004767 	000176 			call	R0toR2			; copy string in (r0) to (r2)
+    103	001374	112722 	000054 		20$:	movb	#comma	,(r2)+		; ","
+    104	001400					calls	d$cvtnum,<r3,numblks,#-1> ; total blocks
+	001400	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001402	012746 	177777 			        mov	#-1	,-(sp)	; push it
+	001406	016746 	002122'			        mov	numblks	,-(sp)	; push it
+	001412	010346 				        mov	r3	,-(sp)	; push it
+	001414	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001416	004767 	002310 			  jsr	pc	,d$cvtnum		; and go to the routine
+	001422	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001426	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    105	001430					R0toR2	r3			; append it please
+	001430	010300 				mov	r3	,r0		; load r0 if an arg is supplied
+	001432	004767 	000134 			call	R0toR2			; copy string in (r0) to (r2)
+    106	001436					R0toR2	#blocks			; " Block"
+	001436	012700 	000107'			mov	#blocks	,r0		; load r0 if an arg is supplied
+	001442	004767 	000124 			call	R0toR2			; copy string in (r0) to (r2)
+    107	001446	005367 	002122'			dec	numblks			; singular or plural?
+    108	001452	001404 				beq	30$			; just one
+    109	001454					R0toR2	#plural			; /63/ not 1, so make it plural
+	001454	012700 	000143'			mov	#plural	,r0		; load r0 if an arg is supplied
+	001460	004767 	000106 			call	R0toR2			; copy string in (r0) to (r2)
+    110	001464				30$:	R0toR2	#dcrlf			; <cr><lf>
+	001464	012700 	000116'			mov	#dcrlf	,r0		; load r0 if an arg is supplied
+	001470	004767 	000076 			call	R0toR2			; copy string in (r0) to (r2)
+    111	001474					calls	d$cvtnum,<r3,numfree,#-1> ; free blocks
+	001474	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001476	012746 	177777 			        mov	#-1	,-(sp)	; push it
+	001502	016746 	002124'			        mov	numfree	,-(sp)	; push it
+	001506	010346 				        mov	r3	,-(sp)	; push it
+	001510	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001512	004767 	002214 			  jsr	pc	,d$cvtnum		; and go to the routine
+	001516	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001522	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    112	001524					R0toR2	r3			; put ascii number in buffer
+	001524	010300 				mov	r3	,r0		; load r0 if an arg is supplied
+	001526	004767 	000040 			call	R0toR2			; copy string in (r0) to (r2)
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 13-4
+Server directory	; /62/ condensed a bit..
+
+    113	001532					R0toR2	#free			; " Free Block"
+	001532	012700 	000127'			mov	#free	,r0		; load r0 if an arg is supplied
+	001536	004767 	000030 			call	R0toR2			; copy string in (r0) to (r2)
+    114	001542	005367 	002124'			dec	numfree			; singular or plural?
+    115	001546	001404 				beq	40$			; singular
+    116	001550					R0toR2	#plural			; /63/ not 1, so make it plural
+	001550	012700 	000143'			mov	#plural	,r0		; load r0 if an arg is supplied
+	001554	004767 	000012 			call	R0toR2			; copy string in (r0) to (r2)
+    117	001560				40$:	R0toR2	#dcrlf			; <cr><lf>
+	001560	012700 	000116'			mov	#dcrlf	,r0		; load r0 if an arg is supplied
+	001564	004767 	000002 			call	R0toR2			; copy string in (r0) to (r2)
+    118	001570	000207 				return
+    119
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 14
+Server directory	; /62/ condensed a bit..
+
+      1
+      2						.sbttl	Copy (r0) to (r2)	; /62/ replaces strcat here
+      3
+      4	001572	112022 			R0toR2:	movb	(r0)+	,(r2)+		; copy a byte
+      5	001574	001376 				bne	R0toR2			; until hitting a null
+      6	001576	005302 				dec	r2			; leave r2 on the null
+      7	001600	000207 				return
+      8
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 15
+Copy (r0) to (r2)	; /62/ replaces strcat here
+
+      1
+      2						.sbttl	Open device, build name list to search directory
+      3
+      4					;	O P N D E V
+      5					;
+      6					;	input:	  (r5)	= file spec string
+      7					;	output:	   r0	= if <>, error code
+      8
+      9	001602				opndev:	calls	fparse	,<(r5),#sluggy>	; /62/ check for valid device
+	001602	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001604	012746 	000004'			        mov	#sluggy	,-(sp)	; push it
+	001610	011546 				        mov	(r5)	,-(sp)	; push it
+	001612	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001614	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	001620	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001622	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     10	001624	005700 				tst	r0			; /BBS/ is it?
+     11	001626	001401 				beq	10$			; /BBS/ ya
+     12	001630	000207 				return				; /BBS/ no
+     13
+     14	001632				10$:	.purge	#lun.sr			; /62/ dump possible old device
+	001632	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	001636	104374 				EMT	^O374
+     15	001640	012700 	000004'			mov	#sluggy	,r0		; /62/ input string address
+     16	001644					copyz	r0	,dirnam		; /62/ return cleaned up file spec
+	001644	005046 				clr	-(sp)
+	001646	010046 				mov	r0	,-(sp)
+	001650	016746 	000000G			mov	dirnam	,-(sp)
+	001654	004767 	000000G			call	copyz$
+     17	001660	005067 	000000G			clr	context			; /62/ init curr dir seg offset reg
+     18	001664	005067 	002122'			clr	numblks			; /62/ clear total blocks of above
+     19	001670	005067 	002124'			clr	numfree			; /62/ clear free space reg
+     20
+     21	001674	162706 	000122 			sub	#ln$max+2.,sp		; /63/ .csispc input data buffer
+     22	001700	010601 				mov	sp	,r1		; pointer to it
+     23	001702	112721 	000075 			movb	#'=	,(r1)+		; /62/ fake an output file spec
+     24	001706	112021 			20$:	movb	(r0)+	,(r1)+		; copy input string to the CSI buffer
+     25	001710	001376 				bne	20$			; until a null byte is found
+     26	001712	010601 				mov	sp	,r1		; reset pointer (also saving sp)
+     27	001714					.csispc #sluggy	,#defext ,r1	; /62/ try to parse the file spec(s)
+	001714	012746 	000004'			MOV	#sluggy,-(SP)
+	001720	012746 	000000'			MOV	#defext,-(SP)
+	001724	010146 				MOV	r1,-(SP)
+	001726	104345 				EMT	^O<345>
+     28	001730	010106 				mov	r1	,sp		; hose any switches, unsupported here
+     29	001732	103532 				bcs	110$			; oops
+     30	001734	016767 	000042'	000000'		mov	sluggy+36,csidev	; /62/ save a copy of device name only
+     31	001742					calls	fetch	,<csidev>	; /62/ try to get the thing loaded
+	001742	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001744	016746 	000000'			  mov	csidev	,-(sp)		; doing it thusly generates less code
+	001750	010605 				  mov	sp	,r5		; set pointer to argument list
+	001752	004767 	000000G			  jsr	pc	,fetch		; call the subroutine
+	001756	005726 				  tst	(sp)+			; pop parameter list from stack
+	001760	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     32	001762	005700 				tst	r0			; well?
+     33	001764	001133 				bne	150$			; exit with mapped error
+     34
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 15-1
+Open device, build name list to search directory
+
+     35	001766	012701 	000006 			mov	#6	,r1		; /62/ do implicit "*." wildcarding
+     36	001772	012700 	000044'			mov	#sluggy+40,r0		; /62/ first input file name is here
+     37	001776	005710 			30$:	tst	(r0)			; /62/ does an input file name exist?
+     38	002000	001002 				bne	40$			; /62/ something was indeed there
+     39					; /63/	Following two lines are here if needed, but probably will never be..
+     40					;	tst	dowild			; /63/ implicit wildcarding enabled?
+     41					;	beq	40$			; /63/ not this time..
+     42	002002	012710 	132500 			mov	#star	,(r0)		; /62/ nothing, convert to wildcard
+     43	002006	062700 	000010 		40$:	add	#10	,r0		; /62/ bump pointer to next descriptor
+     44	002012					sob	r1	,30$		; /62/ do six input file descriptors
+	002012	005301 				dec	r1
+	002014	001370 				bne	30$
+     45	002016	005040 				clr	-(r0)			; /62/ null terminate rad50 names
+     46
+     47	002020	012700 	002020'			mov	#name1	,r0		; /62/ init this buffer with nulls
+     48	002024	012701 	000034 			mov	#56./2	,r1		; /62/ clearing 2 bytes at a time
+     49	002030	005020 			50$:	clr	(r0)+			; /62/ is somewhat faster than one
+     50	002032					sob	r1	,50$		; /62/ by one..
+	002032	005301 				dec	r1
+	002034	001375 				bne	50$
+     51
+     52	002036					save	<r2>			; /63/
+	002036	010246 				 mov	r2	,-(sp)
+     53	002040	012701 	002020'			mov	#name1	,r1		; /62/ top of ascii'd names buffer
+     54	002044	012702 	000042'			mov	#sluggy+36,r2		; /62/ offset to first input file spec
+     55	002050	005722 			60$:	tst	(r2)+			; /62/ ignore device name
+     56	002052	001417 				beq	80$			; /62/ nothing left, done
+     57	002054	012700 	000003 			mov	#3	,r0		; /62/ loop 3 times
+     58	002060				70$:	calls	rdtoa	,<r1,(r2)+>	; /62/ convert file name to ascii
+	002060	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002062	012246 				        mov	(r2)+	,-(sp)	; push it
+	002064	010146 				        mov	r1	,-(sp)	; push it
+	002066	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002070	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	002074	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002076	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     59	002100	062701 	000003 			add	#3	,r1		; /62/ increment pointer by 3 chars
+     60	002104					sob	r0	,70$		; /62/ next please
+	002104	005300 				dec	r0
+	002106	001364 				bne	70$
+     61	002110	000757 				br	60$			; /62/ then try next file name
+     62	002112				80$:	unsave	<r2>			; /63/
+	002112	012602 				 mov	(sp)+	,r2
+     63
+     64	002114					.lock				; /BBS/ lock the USR in memory
+	002114	104346 				EMT	^O346
+     65	002116	026727 	000000G	000005 		cmp	rt11ver	,#5		; /62/ is the RT-11 V5 or above?
+     66	002124	002010 				bge	90$			; /62/ ya, .pval will work
+     67	002126	005767 	000000G			tst	montyp			; /62/ if XM and V4..
+     68	002132	003017 				bgt	100$			; /62/ ..tough luck
+     69	002134	013700 	000054 			mov	@#sysptr,r0		; /62/ otherwise, get RMON base and
+     70	002140	005060 	000256 			clr	blkey(r0)		; /63/ force USR to re-read the dir
+     71	002144	000412 				br	100$
+     72	002146				90$:
+     73					; /62/	.pval	#rtwork	,#blkey	,#0	; /BBS/ force USR to re-read the dir
+     74	002146	012700 	000000G			MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
+     75	002152	012710 	016002 			MOV	#28.*^o400+2,@R0	; /62/ even though V4 can't run it
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 15-2
+Open device, build name list to search directory
+
+     76	002156	012760 	000256 	000002 		MOV	#blkey	,2.(R0)		; /62/
+     77	002164	005060 	000004 			CLR	4.(R0)			; /62/
+     78	002170	104375 				EMT	^o375			; /62/
+     79	002172				100$:	.lookup #rtwork	,#lun.sr,#csidev ; /62/ open the DEVICE for input
+	002172	012700 	000000G			MOV	#rtwork,R0
+	002176	012710 	000400G			MOV	#lun.sr+<1.*^O400>,@R0
+	002202	012760 	000000'	000002 		MOV	#csidev,2.(R0)
+	002210	104375 				EMT	^O375
+     80	002212	103405 				bcs	120$			; can not find it
+     81	002214	005000 				clr	r0			; no errors
+     82	002216	000416 				br	150$
+     83
+     84	002220	012701 	000000G		110$:	mov	#csierr ,r1		; .csispc error mapping
+     85	002224	000402 				br	130$
+     86	002226	012701 	000000G		120$:	mov	#lokerr ,r1		; .lookup error mapping
+     87	002232	113700 	000052 		130$:	movb	@#errbyt,r0		; get the error code now
+     88	002236	100003 				bpl	140$			; /51/ normal (non-fatal) RT-11 error
+     89	002240	005100 				com	r0			; /51/ fatal error, flip it to map
+     90	002242	012701 	000000G			mov	#faterr ,r1		; /BBS/ to a fatal error message
+     91	002246	006300 			140$:	asl	r0			; word indexing
+     92	002250	060001 				add	r0	,r1		; now map the RT-11 error into
+     93	002252	011100 				mov	@r1	,r0		; a fake RMS-11 error
+     94
+     95	002254	062706 	000122 		150$:	add	#ln$max+2,sp		; /63/ pop the .csispc input buffer
+     96	002260					save	<r0>			; /63/ did an error occur?
+	002260	010046 				 mov	r0	,-(sp)
+     97	002262	001403 				beq	160$			; /51/ no
+     98	002264					.purge	#lun.sr			; /51/ ya, purge the channel
+	002264	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	002270	104374 				EMT	^O374
+     99	002272				160$:	.unlock				; /BBS/ now release the USR..
+	002272	104347 				EMT	^O347
+    100	002274					unsave	<r0>			; /63/ restore possible error code
+	002274	012600 				 mov	(sp)+	,r0
+    101	002276	000207 				return
+    102
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 16
+Open device, build name list to search directory
+
+      1
+      2						.sbttl	Read in the home block
+      3
+      4					;	G E T H O M E
+      5					;
+      6					;	output:	   r0	= if <>, error code
+      7
+      8	002300				gethom: save	<r1,r2>			; /54/
+	002300	010146 				 mov	r1	,-(sp)
+	002302	010246 				 mov	r2	,-(sp)
+      9	002304					.readw	#rtwork,#lun.sr,#dirbuf,#400,#hd$blk
+	002304	012700 	000000G			MOV	#rtwork,R0
+	002310	012710 	004000G			MOV	#lun.sr+<8.*^O400>,@R0
+	002314	012760 	000001 	000002 		MOV	#hd$blk,2.(R0)
+	002322	012760 	000012'	000004 		MOV	#dirbuf,4.(R0)
+	002330	012760 	000400 	000006 		MOV	#400,6.(R0)
+	002336	005060 	000010 			CLR	8.(R0)
+	002342	104375 				EMT	^O375
+     10	002344	103432 				bcs	50$			; it failed, bye
+     11	002346	005767 	000000G			tst	rtvol			; really verify volume?
+     12	002352	001422 				beq	30$			; no
+     13	002354	012702 	000012'			mov	#dirbuf ,r2		; ya, get top of the buffer
+     14	002360	062702 	000760 			add	#hd$sys ,r2		; now point to the volume ident
+     15	002364	010201 				mov	r2	,r1		; /54/ copy of dirbuf pointer
+     16	002366	012700 	000151'			mov	#rt	,r0		; /54/ check for DECRT11 id
+     17	002372	105710 			10$:	tstb	@r0			; /54/ done?
+     18	002374	001411 				beq	30$			; /54/ yes, exit
+     19	002376	122021 				cmpb	(r0)+	,(r1)+		; /54/ same?
+     20	002400	001774 				beq	10$			; /54/ yes, keep looking
+     21	002402	012700 	000165'			mov	#vms	,r0		; /54/ check for VMSEXCH id
+     22	002406	105710 			20$:	tstb	@r0			; /54/ done?
+     23	002410	001403 				beq	30$			; /54/ yes, exit
+     24	002412	122022 				cmpb	(r0)+	,(r2)+		; /62/ same?
+     25	002414	001774 				beq	20$			; /54/ yes, keep looking
+     26	002416	000402 				br	40$			; /54/ not valid
+     27	002420	005000 			30$:	clr	r0			; no error
+     28	002422	000410 				br	60$
+     29
+     30	002424	012700 	000000G		40$:	mov	#er$vol ,r0		; return an error code
+     31	002430	000405 				br	60$
+     32	002432	113700 	000052 		50$:	movb	@#errbyt,r0		; get the error code
+     33	002436	006300 				asl	r0			; word indexing
+     34	002440	016000 	000000G			mov	drderr(r0),r0		; /BBS/ disk read error mapping
+     35	002444				60$:	unsave	<r2,r1>			; /54/
+	002444	012602 				 mov	(sp)+	,r2
+	002446	012601 				 mov	(sp)+	,r1
+     36	002450	000207 				return
+     37
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 17
+Read in the home block
+
+      1
+      2						.sbttl	Read in a segment, get header data
+      3
+      4					;	G E T H D R
+      5					;
+      6					;	input:    r1	= desired segment begins at this block
+      7					;	output:	dirbuf	= dir segment just read
+      8					;		dirsiz	= size of each file's dir entry
+      9					;		h.next	= link to next segment
+     10
+     11	002452				gethdr: .readw	#rtwork,#lun.sr,#dirbuf,#1000,r1
+	002452	012700 	000000G			MOV	#rtwork,R0
+	002456	012710 	004000G			MOV	#lun.sr+<8.*^O400>,@R0
+	002462	010160 	000002 			MOV	r1,2.(R0)
+	002466	012760 	000012'	000004 		MOV	#dirbuf,4.(R0)
+	002474	012760 	001000 	000006 		MOV	#1000,6.(R0)
+	002502	005060 	000010 			CLR	8.(R0)
+	002506	104375 				EMT	^O375
+     12	002510	103423 				bcs	20$			; it failed, bye
+     13	002512	012700 	000012'			mov	#dirbuf	,r0		; point to the buffer now
+     14	002516	006360 	000002 			asl	h$next(r0)		; segments are two blocks in length
+     15	002522	001403 				beq	10$			; no more segments if zero
+     16	002524	062760 	000004 	000002 		add	#4	  ,h$next(r0)	; and at last, the offset
+     17	002532	016067 	000002 	002016'	10$:	mov	h$next(r0),h.next	; get the link to the next one
+     18	002540	012767 	000016 	000010'		mov	#7*2	 ,dirsiz	; the default entry size
+     19	002546	066067 	000006 	000010'		add	h$ext(r0),dirsiz	; plus extra bytes per entry
+     20	002554	005000 				clr	r0			; no error
+     21	002556	000405 				br	30$
+     22
+     23	002560	113700 	000052 		20$:	movb	@#errbyt,r0		; get the error code
+     24	002564	006300 				asl	r0			; word indexing
+     25	002566	016000 	000000G			mov	drderr(r0),r0		; /BBS/ disk read error mapping
+     26	002572	000207 			30$:	return
+     27
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 18
+Read in a segment, get header data
+
+      1
+      2						.sbttl	Convert a directory entry to .asciz
+      3
+      4					;	C O N V E R T
+      5					;
+      6					;	input:	   r2	= buffer for the result
+      7					;		   r3	= current directory entry pointer
+      8
+      9	002574				convert:save	<r2>
+	002574	010246 				 mov	r2	,-(sp)
+     10	002576					calls	rdtoa	,<r2,csidev>	; /62/ convert the device name please
+	002576	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002600	016746 	000000'			        mov	csidev	,-(sp)	; push it
+	002604	010246 				        mov	r2	,-(sp)	; push it
+	002606	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002610	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	002614	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002616	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	002620	062702 	000002 			add	#2	,r2		; skip past it and insert a ":"
+     12	002624	121227 	000040 			cmpb	@r2	,#space		; a space (no unit number?)
+     13	002630	001401 				beq	10$			; no
+     14	002632	105722 				tstb	(r2)+			; a real unit, skip over number
+     15	002634	112722 	000072 		10$:	movb	#':	,(r2)+		; get DDn: format of device name
+     16	002640					calls	rdtoa	,<r2,f.nam1(r3)> ; convert first 3 file name to ascii
+	002640	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002642	016346 	000002 			        mov	f.nam1(r3)	,-(sp)	; push it
+	002646	010246 				        mov	r2	,-(sp)	; push it
+	002650	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002652	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	002656	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002660	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     17	002662	062702 	000003 			add	#3	,r2		; and skip over those three characters
+     18	002666					calls	rdtoa	,<r2,f.nam2(r3)> ; now get the rest of the file name
+	002666	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002670	016346 	000004 			        mov	f.nam2(r3)	,-(sp)	; push it
+	002674	010246 				        mov	r2	,-(sp)	; push it
+	002676	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002700	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	002704	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002706	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     19	002710	062702 	000003 			add	#3	,r2		; point to place a dot into the name
+     20	002714	112722 	000056 			movb	#'.	,(r2)+		; a dot
+     21	002720					calls	rdtoa	,<r2,f.type(r3)> ; get the file type at last
+	002720	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002722	016346 	000006 			        mov	f.type(r3)	,-(sp)	; push it
+	002726	010246 				        mov	r2	,-(sp)	; push it
+	002730	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002732	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	002736	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002740	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     22	002742	105062 	000003 			clrb	3(r2)			; ensure .asciz
+     23	002746					unsave	<r2>
+	002746	012602 				 mov	(sp)+	,r2
+     24	002750	000207 				return
+     25
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 19
+Convert a directory entry to .asciz
+
+      1
+      2						.sbttl	Wildcarded file name match test
+      3
+      4					;	M A T C H
+      5					;
+      6					;	r3 = passed pointer to current entry in directory segment buffer
+      7					;	r4 = internal pointer to current entry in file names data buffer
+      8
+      9		000056 				PERCENT = '.			; /58/ percent in a file spec string
+     10		000077 				WILDC	= '?			; /58/ wildcard flag in same
+     11
+     12	002752				match:	save	<r1,r2,r4>		; /62/
+	002752	010146 				 mov	r1	,-(sp)
+	002754	010246 				 mov	r2	,-(sp)
+	002756	010446 				 mov	r4	,-(sp)
+     13	002760	012701 	002110'			mov	#name2	,r1		; /62/ ascii name of file on disk
+     14	002764	010302 				mov	r3	,r2		; /62/ address of its entry
+     15	002766	062702 	000002 			add	#f.nam1 ,r2		; /62/ bump to start of file name
+     16	002772	012700 	000003 			mov	#3	,r0		; /62/ loop 3 times
+     17	002776				10$:	calls	rdtoa	,<r1,(r2)+>	; /62/ convert to ascii
+	002776	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003000	012246 				        mov	(r2)+	,-(sp)	; push it
+	003002	010146 				        mov	r1	,-(sp)	; push it
+	003004	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003006	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	003012	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003014	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     18	003016	062701 	000003 			add	#3	,r1		; /62/ next please
+     19	003022					sob	r0	,10$		; /62/
+	003022	005300 				dec	r0
+	003024	001364 				bne	10$
+     20
+     21	003026	012704 	002020'			mov	#name1	,r4		; /62/ top of input file names buffer
+     22	003032	105714 			20$:	tstb	(r4)			; /62/ is there an entry here?
+     23	003034	001427 				beq	50$			; /62/ nothing left, bail out..
+     24	003036	010401 				mov	r4	,r1		; /62/ the file name pattern
+     25	003040	012702 	002110'			mov	#name2	,r2		; the current file name on disk
+     26	003044	012700 	000006 			mov	#6.	,r0		; the loop count for scanning
+     27	003050	060004 				add	r0	,r4		; /62/ preset to file type location
+     28	003052	004767 	000050 			call	m.char			; /58/ compare file name
+     29	003056	103413 				bcs	30$			; /58/ match failure
+     30	003060	010401 				mov	r4	,r1		; /62/ the file type pattern
+     31	003062	012702 	002116'			mov	#name2+6,r2		; the current file type on disk
+     32	003066	012700 	000003 			mov	#3.	,r0		; the loop count for scanning
+     33	003072	060004 				add	r0	,r4		; /62/ preset to next file name
+     34	003074	004767 	000026 			call	m.char			; /58/ compare file type
+     35	003100	103404 				bcs	40$			; /62/ match failure
+     36	003102	010600 				mov	sp	,r0		; flag success and exit
+     37	003104	000404 				br	60$
+     38	003106	062704 	000003 		30$:	add	#3	,r4		; /62/ bump to next file name
+     39	003112	000747 			40$:	br	20$			; /62/ go try possible next file spec
+     40	003114	005000 			50$:	clr	r0			; /62/ failure, exit
+     41	003116				60$:	unsave	<r4,r2,r1>		; /62/
+	003116	012604 				 mov	(sp)+	,r4
+	003120	012602 				 mov	(sp)+	,r2
+	003122	012601 				 mov	(sp)+	,r1
+     42	003124	000207 				return
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 19-1
+Wildcarded file name match test
+
+     43
+     44	003126	010067 	000002'		m.char:	mov	r0	,L311$		; /63/ save for
+     45	003132	010167 	000000'			mov	r1	,L310$		; /58/ later re-use
+     46	003136	121112 			10$:	cmpb	@r1	,@r2		; /58/ if they match, no problem
+     47	003140	001411 				beq	20$			; /58/ simply check the next character
+     48	003142	121127 	000077 			cmpb	@r1	,#wildc		; /58/ a translated * wildcard?
+     49	003146	001421 				beq	30$			; /58/ yes - alternative check
+     50	003150	121127 	000056 			cmpb	@r1	,#percent	; /58/ a translated % wildcard?
+     51	003154	001051 				bne	80$			; /58/ no  - match failure..
+     52	003156	121227 	000040 			cmpb	(r2)	,#space		; /62/ ya, but must be something here
+     53	003162	003446 				ble	80$			; /62/ nothing there, match failure
+     54	003164	005201 			20$:	inc	r1			; /58/ match so far,
+     55	003166	005202 				inc	r2			; /58/ update pointers
+     56	003170					sob	r0	,10$		; /58/ and check the next ones
+	003170	005300 				dec	r0
+	003172	001361 				bne	10$
+     57	003174	004767 	000104 			call	m.len			; /58/ are we at end of string?
+     58	003200	103436 				bcs	70$			; /58/ yes - success
+     59	003202	121127 	000040 			cmpb	@r1	,#space		; /58/ no - see if wildcarded
+     60	003206	001433 				beq	70$			; /58/ if so, success
+     61	003210	000433 				br	80$			; /58/ else failure..
+     62
+     63	003212	005201 			30$:	inc	r1			; /58/ point to char after wildcard
+     64	003214	004767 	000064 			call	m.len			; /58/ are we at end of string?
+     65	003220	103426 				bcs	70$			; /58/ if so, success..
+     66	003222	121127 	000040 		40$:	cmpb	@r1	,#space		; /58/ a space?
+     67	003226	001423 				beq	70$			; /58/ end of matching check
+     68	003230	121127 	000056 			cmpb	@r1	,#percent	; /58/ a translated % wildcard?
+     69	003234	001007 				bne	50$			; /58/ no - compare strings
+     70	003236	121227 	000040 			cmpb	(r2)	,#space		; /62/ ya, but must be something here
+     71	003242	003416 				ble	80$			; /62/ nothing there, match failure
+     72	003244	005201 				inc	r1			; /58/ point to char after wildc
+     73	003246					sob	r0	,40$		; /58/ otherwise loop to find a char
+	003246	005300 				dec	r0
+	003250	001364 				bne	40$
+     74	003252	000411 				br	70$			; /58/ all %s, assume success
+     75
+     76	003254	121112 			50$:	cmpb	@r1	,@r2		; /58/ find a matching character?
+     77	003256	001003 				bne	60$			; /58/ not yet, see next..
+     78	003260	126212 	000001 			cmpb	1(r2)	,@r2		; /58/ next = same?
+     79	003264	001337 				bne	20$			; /58/ no - verify remainder
+     80	003266	005202 			60$:	inc	r2			; /58/ else point to next
+     81	003270					sob	r0	,50$		; /58/ and loop until done
+	003270	005300 				dec	r0
+	003272	001370 				bne	50$
+     82	003274	000401 				br	80$			; /58/ match failure
+     83	003276	005727 			70$:	tst	(pc)+			; /58/ skip next instr and clr carry
+     84	003300	000261 			80$:	sec				; /58/ or, flag failure by seting it
+     85	003302	000207 				return
+     86
+     87	003304				m.len:	save	<r0>			; /63/
+	003304	010046 				 mov	r0	,-(sp)
+     88	003306	010100 				mov	r1	,r0		; /58/ copy searched string pointer
+     89	003310	166700 	000000'			sub	L310$	,r0		; /62/ get number of chars checked
+     90	003314	026700 	000002'			cmp	L311$	,r0		; /62/ compare with total char count
+     91	003320	001401 				beq	10$			; /58/ a match - go flag it
+     92	003322	005727 				tst	(pc)+			; /58/ else skip next instr, clr carry
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 19-2
+Wildcarded file name match test
+
+     93	003324	000261 			10$:	sec				; /58/ flag end of string
+     94	003326					unsave	<r0>			; /63/
+	003326	012600 				 mov	(sp)+	,r0
+     95	003330	000207 				return
+     96
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 20
+Wildcarded file name match test
+
+      1
+      2						.sbttl	Convert date to .asciz
+      3
+      4					;	A S C D A T E
+      5					;
+      6					;	input:   (r5)	= output buffer address
+      7					;		2(r5)	= value of date, -1 for today's
+      8
+      9					; /BBS/	modified for RT-11 V5.5 extension of max year to 2099
+     10
+     11		000001 				DOFOUR	= 1	; /62/ zero to display just last two digits of year
+     12
+     13	003332				ascdat::save	<r0,r1,r2,r3>
+	003332	010046 				 mov	r0	,-(sp)
+	003334	010146 				 mov	r1	,-(sp)
+	003336	010246 				 mov	r2	,-(sp)
+	003340	010346 				 mov	r3	,-(sp)
+     14	003342	011501 				mov	@r5	,r1		; the result address
+     15	003344	016500 	000002 			mov	2(r5)	,r0		; /62/ get the date desired please
+     16	003350	001006 				bne	10$			; /62/ something is there
+     17	003352					strcpy	r1	,#nodate	; /62/ else return " No Date "
+	003352	012746 	000075'			mov	#nodate	,-(sp)
+	003356	010146 				mov	r1	,-(sp)
+	003360	004767 	000000G			jsr	pc	,strcpy
+     18	003364	000474 				br	60$			; bye
+     19
+     20	003366	020027 	177777 		10$:	cmp	r0	,#-1		; /62/ if -1, then return today's date
+     21	003372	001015 				bne	20$			; it's something else..
+     22	003374	024646 				cmp	-(sp)	,-(sp)		; /BBS/ a two word buffer
+     23	003376	010603 				mov	sp	,r3		; /BBS/ point to it
+     24	003400					.gtim	#rtwork	,r3		; /BBS/ roll over clock so date is ok
+	003400	012700 	000000G			MOV	#rtwork,R0
+	003404	012710 	010400 			MOV	#17.*^O400+0.,@R0
+	003410	010360 	000002 			MOV	r3,2.(R0)
+	003414	104375 				EMT	^O375
+     25	003416	022626 				cmp	(sp)+	,(sp)+		; /BBS/ dump the time buffer
+     26	003420					.date				; /BBS/ get today's date
+	003420	012700 	005000 			MOV	#^O5000,R0
+	003424	104374 				EMT	^O374
+     27
+     28	003426	010003 			20$:	mov	r0	,r3		; copy the date to get day of month
+     29	003430					ash	#3	,r3		; /62/ shift left 3 places
+	003430	006303 				.iif gt <$$type>  asl	r3
+	003432	006303 				.iif gt <$$type>  asl	r3
+	003434	006303 				.iif gt <$$type>  asl	r3
+     30	003436	000303 				swab	r3			; then swap bytes to get
+     31	003440	042703 	177740 			bic	#^c<37>	,r3		; the date, at last
+     32	003444	004767 	000000G			call	i2toa			; /BBS/ write ascii to out buff
+     33
+     34	003450	010003 				mov	r0	,r3		; get the date once again please
+     35	003452	000303 				swab	r3			; get the month to bits 5..2
+     36	003454	042703 	177703 			bic	#^c<74>	,r3		; /62/ hose yrs/days, leave at *4
+     37	003460	020327 	000060 			cmp	r3	,#12.*4		; /62/ a legal month?
+     38	003464	003401 				ble	30$			; /62/ most likely..
+     39	003466	005003 				clr	r3			; /62/ no, force "-ERR-"
+     40	003470	062703 	000010'		30$:	add	#months	,r3		; /BBS/ the easy way to point to month
+     41	003474	012702 	000005 			mov	#5	,r2		; /BBS/ prep to copy 5 chars "-Mon-"
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 20-1
+Convert date to .asciz
+
+     42	003500	112321 			40$:	movb	(r3)+	,(r1)+		; /BBS/ copy to out buff
+     43	003502	005302 				dec	r2			; /BBS/ one byte
+     44	003504	001375 				bne	40$			; /BBS/ at a time
+     45
+     46	003506	010003 				mov	r0	,r3		; copy the date
+     47	003510	042703 	177740 			bic	#^c<37>	,r3		; hose all but the year
+     48
+     49						.if ne dofour			; /62/ display all four years digits
+     50	003514	062703 	003664 			add	#1972.	,r3		; plus the bias please
+     51						.iff				; /62/ just last two digits of year
+     52						add	#72.	,r3		; plus the bias please
+     53						.iftf				; /63/ common code ahead..
+     54
+     55	003520	042700 	037777 			bic	#^c<140000>,r0		; /BBS/ extend max year w/two hi bits
+     56	003524	000300 				swab	r0			; /BBS/ two hi bits now are bits 7,6
+     57	003526	006200 				asr	r0			; /BBS/ shift to bits 6,5 (true value)
+     58	003530	060003 				add	r0	,r3		; /BBS/ add to total years
+     59
+     60						.ift				; /63/
+     61	003532	004767 	000000G			call	i4toa			; /BBS/ write all 4 digits of year
+     62						.iff				; /62/ just last two digits of year
+     63						cmp	#100.	,r3		; /BBS/ is it 2000 (next century) yet?
+     64						bgt	50$			; /BBS/ no
+     65						sub	#100.	,r3		; /BBS/ ya, extract last 2 digits
+     66					50$:	call	i2toa			; /BBS/ write ascii to out buff
+     67						.endc	; ne dofour
+     68
+     69	003536	105011 				clrb	@r1			; .asciz
+     70	003540	122775 	000060 	000000 		cmpb	#'0	,@(r5)		; /BBS/ leading zero to blank?
+     71	003546	001003 				bne	60$			; /BBS/ not zero
+     72	003550	112775 	000040 	000000 		movb	#space	,@(r5)		; /BBS/ ya
+     73	003556				60$:	unsave	<r3,r2,r1,r0>
+	003556	012603 				 mov	(sp)+	,r3
+	003560	012602 				 mov	(sp)+	,r2
+	003562	012601 				 mov	(sp)+	,r1
+	003564	012600 				 mov	(sp)+	,r0
+     74	003566	000207 				return
+     75
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 21
+Convert date to .asciz
+
+      1
+      2						.sbttl	Display TSX+ file creation time	; /BBS/ all new
+      3
+      4					;	F I L T I M E
+      5					;
+      6					;	input:	  (r5)	= output buffer address
+      7					;		 2(r5)	= input filtim in TSX+ "3 sec" format
+      8
+      9	003570				filtim:	save	<r0,r1,r2,r3>
+	003570	010046 				 mov	r0	,-(sp)
+	003572	010146 				 mov	r1	,-(sp)
+	003574	010246 				 mov	r2	,-(sp)
+	003576	010346 				 mov	r3	,-(sp)
+     10	003600	016501 	000002 			mov	2(r5)	,r1		; get filtim (low) word
+     11	003604	005000 				clr	r0			; clear hi word for divide
+     12	003606					div	#20.	,r0		; get # of 3-secs since midnite
+	003606	012746 	000024 			mov	#20.	,-(sp)		; divisor
+	003612	010146 				mov	r1	,-(sp)		; dividend low word
+	003614	010046 				mov	r0	,-(sp)		; dividend high word
+	003616	004767 	000000G			call	p$div			; divide
+	003622	012601 				mov	(sp)+	,r1		; remainder
+	003624	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     13	003626	010146 				mov	r1	,-(sp)		; put on stack
+     14	003630	006301 				asl	r1			; multiply by two
+     15	003632	060116 				add	r1	,(sp)		; *3 = secs component of time value
+     16	003634	010001 				mov	r0	,r1		; prep for divide to..
+     17	003636	005000 				clr	r0			; ..get mins + hrs
+     18	003640					div	#60.	,r0		; get minutes component of time value
+	003640	012746 	000074 			mov	#60.	,-(sp)		; divisor
+	003644	010146 				mov	r1	,-(sp)		; dividend low word
+	003646	010046 				mov	r0	,-(sp)		; dividend high word
+	003650	004767 	000000G			call	p$div			; divide
+	003654	012601 				mov	(sp)+	,r1		; remainder
+	003656	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     19	003660	010146 				mov	r1	,-(sp)		; save minutes
+     20	003662	010003 				mov	r0	,r3		; put hrs where i2toa expects them
+     21	003664	011501 				mov	@r5	,r1		; the result address
+     22	003666	004767 	000000G			call	i2toa			; write hours to outbuff
+     23	003672	112721 	000072 			movb	#':	,(r1)+		; format display
+     24	003676	012603 				mov	(sp)+	,r3		; put mins where i2toa expects them
+     25	003700	004767 	000000G			call	i2toa			; write mins to outbuf
+     26	003704	112721 	000072 			movb	#':	,(r1)+		; format display
+     27	003710	012603 				mov	(sp)+	,r3		; put secs where i2toa expects them
+     28	003712	004767 	000000G			call	i2toa			; write secs to outbuf
+     29	003716	105011 				clrb	@r1			; null terminate the whole thingie
+     30	003720					unsave	<r3,r2,r1,r0>
+	003720	012603 				 mov	(sp)+	,r3
+	003722	012602 				 mov	(sp)+	,r2
+	003724	012601 				 mov	(sp)+	,r1
+	003726	012600 				 mov	(sp)+	,r0
+     31	003730	000207 				return
+     32
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 22
+Display TSX+ file creation time	; /BBS/ all new
+
+      1
+      2						.sbttl	Unsigned 16-bit integer conversion  ; /BBS/ all new
+      3
+      4					;	D $ C V T N U M		accommodates sizes > 32767.
+      5					;
+      6					;	input:	  (r5)	= output buffer address
+      7					;		 2(r5)	= unsigned 16-bit value to write into buffer
+      8					;		 4(r5)	= display formatting:
+      9					;			  0  = field set to 6 and right justified
+     10					;			  <> = space at left, number from left, .asciz
+     11
+     12	003732				d$cvtnum:save	<r0,r1,r2,r3>		; /62/ cleaned up this code..
+	003732	010046 				 mov	r0	,-(sp)
+	003734	010146 				 mov	r1	,-(sp)
+	003736	010246 				 mov	r2	,-(sp)
+	003740	010346 				 mov	r3	,-(sp)
+     13	003742	011502 				mov	(r5)	,r2		; write the number here
+     14	003744	012703 	000006 			mov	#6	,r3		; make its width 6
+     15	003750	010301 				mov	r3	,r1		; copy to clear buffer
+     16
+     17	003752	112722 	000040 		10$:	movb	#space	,(r2)+		; fill the buffer with blanks
+     18	003756					sob	r1	,10$
+	003756	005301 				dec	r1
+	003760	001374 				bne	10$
+     19	003762	105012 				clrb	@r2			; null terminate end of buffer
+     20	003764	016501 	000002 			mov	2(r5)	,r1		; get the value to print out
+     21
+     22	003770	005000 			20$:	clr	r0			; set up for the divide by 10.
+     23	003772					div	#10.	,r0		; remainder in r1, quotient r0
+	003772	012746 	000012 			mov	#10.	,-(sp)		; divisor
+	003776	010146 				mov	r1	,-(sp)		; dividend low word
+	004000	010046 				mov	r0	,-(sp)		; dividend high word
+	004002	004767 	000000G			call	p$div			; divide
+	004006	012601 				mov	(sp)+	,r1		; remainder
+	004010	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     24	004012	062701 	000060 			add	#'0	,r1		; convert remainder to character
+     25	004016	110142 				movb	r1	,-(r2)		; and stuff that into output buffer
+     26	004020	010001 				mov	r0	,r1		; copy for next iteration
+     27	004022	001402 				beq	30$			; done
+     28	004024					sob	r3	,20$		; next..
+	004024	005303 				dec	r3
+	004026	001360 				bne	20$
+     29
+     30	004030	005765 	000004 		30$:	tst	4(r5)			; field flag flyin?
+     31	004034	001404 				beq	50$			; no, exit
+     32	004036	011501 				 mov	@r5	,r1		; start of the buffer here
+     33	004040	005201 				 inc	r1			; keep the leading blank in..
+     34	004042	112221 			40$:	 movb	(r2)+	,(r1)+		; move chars to front of buffer
+     35	004044	001376 				 bne	40$			; copy to and including the null
+     36
+     37	004046				50$:	unsave	<r3,r2,r1,r0>
+	004046	012603 				 mov	(sp)+	,r3
+	004050	012602 				 mov	(sp)+	,r2
+	004052	012601 				 mov	(sp)+	,r1
+	004054	012600 				 mov	(sp)+	,r0
+     38	004056	000207 				return
+     39
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 22-1
+Unsigned 16-bit integer conversion  ; /BBS/ all new
+
+     40		000001 				.end
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 22-2
+Symbol table
+
+ALSIZE= 001000   	DIRBUF  000012R     004	HD$BLK= 000001   	NAME2   002110R     004	SCOLON= 000073
+ASCDAT  003332RG    002	DIRFLG= ****** GX	HD$FIR= 000006   	NODATE  000075R     003	SDIRIN  000472RG    002
+AT.ALL  000177   	DIRNAM= ****** GX	HD$SYS= 000760   	NONEIS= 000001   	SDODIR  000672RG    002
+AT.CDT  000001   	DIRNEX  000750R     002	H$EXT = 000006   	NOSCOP= 000000   	SEVER$= 000010
+AT.INF  000002   	DIRPTR  002012R     004	H$NEXT= 000002   	NUMBLK  002122R     004	SLUGGY  000004R     005
+AT.LEN  000004   	DIRSIZ  000010R     004	H.NEXT  002016R     004	NUMFRE  002124R     004	SOH   = 000001
+AT.ON   100000   	DIRSUM  001250R     002	INDEX = ****** GX	OPNDEV  001602R     002	SPACE = 000040
+AT.PRO  000010   	DODIR   000424RG    002	I2TOA = ****** GX	PAR$EV  000002   	STAR  = 132500
+AT.SYS  000020   	DOFOUR= 000001   	I4TOA = ****** GX	PAR$MA  000003   	STRCPY= ****** GX
+AT.TYP  000040   	DOT   = 000056   	JSW   = 000044   	PAR$NO  000000   	SUCCS$= 000001
+AT.XLE  000100   	DRDERR= ****** GX	KRTINC= 000001   	PAR$OD  000001   	SUMMAR= ****** GX
+BELL  = 000007   	D$CVTN  003732R     002	LF    = 000012   	PAR$SP  000004   	SYSPTR= 000054
+BINARY  000001   	ENDFLG  002014R     004	LN$CNT= 000003   	PERCEN= 000056   	TAB   = 000011
+BLKEY = 000256   	ENDSEG= 004000   	LN$MAX= 000120   	PERM  = 002000   	TERMIN  177777
+BLOCKS  000107R     003	ERBFSI= 000170   	LOG$AL= 000003   	PLURAL  000143R     003	TEXT    000000
+BS    = 000010   	ERRBYT= 000052   	LOG$CO= 000002   	PROSPC  000162R     003	TILDE = 000176
+CAPA.A= 000010   	ERROR$= 000004   	LOG$DE= 000020   	PROT  = 100000   	TSXSAV= ****** GX
+CAPA.L= 000002   	ER$EOF= ****** GX	LOG$IO= 000010   	PROTSP  000145R     003	TTY   = 000001
+CAPA.S= 000004   	ER$NMF= ****** GX	LOG$ON= 040000   	P$DIV = ****** GX	UNPSPC  000161R     003
+COMMA = 000054   	ER$VOL= ****** GX	LOG$OP= 100000   	P.CAPA= 000011   	USERRB= 000053
+CONTEX= ****** GX	ESC   = 000033   	LOG$PA= 000001   	P.CHKT= 000007   	VMS     000165R     003
+CONVER  002574R     002	FATAL$= 000020   	LOG$RP= 000004   	P.EOL = 000004   	VT100 = 000002
+CON$ES= 000034   	FATERR= ****** GX	LOKDAT= ****** GX	P.MXL1= 000013   	VT200 = 000003
+COPYZ$= ****** GX	FETCH = ****** GX	LOKERR= ****** GX	P.MXL2= 000014   	WARN$ = 000002
+CR    = 000015   	FF    = 000014   	LOKLEN= ****** GX	P.NPAD= 000002   	WILDC = 000077
+CSIDEV  000000R     004	FILES   000121R     003	LOKSTA= ****** GX	P.PADC= 000003   	WRTALL= ****** GX
+CSIERR= ****** GX	FILTIM  003570R     002	LOKTIM= ****** GX	P.QBIN= 000006   	XOFF  = 000023
+CTRL$N= 000016   	FIXWIL  000370RG    002	LOOKUP  000000RG    002	P.QCTL= 000005   	XON   = 000021
+CTRL$O= 000017   	FPARSE= ****** GX	LUN.SR= ****** GX	P.REPT= 000010   	$ALLSI= 001144
+C.CRLF= 000004   	FREE    000127R     003	L310$   000000R     005	P.SPSI= 000000   	$C    = 000003
+C.LCUC= 000040   	F.DATE= 000014   	L311$   000002R     005	P.TIME= 000001   	$$    = 000000
+C.LSPA= 000010   	F.LEN = 000010   	MATCH   002752R     002	P.VEND= 000017   	$$SIZE= 000003
+C.SSPA= 000020   	F.NAM1= 000002   	MAXLNG= 001130   	P.WIND= 000012   	$$TYPE= 000001
+C.TSPA= 000200   	F.NAM2= 000004   	MAXPAK  000136   	RDTOA = ****** GX	$$$0  = 000027
+DBSIZE= 002000   	F.STAT= 000000   	MONTHS  000010R     003	RT      000151R     003	$$1   = 000001
+DCRLF   000116R     003	F.TIME= 000012   	MONTYP= ****** GX	RTVOL = ****** GX	$$2   = 000000
+DECNAT  000002   	F.TYPE= 000006   	M.CHAR  003126R     002	RTWORK= ****** GX	$$5   = 000001
+DEFEXT  000000R     003	GETHDR  002452R     002	M.LEN   003304R     002	RT11VE= ****** GX	...V1 = 000003
+DEL   = 000177   	GETHOM  002300R     002	NAME1   002020R     004	R0TOR2  001572R     002	...V2 = 000027
+DIRBFR= ****** GX
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	004060    002	(RO,I,LCL,REL,CON)
+$PDATA	000176    003	(RO,D,LCL,REL,CON)
+RTDIR 	002126    004	(RW,D,GBL,REL,CON)
+$RWDAT	000126    005	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 67
+Work  file writes: 68
+Size of work file: 14232 Words  ( 56 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+KRTDIR	RT-11 directory service	MACRO V05.03b  00:01  Page 22-3
+Symbol table
+
+
+Elapsed time: 00:00:00.33
+KRTDIR,KRTDIR=KRTNHD,KRTDIR

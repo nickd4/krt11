@@ -1,0 +1,2676 @@
+KRTSER	The server	MACRO V05.03b  00:01
+Table of contents
+
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    7-   1	KRTDEF	Packet types (edited from VMS Kermit)
+    7-  11	Protocol V1.0 message types
+    7-  22	Protocol V2.0 message types
+    7-  29	Protocol V4.0 message types
+    7-  35	Generic Kermit commands
+    7-  57	Acknowledgment modifiers (V4.0)
+    7-  63	End of file packet modifier
+    7-  67	Send/receive states
+    9-   2	Local data
+   10-   3	Call the server
+   11-   2	Server main_loop
+   12-   2	Server routines
+   13-   2	Generic command processor
+   14-   2	Kermit generic routines
+   15-   2	Generic COPY
+   16-   2	Generic CWD
+   17-   2	Generic DELETE
+   18-   2	Generic DIRECTORY and SPACE
+   19-   2	Generic HELP
+   20-   2	Generic RENAME
+   21-   2	Generic TYPE
+   23-   2	Generic command error handler
+   24-   2	Get pointers for a two argument server command
+   25-   2	The GET command		; /BBS/ heavily modified
+   26-   2	The REMOTE HOST command	; /63/ spiffed up..
+   27-   2	GENERIC REMOTE commands
+   28-   2	Carry out the REMOTE command please
+   29-   2	Initialize for an extended reply to a generic command
+   30-   2	Open link and flush NAKs
+   31-   2	Server init
+KRTSER	The server	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTSER	The server
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	disallow gets to TT
+      7					;	gen.h now displays the real version data ala SHO VER
+      8					;	clean up remote command response code, display reasons for retries
+      9					;	move C$BYE and REMFIN into now improved REMOTE command processor
+     10					;	on error resend REMOTE command packet before listening again
+     11					;	dump BUFPAK, use BUFFIL instead for repeated char encoding
+     12
+     13					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     14					;
+     15					;	allow server to talk through the comm handler too..
+     16					;	move dispatch macro here
+     17					;	add newline in log file at each new process
+     18
+     19					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     20					;
+     21					;	gen.t filespec more carefully tested, defaults to .LST type
+     22					;	double prompt on server exit killed by hosing ^M in FIN packet
+     23					;	remget - now uses srcnam for input file
+     24					;	no args to server command allowed under RT/TSX
+     25					;	input file name to serv.r checked by fparse
+     26					;	gen.c inserts colon after device name if necessary
+     27					;	gen.w - remote who via xreply added
+     28					;	upcase incoming remote command args, so mskerm is happy
+     29					;	gen.d checks for valid device before initiating any output,
+     30					;	defaults to DK if no arg given, as from MSKermit
+     31					;	modified gen.u to use krtdir
+     32					;	remspa accepts optional device argument, gen.u passes to krtdir
+     33					;	remfin returns error status in r0, to CONNECT if FINISH succeeds
+     34					;	disallow running server unless link device is TT
+     35
+     36					;	Brian Nelson  22-Dec-83  12:16:59
+     37					;
+     38					;	This is the server module for Kermit-11
+     39					;	it also has the modules to talk to a remote Kermit
+     40
+KRTSER	The server	MACRO V05.03b  00:01  Page 2
+
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTSER	The server	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTSER	The server	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTSER	The server	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTSER	The server	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTSER	The server	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTSER	The server	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTSER	The server	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTSER	The server	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTSER	The server	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTSER	The server	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2						.include "IN:KRTDEF.MAC"
+KRTSER	The server	MACRO V05.03b  00:01  Page 7
+KRTDEF	Packet types (edited from VMS Kermit)
+
+      1						.sbttl	KRTDEF	Packet types (edited from VMS Kermit)
+      2					;	.ident	"V03.63"	; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7
+      8					;	Note the use of the "=:" direct assignment ensures these
+      9					;	rather long names are unique in the first 6 characters.
+     10
+     11						.sbttl	Protocol V1.0 message types
+     12
+     13		000131 			MSG$ACK		=: 'Y&137	; acknowledgment (ACK)
+     14		000102 			MSG$BREAK	=: 'B&137	; break transmission (EOT)
+     15		000104 			MSG$DATA	=: 'D&137	; data packet
+     16		000132 			MSG$EOF		=: 'Z&137	; end of file (EOF)
+     17		000105 			MSG$ERROR	=: 'E&137	; error
+     18		000106 			MSG$FILE	=: 'F&137	; file header
+     19		000116 			MSG$NAK		=: 'N&137	; negative acknowledgment (NAK)
+     20		000123 			MSG$SND		=: 'S&137	; send initiate
+     21
+     22						.sbttl	Protocol V2.0 message types
+     23
+     24		000103 			MSG$COMMAND	=: 'C&137	; host command
+     25		000107 			MSG$GENERIC	=: 'G&137	; generic Kermit command
+     26		000113 			MSG$KERMIT	=: 'K&137	; perform Kermit command (text)
+     27		000122 			MSG$RCV		=: 'R&137	; receive initiate
+     28
+     29						.sbttl	Protocol V4.0 message types
+     30
+     31		000101 			MSG$ATR		=: 'A&137	; attribute packet
+     32		000111 			MSG$SER		=: 'I&137	; server initialization
+     33		000130 			MSG$TEXT	=: 'X&137	; text header message
+     34
+     35						.sbttl	Generic Kermit commands
+     36
+     37		000114 			GN$BYE		=: 'L&137	; logout
+     38		000103 			GN$CONNECT	=: 'C&137	; connect to a directory
+     39		000113 			GN$COPY		=: 'K&137	; copy file
+     40		000105 			GN$DELETE	=: 'E&137	; delete a file
+     41		000104 			GN$DIRECTORY	=: 'D&137	; directory
+     42		000125 			GN$DISK		=: 'U&137	; disk usage
+     43		000106 			GN$EXIT		=: 'F&137	; finish (stop the server)
+     44		000110 			GN$HELP		=: 'H&137	; help
+     45		000112 			GN$JOURNAL	=: 'J&137	; perform journal functions
+     46		000111 			GN$LOGIN	=: 'I&137	; login
+     47		000120 			GN$PRINT	=: 'P&137	; print
+     48		000120 			GN$PROGRAM	=: 'P&137	; run program and pass data
+     49		000121 			GN$QUERY	=: 'Q&137	; query status
+     50		000122 			GN$RENAME	=: 'R&137	; rename file
+     51		000115 			GN$SEND		=: 'M&137	; send a message to a user
+     52		000123 			GN$SUBMIT	=: 'S&137	; submit
+     53		000124 			GN$TYPE		=: 'T&137	; type a file specification
+     54		000126 			GN$VARIABLE	=: 'V&137	; return/set variable state
+     55		000127 			GN$WHO		=: 'W&137	; who's logged in?
+     56
+     57						.sbttl	Acknowledgment modifiers (V4.0)
+KRTSER	The server	MACRO V05.03b  00:01  Page 7-1
+Acknowledgment modifiers (V4.0)
+
+     58
+     59		000132 			ABT$ALL		=: 'Z&137	; abort entire stream of files
+     60		000130 			ABT$CUR		=: 'X&137	; abort current file
+     61		000105 			ABT$ERROR	=: 'E&137	; abort because an error occured
+     62
+     63						.sbttl	End of file packet modifier
+     64
+     65		000104 			EOF$DISCARD	=: 'D&137	; discard data from previous file
+     66
+     67						.sbttl	Send/receive states
+     68
+     69		000100 			STA.CCA		=:  100		; ^C from keyboard abort
+     70		000101 			STA.ABO		=: 'A&137	; abort
+     71		000110 			STA.ATR		=: 'H&137	; send attributes
+     72		000102 			STA.BRK		=: 'B&137	; break link
+     73		000103 			STA.COM		=: 'C&137	; transaction complete
+     74		000104 			STA.DAT		=: 'D&137	; data
+     75		000132 			STA.EOF		=: 'Z&137	; end of file or reply
+     76		000106 			STA.FIL		=: 'F&137	; file name header
+     77		000111 			STA.INI		=: 'I&137	; init
+     78		000122 			STA.RIN		=: 'R&137	; receive init
+     79		000123 			STA.SIN		=: 'S&137	; send init
+     80		000130 			STA.TYP		=: 'X&137	; extended reply
+KRTSER	The server	MACRO V05.03b  00:01  Page 8
+Send/receive states
+
+      1						.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+      2
+      3						.mcall	.PURGE			; /62/
+      4
+      5
+      6						.macro	dispat	val,dsp,baseval,basedsp,default	; cmd dispatch tables
+      7						.list me
+      8						.save
+      9						.nlist me
+     10						.if nb <baseval>
+     11						.list me
+     12						.psect	genval	,ro,d,lcl,rel,con
+     13					baseval:
+     14						.psect	gendsp	,ro,d,lcl,rel,con
+     15					basedsp:
+     16						.word	default
+     17						.nlist me
+     18						.iff
+     19						.list me
+     20						.psect	genval	,ro,d,lcl,rel,con
+     21						.nlist me
+     22						  .if b  <val>
+     23						  .byte	 0
+     24						  .even
+     25						  .iff
+     26						  .byte	 val
+     27						  .list	 me
+     28						  .psect gendsp	,ro,d,lcl,rel,con
+     29						  .nlist me
+     30						  .word	 dsp
+     31						  .endc
+     32						.endc
+     33						.list me
+     34						.restore
+     35						.nlist me
+     36						.endm
+     37
+KRTSER	The server	MACRO V05.03b  00:01  Page 9
+Send/receive states
+
+      1
+      2						.sbttl	Local data
+      3
+      4	000000					.psect	$pdata			; /62/ consolidated this stuff here..
+      5	000000	   040 	   144 	   145 	delmsg:	.asciz	" deleted"
+      6	000011	   015 	   012 	   045 	exitxt:	.asciz	<cr><lf>"%KRTSER-I-Server stopped"<cr><lf>
+      7	000046					.blkb	ln$max			; /63/ buffer to prepend version data
+      8	000252	   015 	   012 	   040 	htxt:	.ascii	<cr><lf>"       Server REMOTE commands:"<cr><lf><cr><lf>
+      9	000316	   040 	   040 	   040 		.ascii	"       BYE     Stop server and logout"<cr><lf>
+     10	000365	   122 	   105 	   115 		.ascii	"REMOTE COPY    Copy a file to another"<cr><lf>
+     11	000434	   122 	   105 	   115 		.ascii	"REMOTE CWD     Change server working directory"<cr><lf>
+     12	000514	   122 	   105 	   115 		.ascii	"REMOTE DELETE  Delete specified file"<cr><lf>
+     13	000562	   122 	   105 	   115 		.ascii	"REMOTE DIR     Display a directory"<cr><lf>
+     14	000626	   040 	   040 	   040 		.ascii	"       FINISH  Stop server leaving Kermit running"<cr><lf>
+     15	000711	   040 	   040 	   040 		.ascii	"       GET     Get file(s) from server"<cr><lf>
+     16	000761	   122 	   105 	   115 		.ascii	"REMOTE HELP    Display this help text"<cr><lf>
+     17	001030	   122 	   105 	   115 		.ascii	"REMOTE RENAME  Rename a file"<cr><lf>
+     18	001066	   040 	   040 	   040 		.ascii	"       SEND    Send file(s) to server"<cr><lf>
+     19	001135	   122 	   105 	   115 		.ascii	"REMOTE SPACE   Show available disk space"<cr><lf>
+     20	001207	   122 	   105 	   115 		.asciz	"REMOTE TYPE    Type specified file"<cr><lf>
+     21					;	.asciz	"REMOTE WHO     Show active BBS lines"<cr><lf>
+     22	001254	   077 	   113 	   122 	invarg:	.asciz	"?KRTSER-E-Invalid argument(s)"
+     23	001312	   077 	   113 	   122 	notimp:	.asciz	"?KRTSER-W-Unimplemented command"
+     24	001352	   122 	   145 	   143 	rem.01:	.asciz	"Receive XREPLY failed"
+     25	001400	   124 	   162 	   171 	rem.02:	.asciz	"Try "
+     26	001405	   040 	   157 	   146 	rem.03:	.asciz	" of "
+     27	001412	   040 	   147 	   157 	rem.04:	.asciz	" got invalid response"
+     28	001440	   040 	   143 	   150 	rem.05:	.asciz	" checksum failed"
+     29	001461	   040 	   167 	   141 	rem.06:	.asciz	" was NAKed"
+     30	001474	   040 	   164 	   151 	rem.07:	.asciz	" timed out"
+     31	001507	   061 	   040 	   146 	rem.08:	.asciz	"1 file renamed"	; /BBS/
+     32	001526	   122 	   145 	   155 	rem.ak:	.asciz	"Remote ACK:"<cr><lf>
+     33	001544	   007 	   107 	   145 	ser.01:	.asciz	<bell>"Get completed"
+     34	001563	   007 	   107 	   145 	ser.02:	.asciz	<bell>"Get failed"
+     35	001577	   120 	   162 	   157 	ser.03:	.asciz	'Processing file name "'
+     36	001626	   042 	   000 		ser.04:	.asciz	'"'
+     37	001630	   040 	   142 	   154 	ser.05:	.asciz	" block(s) copied to "	; /BBS/
+     38	001655	   104 	   113 	   040 	ser.06:	.asciz	"DK  --> "
+     39	001666	   045 	   113 	   122 	serpre:	.asciz	"%KRTSER-I-Server starting"
+     40	001720	   056 	   040 	   040 	sertxt:	.ascii	".  Return to your local machine by typing"<cr><lf>
+     41	001773	   151 	   164 	   163 		.ascii	"its escape sequence for closing the connection,"
+     42	002052	   040 	   164 	   150 		.ascii	" then issue further"<cr><lf>
+     43	002077	   143 	   157 	   155 		.ascii	"commands from there.  To shut down the server,"
+     44	002155	   040 	   165 	   163 		.ascii	" use the BYE command"<cr><lf>
+     45	002203	   164 	   157 	   040 		.asciz	"to logout, or the FINISH command and then reconnect."
+     46	002270	   103 	   157 	   156 	serwn0:	.asciz	"Connecting to "
+     47	002307	   040 	   040 	   104 	serspd:	.asciz	"  DTE speed: "
+     48	002325	   116 	   057 	   101 	serspx:	.asciz	"N/A"
+     49	002331	   015 	   012 	   015 	serwn1:	.asciz	<cr><lf><cr><lf><bell><bell>"?KRTSER-W-Type ^C "
+     50	002362	   040 	   164 	   151 	serwn2:	.asciz	" times to stop the server from this terminal"<cr><lf><cr><lf>
+     51	002443	   056 	   114 	   123 	typdef:	.asciz	".LST"
+     52						.even
+     53
+     54	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+     55	000000				rem.d0:	.blkb	4
+     56	000004				rem.d1:	.blkb	4
+     57
+KRTSER	The server	MACRO V05.03b  00:01  Page 10
+Local data
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Call the server
+      4
+      5	000000	105777 	000000G		c$serv::tstb	@argbuf			; if no arg, do normal server
+      6	000004	001403 				beq	10$			; /BBS/ ok
+      7	000006	012700 	000000G			mov	#er$ser	,r0		; /BBS/ subcommands are not supported
+      8	000012	000512 				br	70$			; /BBS/ goto error handler
+      9
+     10	000014	004767 	006442 		10$:	call	seropn			; /63/ includes cantyp + buffer flush
+     11	000020	005700 				tst	r0			; /62/ did it work?
+     12	000022	001111 				bne	80$			; /62/ no, error msg dumped by ttyini
+     13	000024	005767 	000000G			tst	remote			; /62/ local or remote?
+     14	000030	001053 				bne	40$			; /62/ remote, do appropriate message
+     15	000032					wrtall	#serwn0			; /62/ local, say where
+	000032	012746 	002270'			mov	#serwn0	,-(sp)		; pass the address
+	000036	004767 	000000G			call	wrtall			; do it
+     16	000042					wrtall	#ttname			; /62/ we're connected
+	000042	012746 	000000G			mov	#ttname	,-(sp)		; pass the address
+	000046	004767 	000000G			call	wrtall			; do it
+     17	000052					wrtall	#serspd			; /62/
+	000052	012746 	002307'			mov	#serspd	,-(sp)		; pass the address
+	000056	004767 	000000G			call	wrtall			; do it
+     18	000062	004767 	000000G			call	ttspeed			; /62/ get speed
+     19	000066	005700 				tst	r0			; /62/ wuz it gettable?
+     20	000070	001005 				bne	20$			; /62/ yup..
+     21	000072					wrtall	#serspx			; /62/ nope
+	000072	012746 	002325'			mov	#serspx	,-(sp)		; pass the address
+	000076	004767 	000000G			call	wrtall			; do it
+     22	000102	000402 				br	30$			; /62/ continue
+     23	000104	004767 	000000G		20$:	call	L10266			; /62/ speed in r0 to TT
+     24	000110				30$:	.newline			; /62/
+	000110	004767 	000000G			call	l$pcrlf
+     25	000114					wrtall	#serpre			; /62/ the minimum sign-on message..
+	000114	012746 	001666'			mov	#serpre	,-(sp)		; pass the address
+	000120	004767 	000000G			call	wrtall			; do it
+     26	000124					wrtall	#serwn1			; /62/ and how to abort
+	000124	012746 	002331'			mov	#serwn1	,-(sp)		; pass the address
+	000130	004767 	000000G			call	wrtall			; do it
+     27	000134	016700 	000000G			mov	cc$max	,r0		; /62/ it takes this many ^Cs
+     28	000140	005200 				inc	r0			; /62/ plus one for the .scca trap
+     29	000142	004767 	000000G			call	L10266			; /62/ put the total on the terminal
+     30	000146					wrtall	#serwn2			; /62/ and tag the display
+	000146	012746 	002362'			mov	#serwn2	,-(sp)		; pass the address
+	000152	004767 	000000G			call	wrtall			; do it
+     31	000156	000415 				br	60$			; /62/ leave cursor at end of the line
+     32
+     33	000160				40$:	wrtall	#serpre			; /62/ the minimum sign-on message..
+	000160	012746 	001666'			mov	#serpre	,-(sp)		; pass the address
+	000164	004767 	000000G			call	wrtall			; do it
+     34	000170	005767 	000000G			tst	infomsg			; /41/ should we be verbose today?
+     35	000174	001404 				beq	50$			; /41/ no
+     36	000176					wrtall	#sertxt			; dump a message out please
+	000176	012746 	001720'			mov	#sertxt	,-(sp)		; pass the address
+	000202	004767 	000000G			call	wrtall			; do it
+     37	000206				50$:	.newline			; /62/ tag minimum or whole message..
+	000206	004767 	000000G			call	l$pcrlf
+KRTSER	The server	MACRO V05.03b  00:01  Page 10-1
+Call the server
+
+     38	000212	010667 	000000G		60$:	mov	sp	,inserv		; global flag to say we are a server
+     39	000216	004767 	000032 			call	server			; and do it
+     40	000222	005067 	000000G			clr	inserv			; no longer a server
+     41	000226					wrtall	#exitxt			; /BBS/ emulate C-Kermit..
+	000226	012746 	000011'			mov	#exitxt	,-(sp)		; pass the address
+	000232	004767 	000000G			call	wrtall			; do it
+     42	000236	000403 				br	80$
+     43
+     44	000240				70$:	direrr	r0			; /BBS/ handle the error
+	000240	010046 				mov	r0	,-(sp)
+	000242	004767 	000000G			call	direr$
+     45	000246	005000 			80$:	clr	r0			; /62/ success (error just handled..)
+     46	000250	000167 	000000G			jmp	clostt			; /62/ close up the link
+     47
+KRTSER	The server	MACRO V05.03b  00:01  Page 11
+Call the server
+
+      1
+      2						.sbttl	Server main_loop
+      3
+      4	000254	005067 	000000G		server:	clr	paknum			; packet_number := 0
+      5	000260	005067 	000000G			clr	cccnt			; /38/ clear ^C flag
+      6	000264					textsrc				; /38/ reset to normal file I/O
+	000264	005067 	000000G			clr	getcroutine		; /62/ reset to file I/O
+	000270	005067 	000000G			clr	tgetaddr
+      7	000274	012767 	000000G	000000G		mov	#defchk	,chktyp		; checksum_type := type_1
+      8	000302	012767 	000001 	000000G		mov	#1	,chksiz		; checksum_len := 1
+      9	000310	016767 	000000G	000000G		mov	$image	,image		; ensure correct default is set
+     10	000316	005067 	000000G			clr	summary			; /BBS/ reset summary only flag
+     11	000322	005067 	000000G			clr	dirflg			; /62/ reset embedded blanks flag
+     12	000326	004767 	000000G			call	fixchk			; sendpar_checktype := set_checktype
+     13	000332	016767 	000000G	000000G		mov	serwai	,sertim		; /41/ set a new time-out please
+     14	000340	032767 	000001 	000000G		bit	#log$pa	,trace		; /62/ logging packets this time?
+     15	000346	001421 				beq	10$			; /62/ no
+     16	000350					calls	putrec	,<#0,#0,#lun.lo> ; /62/ ya, put newline into log file
+	000350	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000352	012746 	000000G			        mov	#lun.lo	,-(sp)	; push it
+	000356	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000362	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000366	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000370	004767 	000000G			  jsr	pc	,putrec		; and go to the routine
+	000374	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000400	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     17	000402	005700 				tst	r0			; /62/ did it work?
+     18	000404	001402 				beq	10$			; /62/ ya
+     19	000406	004767 	000000G			call	logerr			; /62/ no, handle the error
+     20	000412				10$:	rpack	r2 ,r3	,#packet,#maxlng ; /62/ loop forever
+	000412	162706 	000010 			sub	#10	,sp
+	000416	010601 				mov	sp	,r1
+	000420	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000422	012746 	003600 			        mov	#maxlng	,-(sp)	; push it
+	000426	010146 				        mov	r1	,-(sp)	; push it
+	000430	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	000434	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000436	004767 	000000G			  jsr	pc	,rpack$		; and go to the routine
+	000442	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000446	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	000450	012102 				mov	(r1)+	,r2
+	000452	012103 				mov	(r1)+	,r3
+	000454	011101 				mov	@r1	,r1
+	000456	062706 	000010 			add	#10	,sp
+     21	000462	005067 	000000G			clr	sertim			; normal time-outs now
+     22	000466	116767 	000000G	000001G		movb	sentim	,senpar+p.time	; /62/ default to send time-out
+     23	000474					scan	r1	,#sercom	; find the command in dispatch table
+	000474	012746 	000000'			mov	#sercom	,-(sp)
+	000500	005046 				clr	-(sp)
+	000502	150116 				bisb	r1	,@sp
+	000504	004767 	000000G			call	scanch
+     24	000510	006300 				asl	r0			; word indexing
+     25	000512	004770 	000000'			jsr	pc	,@serdsp(r0)	; go run it
+     26	000516	005700 				tst	r0			; done?
+     27	000520	001655 				beq	server			; /BBS/ no, next server command please
+     28
+     29	000522					calls	suspend	,<#1>		; /BBS/ sleep a second
+KRTSER	The server	MACRO V05.03b  00:01  Page 11-1
+Server main_loop
+
+	000522	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000524	012746 	000001 			  mov	#1	,-(sp)		; doing it thusly generates less code
+	000530	010605 				  mov	sp	,r5		; set pointer to argument list
+	000532	004767 	000000G			  jsr	pc	,suspend		; call the subroutine
+	000536	005726 				  tst	(sp)+			; pop parameter list from stack
+	000540	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     30	000542	000167 	000000G			jmp	clrcns			; /62/ kill "double prompt" on exit
+     31
+     32
+     33	000546					dispat	basedsp=serdsp	,baseval=sercom	,default=serv.$
+						.list me
+						.save
+						.list me
+	000000					.psect	genval	,ro,d,lcl,rel,con
+	000000				sercom:
+	000000					.psect	gendsp	,ro,d,lcl,rel,con
+	000000				serdsp:
+	000000	000546'				.word	serv.$
+						.list me
+	000546					.restore
+     34
+     35	000546					dispat	BADCHK		,serchk	; a fubar checksum
+						.list me
+						.save
+						.list me
+	000000					.psect	genval	,ro,d,lcl,rel,con
+	000000	   000G				  .byte	 BADCHK
+						  .list	 me
+	000002					  .psect gendsp	,ro,d,lcl,rel,con
+	000002	000616'				  .word	 serchk
+						.list me
+	000546					.restore
+     36	000546					dispat	MSG$ACK		,serv$$	; things are ok now
+						.list me
+						.save
+						.list me
+	000001					.psect	genval	,ro,d,lcl,rel,con
+	000001	   131 				  .byte	 MSG$ACK
+						  .list	 me
+	000004					  .psect gendsp	,ro,d,lcl,rel,con
+	000004	000616'				  .word	 serv$$
+						.list me
+	000546					.restore
+     37	000546					dispat	MSG$ERROR	,sernop	; ignore "E" packets from remote
+						.list me
+						.save
+						.list me
+	000002					.psect	genval	,ro,d,lcl,rel,con
+	000002	   105 				  .byte	 MSG$ERROR
+						  .list	 me
+	000006					  .psect gendsp	,ro,d,lcl,rel,con
+	000006	000660'				  .word	 sernop
+						.list me
+	000546					.restore
+     38	000546					dispat	MSG$GENERIC	,serv.g	; do a server command
+						.list me
+						.save
+KRTSER	The server	MACRO V05.03b  00:01  Page 11-2
+Server main_loop
+
+						.list me
+	000003					.psect	genval	,ro,d,lcl,rel,con
+	000003	   107 				  .byte	 MSG$GENERIC
+						  .list	 me
+	000010					  .psect gendsp	,ro,d,lcl,rel,con
+	000010	001322'				  .word	 serv.g
+						.list me
+	000546					.restore
+     39	000546					dispat	MSG$NAK		,serv$$	; a NAK this time
+						.list me
+						.save
+						.list me
+	000004					.psect	genval	,ro,d,lcl,rel,con
+	000004	   116 				  .byte	 MSG$NAK
+						  .list	 me
+	000012					  .psect gendsp	,ro,d,lcl,rel,con
+	000012	000616'				  .word	 serv$$
+						.list me
+	000546					.restore
+     40	000546					dispat	MSG$RCV		,serv.r	; send a file
+						.list me
+						.save
+						.list me
+	000005					.psect	genval	,ro,d,lcl,rel,con
+	000005	   122 				  .byte	 MSG$RCV
+						  .list	 me
+	000014					  .psect gendsp	,ro,d,lcl,rel,con
+	000014	001144'				  .word	 serv.r
+						.list me
+	000546					.restore
+     41	000546					dispat	MSG$SER		,serv.i	; do a server sinit
+						.list me
+						.save
+						.list me
+	000006					.psect	genval	,ro,d,lcl,rel,con
+	000006	   111 				  .byte	 MSG$SER
+						  .list	 me
+	000016					  .psect gendsp	,ro,d,lcl,rel,con
+	000016	000664'				  .word	 serv.i
+						.list me
+	000546					.restore
+     42	000546					dispat	MSG$SND		,serv.s	; init to receive a file
+						.list me
+						.save
+						.list me
+	000007					.psect	genval	,ro,d,lcl,rel,con
+	000007	   123 				  .byte	 MSG$SND
+						  .list	 me
+	000020					  .psect gendsp	,ro,d,lcl,rel,con
+	000020	000776'				  .word	 serv.s
+						.list me
+	000546					.restore
+     43	000546					dispat	TIMOUT		,serv$$	; we timed out
+						.list me
+						.save
+						.list me
+	000010					.psect	genval	,ro,d,lcl,rel,con
+KRTSER	The server	MACRO V05.03b  00:01  Page 11-3
+Server main_loop
+
+	000010	   000G				  .byte	 TIMOUT
+						  .list	 me
+	000022					  .psect gendsp	,ro,d,lcl,rel,con
+	000022	000616'				  .word	 serv$$
+						.list me
+	000546					.restore
+     44	000546					dispat
+						.list me
+						.save
+						.list me
+	000011					.psect	genval	,ro,d,lcl,rel,con
+	000011	   000 				  .byte	 0
+						.list me
+	000546					.restore
+     45
+KRTSER	The server	MACRO V05.03b  00:01  Page 12
+Server main_loop
+
+      1
+      2						.sbttl	Server routines
+      3
+      4	000546				gen.$:					; /63/ unimplemented generic cmd
+      5	000546				serv.$:	strlen	#notimp			; get length of this text into r0
+	000546	012700 	001312'			mov	#notimp	,r0
+	000552	004767 	000000G			call	l$len
+      6	000556					spack	#msg$error,paknum,r0,#notimp ; ignore unrecognized packet type
+	000556	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000560	012746 	001312'			        mov	#notimp	,-(sp)	; push it
+	000564	010046 				        mov	r0	,-(sp)	; push it
+	000566	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	000572	012746 	000105 			        mov	#msg$error	,-(sp)	; push it
+	000576	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000600	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	000604	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000610	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	000612	005000 				clr	r0			; not done yet
+      8	000614	000207 				return
+      9
+     10	000616				serv$$:					; /62/ time-out, send a NAK please
+     11	000616	010367 	000000G		serchk:	mov	r3	,paknum		; NAK checksum errors
+     12	000622					spack	#msg$nak,paknum		; send the NAK out please
+	000622	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000624	012746 	000000G			        mov	#null	,-(sp)	; push it
+	000630	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000634	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	000640	012746 	000116 			        mov	#msg$nak	,-(sp)	; push it
+	000644	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000646	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	000652	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000656	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13	000660	005000 			sernop:	clr	r0			; /62/ we are not done
+     14	000662	000207 				return
+     15
+     16	000664	010367 	000000G		serv.i:	mov	r3	,paknum		; we got an init packet
+     17	000670					calls	rpar	,<#packet,r2>	; save the other Kermit's parameters
+	000670	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000672	010246 				        mov	r2	,-(sp)	; push it
+	000674	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	000700	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000702	004767 	000000G			  jsr	pc	,rpar		; and go to the routine
+	000706	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000710	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     18	000712					calls	spar	,<#packet>	; get our parameters
+	000712	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000714	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	000720	010605 				  mov	sp	,r5		; set pointer to argument list
+	000722	004767 	000000G			  jsr	pc	,spar		; call the subroutine
+	000726	005726 				  tst	(sp)+			; pop parameter list from stack
+	000730	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     19	000732					spack	#msg$ack,paknum,sparsz,#packet ; send them to the other Kermit
+	000732	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000734	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	000740	016746 	000000G			        mov	sparsz	,-(sp)	; push it
+	000744	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	000750	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+KRTSER	The server	MACRO V05.03b  00:01  Page 12-1
+Server routines
+
+	000754	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000756	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	000762	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000766	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     20	000770	005000 				clr	r0			; not done
+     21	000772	000167 	000000G			jmp	inirepeat		; /62/ init repeat char encoding
+     22
+     23	000776	010367 	000000G		serv.s:	mov	r3	,paknum		; got an sinit, init packet number
+     24	001002					calls	rpar	,<#packet,r2>	; store their send init info away
+	001002	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001004	010246 				        mov	r2	,-(sp)	; push it
+	001006	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001012	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001014	004767 	000000G			  jsr	pc	,rpar		; and go to the routine
+	001020	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001022	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     25	001024					calls	spar	,<#packet>	; and send them ours for the ACK
+	001024	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001026	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	001032	010605 				  mov	sp	,r5		; set pointer to argument list
+	001034	004767 	000000G			  jsr	pc	,spar		; call the subroutine
+	001040	005726 				  tst	(sp)+			; pop parameter list from stack
+	001042	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     26	001044					spack	#msg$ack,paknum,sparsz,#packet
+	001044	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001046	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001052	016746 	000000G			        mov	sparsz	,-(sp)	; push it
+	001056	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	001062	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	001066	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001070	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	001074	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001100	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     27	001102	004767 	000000G			call	inirepeat		; do repeat initialization
+     28	001106					incm64	paknum			; paknum := paknum+1 mod 64
+	001106	005267 	000000G			inc	paknum
+	001112	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+     29	001120					calls	rec.sw	,<#sta.fil>	; and get set to receive a file name
+	001120	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001122	012746 	000106 			  mov	#sta.fil	,-(sp)		; doing it thusly generates less code
+	001126	010605 				  mov	sp	,r5		; set pointer to argument list
+	001130	004767 	000000G			  jsr	pc	,rec.sw		; call the subroutine
+	001134	005726 				  tst	(sp)+			; pop parameter list from stack
+	001136	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     30	001140	005000 				clr	r0			; not done
+     31	001142	000207 				return
+     32
+     33	001144				serv.r:	calls	bufunp	,<#packet,#spare1> ; /BBS/ use a spare buff
+	001144	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001146	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	001152	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001156	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001160	004767 	000000G			  jsr	pc	,bufunp		; and go to the routine
+	001164	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001166	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     34	001170	105061 	000000G			clrb	spare1(r1)		; /53/ null terminate it
+     35	001174					upcase	#spare1			; /BBS/ upper case it
+KRTSER	The server	MACRO V05.03b  00:01  Page 12-2
+Server routines
+
+	001174	012700 	000000G			mov	#spare1	,r0
+	001200	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     36	001204					calls	fparse,<#spare1,#srcnam> ; /BBS/ make sure it's an ok device
+	001204	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001206	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	001212	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	001216	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001220	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	001224	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001226	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	001230	005700 				tst	r0			; /BBS/ is it?
+     38	001232	001027 				bne	10$			; /BBS/ nope..
+     39	001234					calls	fixwild	,<#srcnam>	; /BBS/ change "?" to "%"
+	001234	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001236	012746 	000000G			  mov	#srcnam	,-(sp)		; doing it thusly generates less code
+	001242	010605 				  mov	sp	,r5		; set pointer to argument list
+	001244	004767 	000000G			  jsr	pc	,fixwild		; call the subroutine
+	001250	005726 				  tst	(sp)+			; pop parameter list from stack
+	001252	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     40	001254	005067 	000000G			clr	index			; first file in directory please
+     41	001260	004767 	000000G			call	getnxt			; get the first file name
+     42	001264	005700 				tst	r0			; did it work?
+     43	001266	001013 				bne	20$			; no, getnxt has sent the error pak
+     44	001270					calls	sensw	,<#sta.sin>	; ya, send the file(s)
+	001270	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001272	012746 	000123 			  mov	#sta.sin	,-(sp)		; doing it thusly generates less code
+	001276	010605 				  mov	sp	,r5		; set pointer to argument list
+	001300	004767 	000000G			  jsr	pc	,sensw		; call the subroutine
+	001304	005726 				  tst	(sp)+			; pop parameter list from stack
+	001306	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     45	001310	000402 				br	20$
+     46
+     47	001312	004767 	002046 		10$:	call	generr			; /BBS/ send an error message
+     48	001316	005000 			20$:	clr	r0			; not done
+     49	001320	000207 				return
+     50
+KRTSER	The server	MACRO V05.03b  00:01  Page 13
+Server routines
+
+      1
+      2						.sbttl	Generic command processor
+      3
+      4	001322	005067 	000000G		serv.g:	clr	at$len			; /BBS/ used for local sizes too..
+      5	001326	162706 	000200 			sub	#200	,sp		; /53/ make a temp copy of data
+      6	001332	010602 				mov	sp	,r2		; /53/ point to it
+      7	001334					copyz	#packet	,r2	,#176	; /62/ copy, but don't lunch stack!
+	001334	012746 	000176 			mov	#176	,-(sp)
+	001340	012746 	000000G			mov	#packet	,-(sp)
+	001344	010246 				mov	r2	,-(sp)
+	001346	004767 	000000G			call	copyz$
+      8	001352					calls	bufunp	,<r2,#packet>	; /53/ undo it (with repeats)
+	001352	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001354	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001360	010246 				        mov	r2	,-(sp)	; push it
+	001362	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001364	004767 	000000G			  jsr	pc	,bufunp		; and go to the routine
+	001370	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001372	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	001374	062706 	000200 			add	#200	,sp		; /53/ pop buffer
+     10	001400	116702 	000000G			movb	packet+0,r2		; first data byte is generic cmd type
+     11	001404					scan	r2	,#gencom	; find it's command address
+	001404	012746 	000012'			mov	#gencom	,-(sp)
+	001410	005046 				clr	-(sp)
+	001412	150216 				bisb	r2	,@sp
+	001414	004767 	000000G			call	scanch
+     12	001420	006300 				asl	r0			; word indexing
+     13	001422	000170 	000024'			jmp	@gendsp(r0)		; /62/ dispatch the command
+     14
+     15	001426					dispat	basedsp=gendsp	,baseval=gencom	,default=gen.$
+						.list me
+						.save
+						.list me
+	000012					.psect	genval	,ro,d,lcl,rel,con
+	000012				gencom:
+	000024					.psect	gendsp	,ro,d,lcl,rel,con
+	000024				gendsp:
+	000024	000546'				.word	gen.$
+						.list me
+	001426					.restore
+     16
+     17	001426					dispat	GN$BYE		,gen.l	; bye bye
+						.list me
+						.save
+						.list me
+	000012					.psect	genval	,ro,d,lcl,rel,con
+	000012	   114 				  .byte	 GN$BYE
+						  .list	 me
+	000026					  .psect gendsp	,ro,d,lcl,rel,con
+	000026	001472'				  .word	 gen.l
+						.list me
+	001426					.restore
+     18	001426					dispat	GN$CONNECT	,gen.c	; connect here means to a directory
+						.list me
+						.save
+						.list me
+	000013					.psect	genval	,ro,d,lcl,rel,con
+KRTSER	The server	MACRO V05.03b  00:01  Page 13-1
+Generic command processor
+
+	000013	   103 				  .byte	 GN$CONNECT
+						  .list	 me
+	000030					  .psect gendsp	,ro,d,lcl,rel,con
+	000030	002110'				  .word	 gen.c
+						.list me
+	001426					.restore
+     19	001426					dispat	GN$COPY		,gen.k	; copy a file
+						.list me
+						.save
+						.list me
+	000014					.psect	genval	,ro,d,lcl,rel,con
+	000014	   113 				  .byte	 GN$COPY
+						  .list	 me
+	000032					  .psect gendsp	,ro,d,lcl,rel,con
+	000032	001570'				  .word	 gen.k
+						.list me
+	001426					.restore
+     20	001426					dispat	GN$DELETE	,gen.e  ; delete file
+						.list me
+						.save
+						.list me
+	000015					.psect	genval	,ro,d,lcl,rel,con
+	000015	   105 				  .byte	 GN$DELETE
+						  .list	 me
+	000034					  .psect gendsp	,ro,d,lcl,rel,con
+	000034	002376'				  .word	 gen.e
+						.list me
+	001426					.restore
+     21	001426					dispat	GN$DIRECTORY	,gen.d	; directory (of a disk)
+						.list me
+						.save
+						.list me
+	000016					.psect	genval	,ro,d,lcl,rel,con
+	000016	   104 				  .byte	 GN$DIRECTORY
+						  .list	 me
+	000036					  .psect gendsp	,ro,d,lcl,rel,con
+	000036	002566'				  .word	 gen.d
+						.list me
+	001426					.restore
+     22	001426					dispat	GN$DISK		,gen.u	; disk usage
+						.list me
+						.save
+						.list me
+	000017					.psect	genval	,ro,d,lcl,rel,con
+	000017	   125 				  .byte	 GN$DISK
+						  .list	 me
+	000040					  .psect gendsp	,ro,d,lcl,rel,con
+	000040	002562'				  .word	 gen.u
+						.list me
+	001426					.restore
+     23	001426					dispat	GN$EXIT		,gen.f	; exit server, return to command mode
+						.list me
+						.save
+						.list me
+	000020					.psect	genval	,ro,d,lcl,rel,con
+	000020	   106 				  .byte	 GN$EXIT
+						  .list	 me
+KRTSER	The server	MACRO V05.03b  00:01  Page 13-2
+Generic command processor
+
+	000042					  .psect gendsp	,ro,d,lcl,rel,con
+	000042	001426'				  .word	 gen.f
+						.list me
+	001426					.restore
+     24	001426					dispat	GN$HELP		,gen.h	; help
+						.list me
+						.save
+						.list me
+	000021					.psect	genval	,ro,d,lcl,rel,con
+	000021	   110 				  .byte	 GN$HELP
+						  .list	 me
+	000044					  .psect gendsp	,ro,d,lcl,rel,con
+	000044	002710'				  .word	 gen.h
+						.list me
+	001426					.restore
+     25	001426					dispat	GN$RENAME	,gen.r	; rename a file
+						.list me
+						.save
+						.list me
+	000022					.psect	genval	,ro,d,lcl,rel,con
+	000022	   122 				  .byte	 GN$RENAME
+						  .list	 me
+	000046					  .psect gendsp	,ro,d,lcl,rel,con
+	000046	003014'				  .word	 gen.r
+						.list me
+	001426					.restore
+     26	001426					dispat	GN$TYPE		,gen.t	; type a file
+						.list me
+						.save
+						.list me
+	000023					.psect	genval	,ro,d,lcl,rel,con
+	000023	   124 				  .byte	 GN$TYPE
+						  .list	 me
+	000050					  .psect gendsp	,ro,d,lcl,rel,con
+	000050	003174'				  .word	 gen.t
+						.list me
+	001426					.restore
+     27					;	dispat	GN$WHO		,gen.w	; who's on-line
+     28	001426					dispat
+						.list me
+						.save
+						.list me
+	000024					.psect	genval	,ro,d,lcl,rel,con
+	000024	   000 				  .byte	 0
+						.list me
+	001426					.restore
+     29
+KRTSER	The server	MACRO V05.03b  00:01  Page 14
+Generic command processor
+
+      1
+      2						.sbttl	Kermit generic routines
+      3
+      4	001426				gen.f:	spack	#msg$ack,paknum		; send a simple ACK
+	001426	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001430	012746 	000000G			        mov	#null	,-(sp)	; push it
+	001434	012746 	000000 			        mov	#0	,-(sp)	; push it
+	001440	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	001444	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	001450	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001452	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	001456	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001462	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      5	001464	010600 				mov	sp	,r0		; all done, return to command mode
+      6	001466	000167 	000000G			jmp	clostt			; /62/ close the terminal up and exit
+      7
+      8	001472				gen.l:	spack	#msg$ack,paknum		; assume we can log out
+	001472	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001474	012746 	000000G			        mov	#null	,-(sp)	; push it
+	001500	012746 	000000 			        mov	#0	,-(sp)	; push it
+	001504	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	001510	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	001514	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001516	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	001522	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001526	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	001530	004767 	000000G			call	clostt			; close the terminal please
+     10	001534	032767 	100000 	000000G		bit	#log$op	,trace		; a logfile open now?
+     11	001542	001410 				beq	10$			; no
+     12	001544					calls	close	,<#lun.lo>	; yes, close it please
+	001544	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001546	012746 	000000G			  mov	#lun.lo	,-(sp)		; doing it thusly generates less code
+	001552	010605 				  mov	sp	,r5		; set pointer to argument list
+	001554	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	001560	005726 				  tst	(sp)+			; pop parameter list from stack
+	001562	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13	001564	000167 	000000G		10$:	jmp	logout			; log out of the system
+     14
+KRTSER	The server	MACRO V05.03b  00:01  Page 15
+Kermit generic routines
+
+      1
+      2						.sbttl	Generic COPY
+      3
+      4	001570	004767 	001642 		gen.k:	call	get2ar			; get pointers to "from" and "to"
+      5	001574	103531 				bcs	20$			; oops, send an error packet over
+      6	001576					upcase	r1			; /BBS/ upper case first arg
+	001576	010100 				mov	r1	,r0
+	001600	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      7	001604					upcase	r2			; /BBS/ upper case second arg
+	001604	010200 				mov	r2	,r0
+	001606	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      8	001612					calls	fparse	,<r1,#srcnam>	; /62/ get attrs here as lookup is in
+	001612	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001614	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	001620	010146 				        mov	r1	,-(sp)	; push it
+	001622	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001624	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	001630	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001632	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	001634	005067 	000000G			clr	index			; /62/ an adjacent overlay  init index
+     10	001640					calls   lookup  ,<#srcnam,#spare1> ; /62/ load input file attributes
+	001640	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001642	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	001646	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	001652	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001654	004767 	000000G			  jsr	pc	,lookup		; and go to the routine
+	001660	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001662	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	001664					.purge	#lun.sr			; /62/ dump lookup channel
+	001664	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	001670	104374 				EMT	^O374
+     12	001672					calls	copy	,<r1,r2>	; copy the file now
+	001672	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001674	010246 				        mov	r2	,-(sp)	; push it
+	001676	010146 				        mov	r1	,-(sp)	; push it
+	001700	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001702	004767 	000000G			  jsr	pc	,copy		; and go to the routine
+	001706	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001710	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13	001712	005700 				tst	r0			; did it work?
+     14	001714	001056 				bne	10$			; no
+     15	001716	162706 	000100 			sub	#100	,sp		; /63/ yes, formulate a simple ACK
+     16	001722	010603 				mov	sp	,r3		; /BBS/ response telling them how many
+     17	001724					deccvt	r1 ,r3	,#5		; /BBS/ blocks that we copied over
+	001724	010546 				mov	r5	,-(sp)
+	001726	012746 	000005 			mov	#5	,-(sp)
+	001732	010146 				mov	r1	,-(sp)
+	001734	010346 				mov	r3	,-(sp)
+	001736	010605 				mov	sp	,r5
+	001740	004767 	000000G			call	l$cvtnum
+	001744	062706 	000006 			add	#6	,sp
+	001750	012605 				mov	(sp)+	,r5
+     18	001752	062703 	000005 			add	#5	,r3		; /BBS/ point past the block count
+     19	001756					strcpy	r3	,#ser.05	; /62/ copy a message and then ACK it
+	001756	012746 	001630'			mov	#ser.05	,-(sp)
+	001762	010346 				mov	r3	,-(sp)
+	001764	004767 	000000G			jsr	pc	,strcpy
+KRTSER	The server	MACRO V05.03b  00:01  Page 15-1
+Generic COPY
+
+     20	001770					strcat	r3	,#filnam	; /BBS/ tag it with create file name
+	001770	012746 	000000G			mov	#filnam	,-(sp)
+	001774	010346 				mov	r3	,-(sp)
+	001776	004767 	000000G			jsr	pc	,strcat
+     21	002002	010603 				mov	sp	,r3		; /BBS/ point back to start of buffer
+     22	002004					strlen	r3			; /BBS/ get the string length now
+	002004	010300 				mov	r3	,r0
+	002006	004767 	000000G			call	l$len
+     23	002012					spack	#msg$ack,paknum,r0,r3	; /BBS/ send the ACK over
+	002012	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002014	010346 				        mov	r3	,-(sp)	; push it
+	002016	010046 				        mov	r0	,-(sp)	; push it
+	002020	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	002024	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	002030	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002032	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	002036	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002042	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     24	002044	062706 	000100 			add	#100	,sp		; /63/ pop the local buffer
+     25	002050	000415 				br	30$
+     26
+     27	002052	004767 	001306 		10$:	call	generr			; error, send RMS error text
+     28	002056	000412 				br	30$
+     29
+     30	002060				20$:	calls	error	,<#1,#invarg>	; invalid arguments
+	002060	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002062	012746 	001254'			        mov	#invarg	,-(sp)	; push it
+	002066	012746 	000001 			        mov	#1	,-(sp)	; push it
+	002072	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002074	004767 	000000G			  jsr	pc	,error		; and go to the routine
+	002100	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002102	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     31	002104	005000 			30$:	clr	r0			; not done yet
+     32	002106	000207 				return
+     33
+KRTSER	The server	MACRO V05.03b  00:01  Page 16
+Generic COPY
+
+      1
+      2						.sbttl	Generic CWD
+      3
+      4	002110	012701 	000001G		gen.c:	mov	#packet+1,r1		; get the packet address
+      5	002114					unchar	(r1)+	,r2		; get the size of the data
+	002114	005046 				clr	-(sp)
+	002116	152116 				bisb	(r1)+	,@sp
+	002120	162716 	000040 			sub	#40	,@sp
+	002124	112602 				movb	(sp)+	,r2
+      6	002126	001011 				bne	10$			; /63/ something is there
+      7	002130					strcpy	r1	,#dkname	; /63/ if no dev specified, then home
+	002130	012746 	000000G			mov	#dkname	,-(sp)
+	002134	010146 				mov	r1	,-(sp)
+	002136	004767 	000000G			jsr	pc	,strcpy
+      8	002142					strlen	r1			; /63/ get length of name copied in
+	002142	010100 				mov	r1	,r0
+	002144	004767 	000000G			call	l$len
+      9	002150	010002 				mov	r0	,r2		; /63/ and replace packet len with it
+     10
+     11	002152	020227 	000004 		10$:	cmp	r2	,#4		; /63/ a possibly legal name?
+     12	002156	003403 				ble	30$			; /63/ ya
+     13	002160	012700 	000000G		20$:	mov	#er$dna	,r0		; /63/ no, name is no good
+     14	002164	000500 				br	50$			; /63/ goto error handler
+     15
+     16	002166	010200 			30$:	mov	r2	,r0		; /63/ save copy of length
+     17	002170	060102 				add	r1	,r2		; /BBS/ point to the end of it all
+     18	002172	005302 				dec	r2			; /BBS/ bump back to last char in buff
+     19	002174	122227 	000072 			cmpb	(r2)+	,#':		; /BBS/ last byte a colon?
+     20	002200	001405 				beq	40$			; /BBS/ ya
+     21	002202	020027 	000003 			cmp	r0	,#3		; /63/ if no end colon max len is 3 ch
+     22	002206	101364 				bhi	20$			; /63/ it's too long
+     23	002210	112722 	000072 			movb	#':	,(r2)+		; /BBS/ no, but fparse needs one
+     24
+     25	002214	105012 			40$:	clrb	@r2			; /BBS/ (re)terminate
+     26	002216					upcase	r1			; /BBS/ upper case the packet
+	002216	010100 				mov	r1	,r0
+	002220	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     27	002224					calls	fparse,<r1,#spare1>	; /BBS/ use handy buffer to verify
+	002224	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002226	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	002232	010146 				        mov	r1	,-(sp)	; push it
+	002234	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002236	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	002242	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002244	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     28	002246	005700 				tst	r0			; /BBS/ it's an authorized device
+     29	002250	001046 				bne	50$			; /BBS/ nope, it's not..
+     30	002252					strcpy	#defdir	,#spare1	; /62/ modify defdir
+	002252	012746 	000000G			mov	#spare1	,-(sp)
+	002256	012746 	000000G			mov	#defdir	,-(sp)
+	002262	004767 	000000G			jsr	pc	,strcpy
+     31	002266	162706 	000040 			sub	#40	,sp		; allocate a buffer
+     32	002272	010602 				mov	sp	,r2		; point to the buffer
+     33	002274					strcpy	r2	,#ser.06	; /62/ stick "DK --> " in it..
+	002274	012746 	001655'			mov	#ser.06	,-(sp)
+	002300	010246 				mov	r2	,-(sp)
+	002302	004767 	000000G			jsr	pc	,strcpy
+KRTSER	The server	MACRO V05.03b  00:01  Page 16-1
+Generic CWD
+
+     34	002306					strcat	r2	,#defdir	; add the directory name in
+	002306	012746 	000000G			mov	#defdir	,-(sp)
+	002312	010246 				mov	r2	,-(sp)
+	002314	004767 	000000G			jsr	pc	,strcat
+     35	002320					strlen	r2			; get the total length
+	002320	010200 				mov	r2	,r0
+	002322	004767 	000000G			call	l$len
+     36	002326					spack	#msg$ack,paknum,r0,r2	; and sent the ACK message
+	002326	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002330	010246 				        mov	r2	,-(sp)	; push it
+	002332	010046 				        mov	r0	,-(sp)	; push it
+	002334	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	002340	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	002344	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002346	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	002352	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002356	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	002360	062706 	000040 			add	#40	,sp		; pop buffer
+     38	002364	000402 				br	60$
+     39
+     40	002366	004767 	000772 		50$:	call	generr			; handle error
+     41	002372	005000 			60$:	clr	r0			; not done
+     42	002374	000207 				return
+     43
+KRTSER	The server	MACRO V05.03b  00:01  Page 17
+Generic CWD
+
+      1
+      2						.sbttl	Generic DELETE
+      3
+      4	002376	012701 	000001G		gen.e:	mov	#packet+1,r1		; get the packet address
+      5	002402					unchar	(r1)+	,r2		; get the argument length
+	002402	005046 				clr	-(sp)
+	002404	152116 				bisb	(r1)+	,@sp
+	002406	162716 	000040 			sub	#40	,@sp
+	002412	112602 				movb	(sp)+	,r2
+      6	002414	001001 				bne	10$			; non-zero
+      7	002416	105011 				clrb	@r1			; zero, make the string null
+      8	002420				10$:	upcase	r1			; /BBS/ upper case the packet
+	002420	010100 				mov	r1	,r0
+	002422	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      9	002426					calls	delete	,<r1,#lun.ou>	; do it
+	002426	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002430	012746 	000000G			        mov	#lun.ou	,-(sp)	; push it
+	002434	010146 				        mov	r1	,-(sp)	; push it
+	002436	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002440	004767 	000000G			  jsr	pc	,delete		; and go to the routine
+	002444	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002446	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     10	002450	005700 				tst	r0			; did it work?
+     11	002452	001403 				beq	20$			; yes
+     12	002454	004767 	000704 			call	generr			; no, send the RMS error code over
+     13	002460	000436 				br	30$
+     14
+     15	002462				20$:	; /BBS/ wildcarding not available under RT-11
+     16	002462					strcpy	#errtxt	,#srcnam	; /62/ reply for 1 file deleted
+	002462	012746 	000000G			mov	#srcnam	,-(sp)
+	002466	012746 	000000G			mov	#errtxt	,-(sp)
+	002472	004767 	000000G			jsr	pc	,strcpy
+     17	002476					strcat	#errtxt	,#delmsg	; /62/ append " deleted" to file name
+	002476	012746 	000000'			mov	#delmsg	,-(sp)
+	002502	012746 	000000G			mov	#errtxt	,-(sp)
+	002506	004767 	000000G			jsr	pc	,strcat
+     18	002512					strlen	#errtxt			; get the length
+	002512	012700 	000000G			mov	#errtxt	,r0
+	002516	004767 	000000G			call	l$len
+     19	002522					spack	#msg$ack,paknum,r0,#errtxt ; and send a simple ACK packet
+	002522	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002524	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	002530	010046 				        mov	r0	,-(sp)	; push it
+	002532	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	002536	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	002542	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002544	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	002550	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002554	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     20	002556	005000 			30$:	clr	r0			; not done with the server yet
+     21	002560	000207 				return
+     22
+KRTSER	The server	MACRO V05.03b  00:01  Page 18
+Generic DELETE
+
+      1
+      2						.sbttl	Generic DIRECTORY and SPACE
+      3
+      4	002562	010667 	000000G		gen.u:	mov	sp	,summary	; /BBS/ flag for a summary only
+      5	002566	012701 	000001G		gen.d:	mov	#packet+1,r1		; /38/ get the packet address
+      6	002572					unchar	(r1)+	,r2		; /38/ get the argument length
+	002572	005046 				clr	-(sp)
+	002574	152116 				bisb	(r1)+	,@sp
+	002576	162716 	000040 			sub	#40	,@sp
+	002602	112602 				movb	(sp)+	,r2
+      7	002604	060102 				add	r1	,r2		; /BBS/ point to the end
+      8	002606	105012 				clrb	@r2			; /BBS/ null terminate
+      9	002610					upcase	r1			; /BBS/ upper case the packet
+	002610	010100 				mov	r1	,r0
+	002612	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     10	002616					calls	fixwild	,<r1>		; /BBS/ convert "?" to "%"
+	002616	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002620	010146 				  mov	r1	,-(sp)		; doing it thusly generates less code
+	002622	010605 				  mov	sp	,r5		; set pointer to argument list
+	002624	004767 	000000G			  jsr	pc	,fixwild		; call the subroutine
+	002630	005726 				  tst	(sp)+			; pop parameter list from stack
+	002632	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	002634					calls	sdirini	,<r1>		; /38/ init directory lookup and
+	002634	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002636	010146 				  mov	r1	,-(sp)		; doing it thusly generates less code
+	002640	010605 				  mov	sp	,r5		; set pointer to argument list
+	002642	004767 	000000G			  jsr	pc	,sdirini		; call the subroutine
+	002646	005726 				  tst	(sp)+			; pop parameter list from stack
+	002650	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     12	002652	005700 				tst	r0			; /38/ preload sdodir's buffer
+     13	002654	001011 				bne	10$			; /38/ send error packet on any error
+     14	002656	012767 	000000G	000000G		mov	#sdodir	,getcroutine	; /38/ stuff address of get_next_char
+     15	002664	012700 	000000G			mov	#null	,r0		; /38/ and flag we're NOT using a file
+     16	002670	004767 	003456 			call	xreply			; /38/ do the extended reply now
+     17	002674	005700 				tst	r0			; did it work?
+     18	002676	001402 				beq	20$			; ya
+     19	002700	004767 	000460 		10$:	call	generr			; /BBS/ send error to the user
+     20	002704	005000 			20$:	clr	r0			; not done yet
+     21	002706	000207 				return
+     22
+KRTSER	The server	MACRO V05.03b  00:01  Page 19
+Generic DIRECTORY and SPACE
+
+      1
+      2						.sbttl	Generic HELP
+      3
+      4	002710				gen.h:	calls	get$ve	,<#spare1>	; /63/ use the actual version data
+	002710	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002712	012746 	000000G			  mov	#spare1	,-(sp)		; doing it thusly generates less code
+	002716	010605 				  mov	sp	,r5		; set pointer to argument list
+	002720	004767 	000000G			  jsr	pc	,get$ve		; call the subroutine
+	002724	005726 				  tst	(sp)+			; pop parameter list from stack
+	002726	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      5	002730	012701 	000000G			mov	#spare1	,r1		; /63/ which we will prepend to htxt
+      6	002734					strlen	r1			; /63/ get its length into r0
+	002734	010100 				mov	r1	,r0
+	002736	004767 	000000G			call	l$len
+      7	002742	060001 				add	r0	,r1		; /63/ and a pointer to its end
+      8	002744	020027 	000204 			cmp	r0	,#ln$max	; /63/ is the length within range?
+      9	002750	101402 				blos	10$			; /63/ yes
+     10	002752	012700 	000204 			mov	#ln$max	,r0		; /63/ no, but it is now!
+     11	002756	012702 	000252'		10$:	mov	#htxt	,r2		; /63/ start the prepended data here
+     12	002762	114142 			20$:	movb	-(r1)	,-(r2)		; /63/ copy it across backwards so it
+     13	002764	077002 				sob	r0	,20$		; /63/ is in front of the static htxt
+     14	002766					textsrc	r2			; /63/ help text now begins here
+	002766	012767 	000000G	000000G		mov	#tgetcr0,getcroutine
+	002774	010267 	000000G			mov	r2	,tgetaddr
+     15	003000	012700 	000000G			mov	#null	,r0		; /38/ flag it's not file I/O..
+     16	003004	004767 	003342 			call	xreply			; /38/ send it
+     17	003010	005000 				clr	r0			; /38/ not done yet
+     18	003012	000207 				return
+     19
+KRTSER	The server	MACRO V05.03b  00:01  Page 20
+Generic HELP
+
+      1
+      2						.sbttl	Generic RENAME
+      3
+      4	003014	004767 	000416 		gen.r:	call	get2ar			; get pointers to "from" and "to"
+      5	003020	103451 				bcs	20$			; oops, send an error packet over
+      6	003022					upcase	r1			; /BBS/ upper case first arg
+	003022	010100 				mov	r1	,r0
+	003024	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      7	003030					upcase	r2			; /BBS/ upper case second arg
+	003030	010200 				mov	r2	,r0
+	003032	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      8	003036					calls	rename	,<r1,r2,#-1>	; rename the file now
+	003036	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003040	012746 	177777 			        mov	#-1	,-(sp)	; push it
+	003044	010246 				        mov	r2	,-(sp)	; push it
+	003046	010146 				        mov	r1	,-(sp)	; push it
+	003050	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003052	004767 	000000G			  jsr	pc	,rename		; and go to the routine
+	003056	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003062	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	003064	005700 				tst	r0			; did it work out ok?
+     10	003066	001023 				bne	10$			; no
+     11	003070					strlen	#rem.08			; /62/ get the string length
+	003070	012700 	001507'			mov	#rem.08	,r0
+	003074	004767 	000000G			call	l$len
+     12	003100					spack	#msg$ack,paknum,r0,#rem.08 ; /62/ send the ACK over
+	003100	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003102	012746 	001507'			        mov	#rem.08	,-(sp)	; push it
+	003106	010046 				        mov	r0	,-(sp)	; push it
+	003110	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	003114	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	003120	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003122	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	003126	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003132	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13	003134	000415 				br	30$
+     14
+     15	003136	004767 	000222 		10$:	call	generr			; error, send RMS error text
+     16	003142	000412 				br	30$
+     17
+     18	003144				20$:	calls	error	,<#1,#invarg>	; invalid arguments
+	003144	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003146	012746 	001254'			        mov	#invarg	,-(sp)	; push it
+	003152	012746 	000001 			        mov	#1	,-(sp)	; push it
+	003156	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003160	004767 	000000G			  jsr	pc	,error		; and go to the routine
+	003164	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003166	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     19	003170	005000 			30$:	clr	r0			; not done yet
+     20	003172	000207 				return
+     21
+KRTSER	The server	MACRO V05.03b  00:01  Page 21
+Generic RENAME
+
+      1
+      2						.sbttl	Generic TYPE
+      3
+      4	003174	012701 	000001G		gen.t:	mov	#packet+1,r1		; get the packet address
+      5	003200					unchar	(r1)+	,r2		; get the argument length
+	003200	005046 				clr	-(sp)
+	003202	152116 				bisb	(r1)+	,@sp
+	003204	162716 	000040 			sub	#40	,@sp
+	003210	112602 				movb	(sp)+	,r2
+      6	003212	001451 				beq	20$			; /BBS/ nothing was there
+      7	003214	060102 				add	r1	,r2		; /BBS/ point to end
+      8	003216	105012 				clrb	@r2			; /BBS/ null terminate
+      9	003220					upcase	r1			; /BBS/ upper case the packet
+	003220	010100 				mov	r1	,r0
+	003222	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     10	003226					scan	#'.	,r1		; /BBS/ look for a dot in the name
+	003226	010146 				mov	r1	,-(sp)
+	003230	005046 				clr	-(sp)
+	003232	152716 	000056 			bisb	#'.	,@sp
+	003236	004767 	000000G			call	scanch
+     11	003242	005700 				tst	r0			; /BBS/ find one?
+     12	003244	001005 				bne	10$			; /BBS/ ya..
+     13	003246					strcat	r1	,#typdef	; /BBS/ no, add ".LST" to it
+	003246	012746 	002443'			mov	#typdef	,-(sp)
+	003252	010146 				mov	r1	,-(sp)
+	003254	004767 	000000G			jsr	pc	,strcat
+     14	003260				10$:	calls	iswild	,<r1>		; /BBS/ wildcarded file_spec??
+	003260	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003262	010146 				  mov	r1	,-(sp)		; doing it thusly generates less code
+	003264	010605 				  mov	sp	,r5		; set pointer to argument list
+	003266	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	003272	005726 				  tst	(sp)+			; pop parameter list from stack
+	003274	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	003276	005700 				tst	r0			; /BBS/
+     16	003300	001020 				bne	30$			; /BBS/ disallow wildcarded file_spec
+     17	003302					calls	fparse,<r1,#spare1>	; /BBS/ be sure it's an auth'd dev..
+	003302	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003304	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	003310	010146 				        mov	r1	,-(sp)	; push it
+	003312	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003314	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	003320	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003322	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     18	003324	005700 				tst	r0			; /BBS/ is it?
+     19	003326	001410 				beq	40$			; /BBS/ nope
+     20	003330	012700 	000000G			mov	#er$dna	,r0		; /63/ bad device name
+     21	003334	000402 				br	30$
+     22
+     23	003336	012700 	000000G		20$:	mov	#er$fnm	,r0		; /BBS/ bad file name
+     24	003342	004767 	000016 		30$:	call	generr			; /BBS/ handle the error
+     25	003346	000404 				br	50$
+     26
+     27	003350	012700 	000000G		40$:	mov	#spare1	,r0		; point to file to be typed
+     28	003354	004767 	002772 			call	xreply			; send it as an extended reply
+     29	003360	005000 			50$:	clr	r0			; not done yet
+     30	003362	000207 				return
+     31
+KRTSER	The server	MACRO V05.03b  00:01  Page 22
+Generic TYPE
+
+      1
+      2					;	.sbttl	Generic WHO
+      3					;
+      4					;gen.w:	calls	systat,<#1>		; load output into out buff
+      5					;	textsrc	#whobuff		; aim out buff at packet buffer
+      6					;	mov	#null	,r0		; flag it's not file I/O
+      7					;	call	xreply			; do the extended reply now
+      8					;	clr	r0			; not done yet
+      9					;	return
+     10
+KRTSER	The server	MACRO V05.03b  00:01  Page 23
+Generic TYPE
+
+      1
+      2						.sbttl	Generic command error handler
+      3
+      4	003364				generr:	calls	syserr	,<r0,#errtxt>	; /BBS/ be more informative
+	003364	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003366	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	003372	010046 				        mov	r0	,-(sp)	; push it
+	003374	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003376	004767 	000000G			  jsr	pc	,syserr		; and go to the routine
+	003402	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003404	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      5	003406					calls	error	,<#1,#errtxt>	; get the error text and send it
+	003406	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003410	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	003414	012746 	000001 			        mov	#1	,-(sp)	; push it
+	003420	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003422	004767 	000000G			  jsr	pc	,error		; and go to the routine
+	003426	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003430	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      6	003432	005000 				clr	r0			; not done yet
+      7	003434	000207 				return
+      8
+KRTSER	The server	MACRO V05.03b  00:01  Page 24
+Generic command error handler
+
+      1
+      2						.sbttl	Get pointers for a two argument server command
+      3
+      4					;	input:	packet	= packet just read as a server, .asciz
+      5					;	output:	  r1	= first argument address in packet buffer
+      6					;		  r2	= second argument address..
+      7					;		carry	= set on missing arg, clear if all is well and good
+      8
+      9	003436				get2ar:	save	<r3,r4>
+	003436	010346 				 mov	r3	,-(sp)
+	003440	010446 				 mov	r4	,-(sp)
+     10	003442	012703 	000001G			mov	#packet+1,r3		; get the address of our parameters
+     11	003446	105713 				tstb	@r3			; a null here is an error
+     12	003450	001423 				beq	10$			; exit with carry set
+     13	003452					unchar	(r3)+	,r4		; get the length of the first arg
+	003452	005046 				clr	-(sp)
+	003454	152316 				bisb	(r3)+	,@sp
+	003456	162716 	000040 			sub	#40	,@sp
+	003462	112604 				movb	(sp)+	,r4
+     14	003464	001415 				beq	10$			; a null string, exit with error
+     15	003466	010301 				mov	r3	,r1		; not null, point to the first one
+     16	003470	060403 				add	r4	,r3		; point to the length field for 2nd
+     17	003472	105713 				tstb	@r3			; must not be null or zero
+     18	003474	001411 				beq	10$			; null, missing second argument
+     19	003476					unchar	(r3)+	,r4		; get the length of the last field
+	003476	005046 				clr	-(sp)
+	003500	152316 				bisb	(r3)+	,@sp
+	003502	162716 	000040 			sub	#40	,@sp
+	003506	112604 				movb	(sp)+	,r4
+     20	003510	001403 				beq	10$			; nothing is there, abort please
+     21	003512	010302 				mov	r3	,r2		; return a pointer to the second arg
+     22	003514	105043 				clrb	-(r3)			; /63/ terminate 1st arg, clear carry
+     23	003516	000401 				br	20$
+     24	003520	000261 			10$:	sec				; failure, to try again someday
+     25	003522				20$:	unsave	<r4,r3>
+	003522	012604 				 mov	(sp)+	,r4
+	003524	012603 				 mov	(sp)+	,r3
+     26	003526	000207 				return
+     27
+KRTSER	The server	MACRO V05.03b  00:01  Page 25
+Get pointers for a two argument server command
+
+      1
+      2						.sbttl	The GET command		; /BBS/ heavily modified
+      3
+      4	003530	004767 	000000G		c$get::	call	ckremote		; /62/ moved c$get here from the root
+      5	003534	103002 				bcc	10$			; /63/ local, no problem
+      6	003536	000167 	000416 			jmp	120$			; /63/ we are remote, abort this
+      7	003542	005067 	000000G		10$:	clr	wasmore			; init multi-args display flag
+      8
+      9	003546	016701 	000000G		20$:	mov	argbuf	,r1		; address of command line buffer
+     10	003552	105711 				tstb	@r1			; anything there?
+     11	003554	001421 				beq	40$			; nope, bail out
+     12	003556	004767 	000000G			call	isitas			; get asname if there
+     13	003562	005700 				tst	r0			; any error in syntax?
+     14	003564	001403 				beq	30$			; /63/ no, it's ok
+     15	003566	012700 	000000G			mov	#er$get	,r0		; /63/ emit a syntax error message
+     16	003572	000412 				br	40$			; /63/
+     17	003574				30$:	calls	chk.tt	,<#asname>	; /63/ disallow getting to TT
+	003574	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003576	012746 	000000G			  mov	#asname	,-(sp)		; doing it thusly generates less code
+	003602	010605 				  mov	sp	,r5		; set pointer to argument list
+	003604	004767 	000000G			  jsr	pc	,chk.tt		; call the subroutine
+	003610	005726 				  tst	(sp)+			; pop parameter list from stack
+	003612	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     18	003614	005700 				tst	r0			; /63/ well?
+     19	003616	001404 				beq	50$			; /63/ it's not TT
+     20	003620				40$:	direrr	r0			; /63/ display error message
+	003620	010046 				mov	r0	,-(sp)
+	003622	004767 	000000G			call	direr$
+     21	003626	000554 				br	120$			; bail out
+     22
+     23	003630	005767 	000000G		50$:	tst	wasmore			; working with more than 1 file spec?
+     24	003634	001417 				beq	60$			; no
+     25	003636					calls	printm	,<#3,#ser.03,#srcnam,#ser.04> ; ya, say which it is
+	003636	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003640	012746 	001626'			        mov	#ser.04	,-(sp)	; push it
+	003644	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	003650	012746 	001577'			        mov	#ser.03	,-(sp)	; push it
+	003654	012746 	000003 			        mov	#3	,-(sp)	; push it
+	003660	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003662	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	003666	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003672	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     26	003674				60$:	upcase	#asname			; just in case
+	003674	012700 	000000G			mov	#asname	,r0
+	003700	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     27	003704	005767 	000000G			tst	locase			; SET FILE NAMING LOWER-CASE?
+     28	003710	001004 				bne	70$			; ya
+     29	003712					upcase	#srcnam			; no, make it upper case
+	003712	012700 	000000G			mov	#srcnam	,r0
+	003716	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     30	003722	116767 	000000G	000001G	70$:	movb	rectim	,senpar+p.time	; /62/ use receive time-out
+     31	003730	004767 	002526 			call	seropn			; init the link
+     32	003734	005700 				tst	r0			; /BBS/ did it work?
+     33	003736	001036 				bne	80$			; /BBS/ no, error msg dumped by ttyini
+     34	003740	004767 	002566 			call	sinfo			; exchange information please
+     35	003744	005067 	000000G			clr	paknum			; packet_number := 0
+     36	003750					strlen	#srcnam			; get the length of the file name
+KRTSER	The server	MACRO V05.03b  00:01  Page 25-1
+The GET command		; /BBS/ heavily modified
+
+	003750	012700 	000000G			mov	#srcnam	,r0
+	003754	004767 	000000G			call	l$len
+     37	003760					spack	#msg$rcv,paknum,r0,#srcnam ; get the server to send this file
+	003760	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003762	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	003766	010046 				        mov	r0	,-(sp)	; push it
+	003770	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	003774	012746 	000122 			        mov	#msg$rcv	,-(sp)	; push it
+	004000	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004002	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	004006	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004012	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     38	004014					calls	recsw	,<#sta.rin>	; and call the receiver
+	004014	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004016	012746 	000122 			  mov	#sta.rin	,-(sp)		; doing it thusly generates less code
+	004022	010605 				  mov	sp	,r5		; set pointer to argument list
+	004024	004767 	000000G			  jsr	pc	,recsw		; call the subroutine
+	004030	005726 				  tst	(sp)+			; pop parameter list from stack
+	004032	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     39	004034	004767 	000000G		80$:	call	clostt			; /62/ close the remote link
+     40	004040	005700 				tst	r0			; did it work?
+     41	004042	001034 				bne	110$			; no
+     42	004044	016700 	000000G			mov	nextone	,r0		; ya, any more arguments to process?
+     43	004050	001013 				bne	90$			; ya, go do it
+     44	004052					calls	printm	,<#1,#ser.01>	; /62/ no, done
+	004052	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004054	012746 	001544'			        mov	#ser.01	,-(sp)	; push it
+	004060	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004064	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004066	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	004072	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004074	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     45	004076	000432 				br	130$			; note r0 is clear here too
+     46	004100	121027 	000040 		90$:	cmpb	(r0)	,#space		; is first byte a blank?
+     47	004104	001002 				bne	100$			; no
+     48	004106	005200 				inc	r0			; ya, skip past it
+     49	004110	000773 				br	90$			; and check what is now the first byte
+     50	004112				100$:	copyz	r0 ,argbuf ,#ln$max	; pull up remaining args to top of buf
+	004112	012746 	000204 			mov	#ln$max	,-(sp)
+	004116	010046 				mov	r0	,-(sp)
+	004120	016746 	000000G			mov	argbuf	,-(sp)
+	004124	004767 	000000G			call	copyz$
+     51	004130	000167 	177412 			jmp	20$			; /63/ loop back for more
+     52
+     53	004134				110$:	calls	printm	,<#1,#ser.02>	; /62/ it failed, say so if local
+	004134	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004136	012746 	001563'			        mov	#ser.02	,-(sp)	; push it
+	004142	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004146	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004150	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	004154	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004156	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     54	004160	005267 	000000G		120$:	inc	status			; /45/ flag for batch exit
+     55	004164	105067 	000000G		130$:	clrb	asname			; /36/ ensure no more alternate names
+     56	004170	000167 	000000G			jmp	clrcns			; /62/ flush TT input, clear r0
+     57
+KRTSER	The server	MACRO V05.03b  00:01  Page 26
+The GET command		; /BBS/ heavily modified
+
+      1
+      2						.sbttl	The REMOTE HOST command	; /63/ spiffed up..
+      3
+      4	004174	004767 	002262 		remhos::call	seropn			; init the link
+      5	004200	005700 				tst	r0			; /BBS/ did it work?
+      6	004202	001402 				beq	10$			; /BBS/ ya
+      7	004204	000167 	001422 			jmp	xit			; /BBS/ no, error msg dumped by ttyini
+      8	004210	004767 	000000G		10$:	call	inista			; /63/ init all the stats registers
+      9	004214	116767 	000000G	000001G		movb	sentim	,senpar+p.time	; /63/ use send time-out
+     10	004222	004767 	002304 			call	sinfo			; exchange information please
+     11	004226	005067 	000000G			clr	paknum			; packet_number := 0  (must do this)
+     12	004232	005067 	000000G			clr	numtry			; /62/ clear the retry counter please
+     13					;	mov	sp	,logini		; /62/ force result msgs to a newline
+     14	004236					calls	buffil	,<argbuf,cmdbuf> ; /63/ do repeat encoding if need be
+	004236	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004240	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	004244	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004250	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004252	004767 	000000G			  jsr	pc	,buffil		; and go to the routine
+	004256	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004260	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	004262				20$:	strlen	cmdbuf			; /63/ get this way in case of retry
+	004262	016700 	000000G			mov	cmdbuf	,r0
+	004266	004767 	000000G			call	l$len
+     16	004272					spack	#msg$com,paknum,r0,cmdbuf ; /63/ get the server to execute
+	004272	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004274	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	004300	010046 				        mov	r0	,-(sp)	; push it
+	004302	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	004306	012746 	000103 			        mov	#msg$com	,-(sp)	; push it
+	004312	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004314	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	004320	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004324	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     17	004326				30$:	rpack	r2 ,r3	,#packet,#maxlng ; /62/ get the response from remote
+	004326	162706 	000010 			sub	#10	,sp
+	004332	010601 				mov	sp	,r1
+	004334	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004336	012746 	003600 			        mov	#maxlng	,-(sp)	; push it
+	004342	010146 				        mov	r1	,-(sp)	; push it
+	004344	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	004350	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004352	004767 	000000G			  jsr	pc	,rpack$		; and go to the routine
+	004356	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004362	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	004364	012102 				mov	(r1)+	,r2
+	004366	012103 				mov	(r1)+	,r3
+	004370	011101 				mov	@r1	,r1
+	004372	062706 	000010 			add	#10	,sp
+     18	004376	010367 	000000G			mov	r3	,paknum		; save the packet number please
+     19	004402					scan	r1	,#remrsp	; what to do with the response
+	004402	012746 	002450'			mov	#remrsp	,-(sp)
+	004406	005046 				clr	-(sp)
+	004410	150116 				bisb	r1	,@sp
+	004412	004767 	000000G			call	scanch
+     20	004416	006300 				asl	r0			; word indexing
+     21	004420	004770 	002460'			jsr	pc	,@remdsp(r0)	; and dispatch on the response
+KRTSER	The server	MACRO V05.03b  00:01  Page 26-1
+The REMOTE HOST command	; /63/ spiffed up..
+
+     22	004424	032700 	000001 			bit	#1	,r0		; /63/ is number of retires odd?
+     23	004430	001336 				bne	30$			; /63/ just listen for tries 1,3,5,..
+     24	004432	005700 				tst	r0			; try again?
+     25	004434	001312 				bne	20$			; /63/ must be try 2,4,6,.. resend too
+     26	004436	000167 	001170 			jmp	xit			; /63/ no, we are done
+     27
+KRTSER	The server	MACRO V05.03b  00:01  Page 27
+The REMOTE HOST command	; /63/ spiffed up..
+
+      1
+      2						.sbttl	GENERIC REMOTE commands
+      3
+      4	004442	004767 	000000G		c$bye::	call	ckremote		; /62/ moved front end here
+      5	004446	103415 				bcs	10$			; /62/ we are remote, abort this
+      6	004450					calls	doremo	,<#gn$bye,#1,#null> ; /63/ do the BYE command
+	004450	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004452	012746 	000000G			        mov	#null	,-(sp)	; push it
+	004456	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004462	012746 	000114 			        mov	#gn$bye	,-(sp)	; push it
+	004466	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004470	004767 	000544 			  jsr	pc	,doremo		; and go to the routine
+	004474	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004500	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	004502	005000 			10$:	clr	r0			; /62/
+      8	004504	000207 				return
+      9
+     10	004506				remcop::calls	doremo	,<#gn$cop,#2,cmdbuf,argbuf> ; /62/ remote copy
+	004506	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004510	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004514	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	004520	012746 	000002 			        mov	#2	,-(sp)	; push it
+	004524	012746 	000113 			        mov	#gn$cop	,-(sp)	; push it
+	004530	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004532	004767 	000502 			  jsr	pc	,doremo		; and go to the routine
+	004536	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004542	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	004544	000207 				return
+     12
+     13	004546	012700 	000103 		remcwd::mov	#gn$con	,r0		; /63/ do connect to a dir command
+     14	004552	016701 	000000G		rem.two:mov	argbuf	,r1		; check for optional password
+     15	004556	105711 			10$:	tstb	@r1			; end of string?
+     16	004560	001425 				beq	20$			; yes
+     17	004562	122127 	000040 			cmpb	(r1)+	,#space		; look for a space
+     18	004566	001373 				bne	10$			; not yet..
+     19	004570	105711 				tstb	@r1			; null here?
+     20	004572	001420 				beq	20$			; yes, no password present
+     21	004574	105061 	177777 			clrb	-1(r1)			; /63/ insert null where <space> was
+     22	004600					calls	doremo	,<r0,#2,argbuf,r1> ; /63/ ya, insert password too
+	004600	010546 				mov	r5	,-(sp)		00414 			  jsr	pc	,doremo		; and go to the routine
+	004624	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004630	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     23	004632	000414 				br	30$
+     24	004634				20$:	calls	doremo	,<r0,#1,argbuf>	; /63/ no password today
+	004634	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004636	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004642	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004646	010046 				        mov	r0	,-(sp)	; push it
+	004650	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004652	004767 	000362 			  jsr	pc	,doremo		; and go to the routine
+	004656	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+KRTSER	The server	MACRO V05.03b  00:01  Page 27-1
+GENERIC REMOTE commands
+
+	004662	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     25	004664	000207 			30$:	return
+     26
+     27	004666				remdel::calls	doremo	,<#gn$del,#1,argbuf> ; /62/ remote delete
+	004666	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004670	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004674	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004700	012746 	000105 			        mov	#gn$del	,-(sp)	; push it
+	004704	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004706	004767 	000326 			  jsr	pc	,doremo		; and go to the routine
+	004712	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004716	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     28	004720	000207 				return
+     29
+     30	004722				remdir::calls	doremo	,<#gn$dir,#1,argbuf> ; /62/ remote directory
+	004722	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004724	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004730	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004734	012746 	000104 			        mov	#gn$dir	,-(sp)	; push it
+	004740	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004742	004767 	000272 			  jsr	pc	,doremo		; and go to the routine
+	004746	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004752	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     31	004754	000207 				return
+     32
+     33	004756				remfin::calls	doremo	,<#gn$exit,#1,#null> ; /63/ finish
+	004756	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004760	012746 	000000G			        mov	#null	,-(sp)	; push it
+	004764	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004770	012746 	000106 			        mov	#gn$exit	,-(sp)	; push it
+	004774	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004776	004767 	000236 			  jsr	pc	,doremo		; and go to the routine
+	005002	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005006	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     34	005010	000207 				return
+     35
+     36	005012				remhlp::calls	doremo	,<#gn$hel,#1,#null> ; remote help
+	005012	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005014	012746 	000000G			        mov	#null	,-(sp)	; push it
+	005020	012746 	000001 			        mov	#1	,-(sp)	; push it
+	005024	012746 	000110 			        mov	#gn$hel	,-(sp)	; push it
+	005030	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005032	004767 	000202 			  jsr	pc	,doremo		; and go to the routine
+	005036	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005042	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	005044	000207 				return
+     38
+     39	005046	012700 	000111 		remlgi::mov	#gn$log	,r0		; /63/ do login command
+     40	005052	000637 				br	rem.two			; /63/ common code
+     41
+     42	005054				remren::calls	doremo	,<#gn$ren,#2,cmdbuf,argbuf> ; /62/ remote rename
+	005054	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005056	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	005062	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	005066	012746 	000002 			        mov	#2	,-(sp)	; push it
+	005072	012746 	000122 			        mov	#gn$ren	,-(sp)	; push it
+	005076	010605 				  mov	sp	,r5		; set up the argument list pointer
+KRTSER	The server	MACRO V05.03b  00:01  Page 27-2
+GENERIC REMOTE commands
+
+	005100	004767 	000134 			  jsr	pc	,doremo		; and go to the routine
+	005104	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005110	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     43	005112	000207 				return
+     44
+     45	005114				remspa::calls	doremo	,<#gn$dis,#1,argbuf> ; /62/ remote space
+	005114	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005116	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	005122	012746 	000001 			        mov	#1	,-(sp)	; push it
+	005126	012746 	000125 			        mov	#gn$dis	,-(sp)	; push it
+	005132	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005134	004767 	000100 			  jsr	pc	,doremo		; and go to the routine
+	005140	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005144	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     46	005146	000207 				return				     ; /BBS/ with possible device
+     47
+     48	005150				remtyp::calls	doremo	,<#gn$typ,#1,argbuf> ; /62/ remote type
+	005150	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005152	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	005156	012746 	000001 			        mov	#1	,-(sp)	; push it
+	005162	012746 	000124 			        mov	#gn$typ	,-(sp)	; push it
+	005166	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005170	004767 	000044 			  jsr	pc	,doremo		; and go to the routine
+	005174	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005200	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     49	005202	000207 				return
+     50
+     51	005204				remwho::calls	doremo	,<#gn$who,#1,argbuf> ; /63/ remote who
+	005204	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005206	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	005212	012746 	000001 			        mov	#1	,-(sp)	; push it
+	005216	012746 	000127 			        mov	#gn$who	,-(sp)	; push it
+	005222	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005224	004767 	000010 			  jsr	pc	,doremo		; and go to the routine
+	005230	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005234	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     52	005236	000207 				return
+     53
+KRTSER	The server	MACRO V05.03b  00:01  Page 28
+GENERIC REMOTE commands
+
+      1
+      2						.sbttl	Carry out the REMOTE command please
+      3
+      4					;	DOREMOTE handles most generic commands that may have
+      5					;	a variable response, such as a simple ACK ("Y") with
+      6					;	the response in the data packet, an SINIT, or an "X"
+      7					;	packet.
+      8
+      9	005240	004767 	001216 		doremo:	call	seropn			; initialize the link
+     10	005244	005700 				tst	r0			; /BBS/ did it work?
+     11	005246	001171 				bne	xit			; /BBS/ nope, err msg dumped by ttyini
+     12	005250	004767 	000000G			call	inista			; /63/ init all the stats registers
+     13	005254	116767 	000000G	000001G		movb	sentim	,senpar+p.time	; /63/ use send time-out
+     14	005262	004767 	001244 			call	sinfo			; /63/ must do before calling buffil!
+     15	005266	005067 	000000G			clr	paknum			; packet_number := 0  (must do this)
+     16	005272	005067 	000000G			clr	numtry			; clear the retry counter please
+     17					;;	mov	sp	,logini		; /62/ force result msgs to a newline
+     18
+     19	005276	162706 	000410 			sub	#<ln$max*2>,sp		; /62/ allocate a buffer please
+     20	005302	010602 				mov	sp	,r2		; point to it
+     21	005304	111522 				movb	@r5	,(r2)+		; /63/ the generic command to execute
+     22	005306	016501 	000004 			mov	4(r5)	,r1		; get the first command argument
+     23	005312					strlen	r1			; get the length of it please
+	005312	010100 				mov	r1	,r0
+	005314	004767 	000000G			call	l$len
+     24	005320					tochar	r0	,(r2)+		; followed by len of first arg
+	005320	005046 				clr	-(sp)
+	005322	150016 				bisb	r0	,@sp
+	005324	062716 	000040 			add	#40	,@sp
+	005330	112622 				movb	(sp)+	,(r2)+
+     25	005332					copyz	r1	,r2 ,#ln$max	; /63/ copy the arglist over please
+	005332	012746 	000204 			mov	#ln$max	,-(sp)
+	005336	010146 				mov	r1	,-(sp)
+	005340	010246 				mov	r2	,-(sp)
+	005342	004767 	000000G			call	copyz$
+     26	005346	026527 	000002 	000001 		cmp	2(r5)	,#1		; one or two arguments passed?
+     27	005354	001423 				beq	20$			; only one
+     28	005356	105722 			10$:	tstb	(r2)+			; two, so find the end so far
+     29	005360	001376 				bne	10$			; not yet
+     30	005362					strlen	6(r5)			; get the length of the second arg
+	005362	016500 	000006 			mov	6(r5)	,r0
+	005366	004767 	000000G			call	l$len
+     31	005372	005302 				dec	r2			; point back to the null please
+     32	005374					tochar	r0	,(r2)+		; and copy the new length over
+	005374	005046 				clr	-(sp)
+	005376	150016 				bisb	r0	,@sp
+	005400	062716 	000040 			add	#40	,@sp
+	005404	112622 				movb	(sp)+	,(r2)+
+     33	005406					copyz	6(r5)	,r2 ,#ln$max	; /63/ copy the second arg over now
+	005406	012746 	000204 			mov	#ln$max	,-(sp)
+	005412	016546 	000006 			mov	6(r5)	,-(sp)
+	005416	010246 				mov	r2	,-(sp)
+	005420	004767 	000000G			call	copyz$
+     34	005424	010600 			20$:	mov	sp	,r0		; point back to the command buffer
+     35	005426					calls	buffil	,<r0,cmdbuf>	; /63/ encoding the data as normal
+	005426	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005430	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+KRTSER	The server	MACRO V05.03b  00:01  Page 28-1
+Carry out the REMOTE command please
+
+	005434	010046 				        mov	r0	,-(sp)	; push it
+	005436	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005440	004767 	000000G			  jsr	pc	,buffil		; and go to the routine
+	005444	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	005446	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     36	005450	062706 	000410 			add	#<ln$max*2>,sp		; /62/ pop the local buffer
+     37
+     38	005454				getres:	strlen	cmdbuf			; /63/ get this way in case of retry
+	005454	016700 	000000G			mov	cmdbuf	,r0
+	005460	004767 	000000G			call	l$len
+     39	005464					spack	#msg$gen,paknum,r0,cmdbuf ; /63/ send the command over please
+	005464	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005466	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	005472	010046 				        mov	r0	,-(sp)	; push it
+	005474	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	005500	012746 	000107 			        mov	#msg$gen	,-(sp)	; push it
+	005504	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005506	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	005512	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005516	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     40	005520				10$:	rpack	r2 ,r3	,#packet,#maxlng ; /62/ get the response from remote
+	005520	162706 	000010 			sub	#10	,sp
+	005524	010601 				mov	sp	,r1
+	005526	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005530	012746 	003600 			        mov	#maxlng	,-(sp)	; push it
+	005534	010146 				        mov	r1	,-(sp)	; push it
+	005536	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	005542	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005544	004767 	000000G			  jsr	pc	,rpack$		; and go to the routine
+	005550	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005554	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	005556	012102 				mov	(r1)+	,r2
+	005560	012103 				mov	(r1)+	,r3
+	005562	011101 				mov	@r1	,r1
+	005564	062706 	000010 			add	#10	,sp
+     41	005570	010367 	000000G			mov	r3	,paknum		; save the packet number please
+     42	005574					scan	r1	,#remrsp	; what to do with the response
+	005574	012746 	002450'			mov	#remrsp	,-(sp)
+	005600	005046 				clr	-(sp)
+	005602	150116 				bisb	r1	,@sp
+	005604	004767 	000000G			call	scanch
+     43	005610	006300 				asl	r0			; word indexing
+     44	005612	004770 	002460'			jsr	pc	,@remdsp(r0)	; and dispatch on the response
+     45	005616	005700 				tst	r0			; did it succeed?
+     46	005620	001404 				beq	xit			; /63/ yes
+     47	005622	032700 	000001 			bit	#1	,r0		; /63/ no, is this an odd or even try?
+     48	005626	001712 				beq	getres			; /63/ only resend packets 2,4,6,...
+     49	005630	000733 				br	10$			; /63/ just listen for tries 1,3,5,...
+     50
+     51	005632	005067 	000000G		xit:	clr	xmode			; no extended reply stuff now
+     52	005636	005067 	000000G			clr	xgottn			; we don't have any "X" packets
+     53	005642	005000 				clr	r0			; don't pass error back to caller
+     54	005644	000167 	000000G			jmp	clostt			; /62/ close the link for now
+     55
+     56						.save
+     57	002450					.psect	$pdata
+     58	002450	   105 	   116 	   123 	remrsp:	.byte	msg$err	,msg$nak,msg$snd,msg$ack,msg$tex,timout	,badchk
+KRTSER	The server	MACRO V05.03b  00:01  Page 28-2
+Carry out the REMOTE command please
+
+     59	002457	   000 				.byte	0
+     60						.even
+     61	002460	005672'			remdsp:	.word	rem.$
+     62	002462	006330'	005656'	006120'		.word	rem.e	,rem.n	,rem.s	,rem.y	,rem.x	,rem.t	,rem.ck
+     63	005650					.restore
+     64
+     65	005650	012702 	001440'		rem.ck:	mov	#rem.05	,r2		; /63/ checksum failed
+     66	005654	000410 				br	rem.$$
+     67	005656	012702 	001461'		rem.n:	mov	#rem.06	,r2		; /63/ NAKed
+     68	005662	000405 				br	rem.$$
+     69	005664	012702 	001474'		rem.t:	mov	#rem.07	,r2		; /63/ timed out
+     70	005670	000402 				br	rem.$$
+     71	005672	012702 	001412'		rem.$:	mov	#rem.04	,r2		; /63/ invalid response
+     72	005676	005267 	000000G		rem.$$:	inc	numtry			; add this try to the retry count
+     73	005702	016700 	000000G			mov	numtry	,r0		; /63/ get number of tries so far
+     74	005706	012701 	000000'			mov	#rem.d0	,r1		; /63/ where to write ascii copy
+     75	005712	004767 	000000G			call	L10012			; /63/ convert integer to ascii
+     76	005716	105011 				clrb	@r1			; /63/ null terminate ascii string
+     77	005720	016700 	000000G			mov	initry	,r0		; /63/ now get the retry limit here
+     78	005724	012701 	000004'			mov	#rem.d1	,r1		; /63/ this one's ascii copy goes here
+     79	005730	004767 	000000G			call	L10012			; /63/ convert it
+     80	005734	105011 				clrb	@r1			; /63/ and terminate it
+     81					;;	clr	logini			; /63/ already on a new line by now
+     82	005736					calls	printm	,<#5,#rem.02,#rem.d0,#rem.03,#rem.d1,r2> ; /63/
+	005736	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005740	010246 				        mov	r2	,-(sp)	; push it
+	005742	012746 	000004'			        mov	#rem.d1	,-(sp)	; push it
+	005746	012746 	001405'			        mov	#rem.03	,-(sp)	; push it
+	005752	012746 	000000'			        mov	#rem.d0	,-(sp)	; push it
+	005756	012746 	001400'			        mov	#rem.02	,-(sp)	; push it
+	005762	012746 	000005 			        mov	#5	,-(sp)	; push it
+	005766	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005770	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	005774	062706 	000014 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	006000	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     83	006002	026767 	000000G	000000G		cmp	numtry	,initry		; /63/ been trying too hard?
+     84	006010	103403 				blo	10$			; /63/ not yet..
+     85	006012	005000 				clr	r0			; /63/ force an exit
+     86	006014	000167 	000000G			jmp	m$retry			; /63/ too many retries error
+     87	006020	016700 	000000G		10$:	mov	numtry	,r0		; /63/ number of tries=what to do now
+     88	006024	000207 				return
+     89
+     90	006026	010667 	000000G		rem.x:	mov	sp	,xmode		; set a global flag for this
+     91	006032	010667 	000000G			mov	sp	,xgottn		; we already have the "X" packet
+     92	006036					calls	rec.sw	,<#sta.fil>	; yes, switch to receive data
+	006036	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006040	012746 	000106 			  mov	#sta.fil	,-(sp)		; doing it thusly generates less code
+	006044	010605 				  mov	sp	,r5		; set pointer to argument list
+	006046	004767 	000000G			  jsr	pc	,rec.sw		; call the subroutine
+	006052	005726 				  tst	(sp)+			; pop parameter list from stack
+	006054	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     93	006056	005067 	000000G			clr	xmode			; no longer want output to TT
+     94	006062	005067 	000000G			clr	xgottn			; we don't have any "X" packets
+     95	006066	005700 				tst	r0			; did the receive succeed?
+     96	006070	001470 				beq	rem.tag			; /62/ yes
+     97					;;	mov	sp	,logini		; /62/ force following msg to newline
+     98	006072					calls	error	,<#1,#rem.01>	; /63/ receive data failed
+KRTSER	The server	MACRO V05.03b  00:01  Page 28-3
+Carry out the REMOTE command please
+
+	006072	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006074	012746 	001352'			        mov	#rem.01	,-(sp)	; push it
+	006100	012746 	000001 			        mov	#1	,-(sp)	; push it
+	006104	010605 				  mov	sp	,r5		; set up the argument list pointer
+	006106	004767 	000000G			  jsr	pc	,error		; and go to the routine
+	006112	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	006114	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     99	006116	000457 				br	rem.xt			; /63/
+    100
+    101	006120				rem.s:	calls	rpar	,<#packet,r2>	; handle the sinit now
+	006120	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006122	010246 				        mov	r2	,-(sp)	; push it
+	006124	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	006130	010605 				  mov	sp	,r5		; set up the argument list pointer
+	006132	004767 	000000G			  jsr	pc	,rpar		; and go to the routine
+	006136	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	006140	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    102	006142					calls	spar	,<#packet>	; and send my init things over
+	006142	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006144	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	006150	010605 				  mov	sp	,r5		; set pointer to argument list
+	006152	004767 	000000G			  jsr	pc	,spar		; call the subroutine
+	006156	005726 				  tst	(sp)+			; pop parameter list from stack
+	006160	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    103	006162					spack	#msg$ack,paknum,sparsz,#packet
+	006162	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006164	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	006170	016746 	000000G			        mov	sparsz	,-(sp)	; push it
+	006174	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	006200	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	006204	010605 				  mov	sp	,r5		; set up the argument list pointer
+	006206	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	006212	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	006216	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    104	006220					incm64	paknum			; bump the packet number up mod 64
+	006220	005267 	000000G			inc	paknum
+	006224	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+    105	006232					calls	rec.sw	,<#sta.fil>	; switch to get fileheader state
+	006232	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006234	012746 	000106 			  mov	#sta.fil	,-(sp)		; doing it thusly generates less code
+	006240	010605 				  mov	sp	,r5		; set pointer to argument list
+	006242	004767 	000000G			  jsr	pc	,rec.sw		; call the subroutine
+	006246	005726 				  tst	(sp)+			; pop parameter list from stack
+	006250	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    106	006252				rem.tag:.newline			; /62/ shared .newline exit
+	006252	004767 	000000G			call	l$pcrlf
+    107	006256	005000 			rem.xt:	clr	r0			; /63/ or exit without one
+    108	006260	000207 				return
+    109
+    110	006262	010667 	000000G		rem.y:	mov	sp	,rem.ack	; /63/ set ACK rec'd flag for c$fin
+    111	006266	105767 	000000G			tstb	packet			; /63/ any data in the field?
+    112	006272	001771 				beq	rem.xt			; /63/ if not, just exit
+    113	006274					calls	printm	,<#2,#rem.ak,#packet> ; /62/ print the packet
+	006274	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006276	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	006302	012746 	001526'			        mov	#rem.ak	,-(sp)	; push it
+	006306	012746 	000002 			        mov	#2	,-(sp)	; push it
+KRTSER	The server	MACRO V05.03b  00:01  Page 28-4
+Carry out the REMOTE command please
+
+	006312	010605 				  mov	sp	,r5		; set up the argument list pointer
+	006314	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	006320	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	006324	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    114	006326	000751 				br	rem.tag			; /62/
+    115
+    116	006330				rem.e:	calls	prerrp	,<#packet>	; /63/ print error text
+	006330	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006332	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	006336	010605 				  mov	sp	,r5		; set pointer to argument list
+	006340	004767 	000000G			  jsr	pc	,prerrp		; call the subroutine
+	006344	005726 				  tst	(sp)+			; pop parameter list from stack
+	006346	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    117	006350	000742 				br	rem.xt			; /63/
+    118
+KRTSER	The server	MACRO V05.03b  00:01  Page 29
+Carry out the REMOTE command please
+
+      1
+      2						.sbttl	Initialize for an extended reply to a generic command
+      3
+      4					;	Here's where we send an "X" packet back to the requesting Kermit
+      5					;	to  say that we are going to send an extended reply to it.  This
+      6					;	reply takes the form of a  normal file transfer but we will want
+      7					;	it to be printed on the user's terminal rather than go to a disk
+      8					;	file.  Thus the use of the "X" packet to start things off.
+      9
+     10	006352				xreply:	strcpy	#srcnam	,r0		; /62/ copy the file name to be sent
+	006352	010046 				mov	r0	,-(sp)
+	006354	012746 	000000G			mov	#srcnam	,-(sp)
+	006360	004767 	000000G			jsr	pc	,strcpy
+     11	006364	105067 	000000G			clrb	filnam			; /38/ ensure cleared out
+     12	006370	105767 	000000G			tstb	srcnam			; /38/ is there really a file?
+     13	006374	001406 				beq	10$			; /38/ no, ignore lookup then
+     14	006376	005067 	000000G			clr	index			; /62/ wildcard file number := 0
+     15	006402	004767 	000000G			call	getnxt			; go do a directory lookup please
+     16	006406	005700 				tst	r0			; well, did the lookup work out?
+     17	006410	001012 				bne	20$			; /62/ no, getnxt has sent error pak
+     18	006412	010667 	000000G		10$:	mov	sp	,xmode		; flag this is an extended reply
+     19	006416					calls	sensw	,<#sta.fil>	; go send the extended reply text
+	006416	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006420	012746 	000106 			  mov	#sta.fil	,-(sp)		; doing it thusly generates less code
+	006424	010605 				  mov	sp	,r5		; set pointer to argument list
+	006426	004767 	000000G			  jsr	pc	,sensw		; call the subroutine
+	006432	005726 				  tst	(sp)+			; pop parameter list from stack
+	006434	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     20	006436	005067 	000000G		20$:	clr	xmode			; no longer extended reply mode
+     21	006442	005067 	000000G			clr	xgottn			; we don't have any "X" packets
+     22	006446	005000 				clr	r0			; success
+     23	006450					textsrc				; /38/ reset to normal file I/O
+	006450	005067 	000000G			clr	getcroutine		; /62/ reset to file I/O
+	006454	005067 	000000G			clr	tgetaddr
+     24	006460	000207 				return
+     25
+KRTSER	The server	MACRO V05.03b  00:01  Page 30
+Initialize for an extended reply to a generic command
+
+      1
+      2						.sbttl	Open link and flush NAKs
+      3
+      4	006462				seropn:	save	<r1>
+	006462	010146 				 mov	r1	,-(sp)
+      5	006464	004767 	000000G			call	opentt			; open the link for a server command
+      6	006470	005700 				tst	r0			; did it work?
+      7	006472	001015 				bne	20$			; /BBS/ no, err msg dumped by ttyini
+      8	006474	004767 	000000G			call	cantyp			; flush any accumulated NAKs
+      9	006500				10$:	calls	xbinread,<#-1>		; /63/ read with no wait to flush
+	006500	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006502	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	006506	010605 				  mov	sp	,r5		; set pointer to argument list
+	006510	004767 	000000G			  jsr	pc	,xbinread		; call the subroutine
+	006514	005726 				  tst	(sp)+			; pop parameter list from stack
+	006516	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     10	006520	005700 				tst	r0			; /63/ any possible junk in buffer
+     11	006522	001766 				beq	10$			; /63/ loop until nothing remains
+     12	006524	005000 				clr	r0			; /63/ no error possible here
+     13	006526				20$:	unsave	<r1>
+	006526	012601 				 mov	(sp)+	,r1
+     14	006530	000207 				return
+     15
+KRTSER	The server	MACRO V05.03b  00:01  Page 31
+Open link and flush NAKs
+
+      1
+      2						.sbttl	Server init
+      3
+      4	006532				sinfo:	save				; save ALL registers please
+	006532	010046 				 mov	r0	,-(sp)
+	006534	010146 				 mov	r1	,-(sp)
+	006536	010246 				 mov	r2	,-(sp)
+	006540	010346 				 mov	r3	,-(sp)
+	006542	010446 				 mov	r4	,-(sp)
+	006544	010546 				 mov	r5	,-(sp)
+      5	006546	032767 	000001 	000000G		bit	#log$pa	,trace		; /62/ logging packets this time?
+      6	006554	001421 				beq	10$			; /62/ no
+      7	006556					calls	putrec	,<#0,#0,#lun.lo> ; /62/ ya, put newline into log file
+	006556	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	006560	012746 	000000G			        mov	#lun.lo	,-(sp)	; push it
+	006564	012746 	000000 			        mov	#0	,-(sp)	; push it
+	006570	012746 	000000 			        mov	#0	,-(sp)	; push it
+	006574	010605 				  mov	sp	,r5		; set up the argument list pointer
+	006576	004767 	000000G			  jsr	pc	,putrec		; and go to the routine
+	006602	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	006606	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      8	006610	005700 				tst	r0			; /62/ did it work?
+      9	006612	001402 				beq	10$			; /62/ ya
+     10	006614	004767 	000000G			call	logerr			; /62/ no, handle the error
+     11	006620	010667 	000000G		10$:	mov	sp	,inprogress	; /63/ flag packets being exchanged
+     12	006624	005067 	000000G			clr	numtry			; send info packets before any
+     13	006630	005067 	000000G			clr	paknum			; extended server response please
+     14	006634	112746 	000111 			movb	#msg$ser,-(sp)		; packet type "I"
+     15	006640	004767 	000000G			call	.sinit			; do it
+     16	006644					unsave				; restore ALL registers now
+	006644	012605 				 mov	(sp)+	,r5
+	006646	012604 				 mov	(sp)+	,r4
+	006650	012603 				 mov	(sp)+	,r3
+	006652	012602 				 mov	(sp)+	,r2
+	006654	012601 				 mov	(sp)+	,r1
+	006656	012600 				 mov	(sp)+	,r0
+     17	006660	000207 				return
+     18
+     19		000001 				.end
+KRTSER	The server	MACRO V05.03b  00:01  Page 31-1
+Symbol table
+
+ABT$AL  000132   	DIRER$= ****** GX	GN$SUB  000123   	MSG$TE  000130   	REM.S   006120R     002
+ABT$CU  000130   	DIRFLG= ****** GX	GN$TYP  000124   	M$RETR= ****** GX	REM.T   005664R     002
+ABT$ER  000105   	DKNAME= ****** GX	GN$VAR  000126   	NEXTON= ****** GX	REM.TA  006252R     002
+ALSIZE= 002000   	DOREMO  005240R     002	GN$WHO  000127   	NOSCOP= 000000   	REM.TW  004552R     002
+ARGBUF= ****** GX	DOT   = 000056   	HTXT    000252R     003	NOTIMP  001312R     003	REM.X   006026R     002
+ASNAME= ****** GX	EOF$DI  000104   	IMAGE = ****** GX	NULL  = ****** GX	REM.XT  006256R     002
+AT$LEN= ****** GX	ERBFSI= 000170   	INDEX = ****** GX	NUMTRY= ****** GX	REM.Y   006262R     002
+AT.ALL  000177   	ERRBYT= 000052   	INFOMS= ****** GX	OPENTT= ****** GX	REM.$   005672R     002
+AT.CDT  000001   	ERROR = ****** GX	INIREP= ****** GX	PACKET= ****** GX	REM.$$  005676R     002
+AT.INF  000002   	ERROR$= 000004   	INISTA= ****** GX	PAKNUM= ****** GX	REM.01  001352R     003
+AT.LEN  000004   	ERRTXT= ****** GX	INITRY= ****** GX	PAR$EV  000002   	REM.02  001400R     003
+AT.ON   100000   	ER$DNA= ****** GX	INPROG= ****** GX	PAR$MA  000003   	REM.03  001405R     003
+AT.PRO  000010   	ER$FNM= ****** GX	INSERV= ****** GX	PAR$NO  000000   	REM.04  001412R     003
+AT.SYS  000020   	ER$GET= ****** GX	INVARG  001254R     003	PAR$OD  000001   	REM.05  001440R     003
+AT.TYP  000040   	ER$SER= ****** GX	ISITAS= ****** GX	PAR$SP  000004   	REM.06  001461R     003
+AT.XLE  000100   	ESC   = 000033   	ISWILD= ****** GX	PRERRP= ****** GX	REM.07  001474R     003
+BADCHK= ****** GX	EXITXT  000011R     003	JSW   = 000044   	PRINTM= ****** GX	REM.08  001507R     003
+BELL  = 000007   	FATAL$= 000020   	KRTINC= 000001   	PUTREC= ****** GX	RENAME= ****** GX
+BINARY  000001   	FF    = 000014   	LF    = 000012   	P.CAPA= 000011   	RPACK$= ****** GX
+BS    = 000010   	FILNAM= ****** GX	LN$CNT= 000012   	P.CHKT= 000007   	RPAR  = ****** GX
+BUFFIL= ****** GX	FIXCHK= ****** GX	LN$MAX= 000204   	P.EOL = 000004   	SCANCH= ****** GX
+BUFUNP= ****** GX	FIXWIL= ****** GX	LOCASE= ****** GX	P.MXL1= 000013   	SCOLON= 000073
+CANTYP= ****** GX	FPARSE= ****** GX	LOGERR= ****** GX	P.MXL2= 000014   	SDIRIN= ****** GX
+CAPA.A= 000010   	GENCOM  000012R     005	LOGOUT= ****** GX	P.NPAD= 000002   	SDODIR= ****** GX
+CAPA.L= 000002   	GENDSP  000024R     006	LOG$AL= 000003   	P.PADC= 000003   	SENPAR= ****** GX
+CAPA.S= 000004   	GENERR  003364R     002	LOG$CO= 000002   	P.QBIN= 000006   	SENSW = ****** GX
+CCCNT = ****** GX	GEN.C   002110R     002	LOG$DE= 000020   	P.QCTL= 000005   	SENTIM= ****** GX
+CC$MAX= ****** GX	GEN.D   002566R     002	LOG$IO= 000010   	P.REPT= 000010   	SERCHK  000616R     002
+CHKSIZ= ****** GX	GEN.E   002376R     002	LOG$ON= 040000   	P.SPSI= 000000   	SERCOM  000000R     005
+CHKTYP= ****** GX	GEN.F   001426R     002	LOG$OP= 100000   	P.TIME= 000001   	SERDSP  000000R     006
+CHK.TT= ****** GX	GEN.H   002710R     002	LOG$PA= 000001   	P.VEND= 000017   	SERNOP  000660R     002
+CKREMO= ****** GX	GEN.K   001570R     002	LOG$RP= 000004   	P.WIND= 000012   	SEROPN  006462R     002
+CLOSE = ****** GX	GEN.L   001472R     002	LOOKUP= ****** GX	RECSW = ****** GX	SERPRE  001666R     003
+CLOSTT= ****** GX	GEN.R   003014R     002	LUN.LO= ****** GX	RECTIM= ****** GX	SERSPD  002307R     003
+CLRCNS= ****** GX	GEN.T   003174R     002	LUN.OU= ****** GX	REC.SW= ****** GX	SERSPX  002325R     003
+CMDBUF= ****** GX	GEN.U   002562R     002	LUN.SR= ****** GX	REMCOP  004506RG    002	SERTIM= ****** GX
+COMMA = 000054   	GEN.$   000546R     002	L$CVTN= ****** GX	REMCWD  004546RG    002	SERTXT  001720R     003
+CON$ES= 000034   	GETCRO= ****** GX	L$LEN = ****** GX	REMDEL  004666RG    002	SERVER  000254R     002
+COPY  = ****** GX	GETNXT= ****** GX	L$PCRL= ****** GX	REMDIR  004722RG    002	SERV$$  000616R     002
+COPYZ$= ****** GX	GETRES  005454R     002	L10012= ****** GX	REMDSP  002460R     003	SERV.G  001322R     002
+CR    = 000015   	GET$VE= ****** GX	L10266= ****** GX	REMFIN  004756RG    002	SERV.I  000664R     002
+CTRL$N= 000016   	GET2AR  003436R     002	MAXLNG= 003600   	REMHLP  005012RG    002	SERV.R  001144R     002
+CTRL$O= 000017   	GN$BYE  000114   	MAXPAK  000136   	REMHOS  004174RG    002	SERV.S  000776R     002
+C$BYE   004442RG    002	GN$CON  000103   	MSG$AC  000131   	REMLGI  005046RG    002	SERV.$  000546R     002
+C$GET   003530RG    002	GN$COP  000113   	MSG$AT  000101   	REMOTE= ****** GX	SERWAI= ****** GX
+C$SERV  000000RG    002	GN$DEL  000105   	MSG$BR  000102   	REMREN  005054RG    002	SERWN0  002270R     003
+C.CRLF= 000004   	GN$DIR  000104   	MSG$CO  000103   	REMRSP  002450R     003	SERWN1  002331R     003
+C.LCUC= 000040   	GN$DIS  000125   	MSG$DA  000104   	REMSPA  005114RG    002	SERWN2  002362R     003
+C.LSPA= 000010   	GN$EXI  000106   	MSG$EO  000132   	REMTYP  005150RG    002	SER.01  001544R     003
+C.SSPA= 000020   	GN$HEL  000110   	MSG$ER  000105   	REMWHO  005204RG    002	SER.02  001563R     003
+C.TSPA= 000200   	GN$JOU  000112   	MSG$FI  000106   	REM.AC= ****** GX	SER.03  001577R     003
+DECNAT  000002   	GN$LOG  000111   	MSG$GE  000107   	REM.AK  001526R     003	SER.04  001626R     003
+DEFCHK= ****** GX	GN$PRI  000120   	MSG$KE  000113   	REM.CK  005650R     002	SER.05  001630R     003
+DEFDIR= ****** GX	GN$PRO  000120   	MSG$NA  000116   	REM.D0  000000R     004	SER.06  001655R     003
+DEL   = 000177   	GN$QUE  000121   	MSG$RC  000122   	REM.D1  000004R     004	SEVER$= 000010
+DELETE= ****** GX	GN$REN  000122   	MSG$SE  000111   	REM.E   006330R     002	SINFO   006532R     002
+DELMSG  000000R     003	GN$SEN  000115   	MSG$SN  000123   	REM.N   005656R     002	SOH   = 000001
+KRTSER	The server	MACRO V05.03b  00:01  Page 31-2
+Symbol table
+
+SPACE = 000040   	STA.DA  000104   	SYSERR= ****** GX	TYPDEF  002443R     003	XOFF  = 000023
+SPACK$= ****** GX	STA.EO  000132   	TAB   = 000011   	UPCASE= ****** GX	XON   = 000021
+SPAR  = ****** GX	STA.FI  000106   	TERMIN  177777   	USERRB= 000053   	XREPLY  006352R     002
+SPARE1= ****** GX	STA.IN  000111   	TEXT    000000   	VT100 = 000002   	$ALLSI= 003614
+SPARSZ= ****** GX	STA.RI  000122   	TGETAD= ****** GX	VT200 = 000003   	$IMAGE= ****** GX
+SRCNAM= ****** GX	STA.SI  000123   	TGETCR= ****** GX	WARN$ = 000002   	$$    = 000003
+STATUS= ****** GX	STA.TY  000130   	TILDE = 000176   	WASMOR= ****** GX	$$1   = 000001
+STA.AB  000101   	STRCAT= ****** GX	TIMOUT= ****** GX	WRTALL= ****** GX	$$2   = 000000
+STA.AT  000110   	STRCPY= ****** GX	TRACE = ****** GX	XBINRE= ****** GX	$$5   = 000027
+STA.BR  000102   	SUCCS$= 000001   	TTNAME= ****** GX	XGOTTN= ****** GX	.SINIT= ****** GX
+STA.CC  000100   	SUMMAR= ****** GX	TTSPEE= ****** GX	XIT     005632R     002	...V1 = 000003
+STA.CO  000103   	SUSPEN= ****** GX	TTY   = 000001   	XMODE = ****** GX	...V2 = 000027
+
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	006662    002	(RO,I,LCL,REL,CON)
+$PDATA	002500    003	(RO,D,LCL,REL,CON)
+$RWDAT	000010    004	(RW,D,LCL,REL,CON)
+GENVAL	000026    005	(RO,D,LCL,REL,CON)
+GENDSP	000052    006	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 13
+Work  file writes: 16
+Size of work file: 13176 Words  ( 52 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:01.23
+KRTSER,KRTSER=KRTSER

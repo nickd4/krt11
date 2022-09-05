@@ -1,0 +1,152 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+KRTXM	Kermit-11 root module f	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTXM	Kermit-11 root module f	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTXM	Kermit-11 root module f	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTXM	Kermit-11 root module for RT-11XB,XM,ZB,ZM or TSX-Plus
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	for EXTENDED MEMORY OVERLAYS
+      7
+      8					;	19-May-86  Brian Nelson
+      9
+     10	000000					.ASECT
+     11		000044 			. = 44					  ; job status word
+     12	000044	002000 				.word	2000			  ; set the virtual image bit
+     13		000056 			. = 56					  ; TSX-Plus set size location
+     14	000056	000040 				.word	40			  ; SETSIZ KRTTSX/T:64.
+     15
+     16	000000					.psect	$RTQUE	,rw,d,gbl,rel,con ; MUST be in root
+     17	000000					.psect	HNBUFF	,rw,d,lcl,rel,con ; MUST be in root
+     18	000000	000000 			xmflow::.word	0			  ; use LINK's /E:nnnn to expand
+     19	000000					.psect	HNBEND	,rw,d,lcl,rel,con ; MUST be in root
+     20	000000	000000 			xmftop::.word	0			  ; end of the line for XM fetching..
+     21	000000					.psect	IMGTYPE	,ro,d,lcl,rel,con
+     22	000000	000001 			imgtyp::.word	1			  ; /62/ flag it's the XM image
+     23	000002	000000 	000000 		$limit::.limit				  ; /62/ in root for separate I&D assy
+     24	000000					.psect	USERMD	,rw,d,gbl,rel,con
+     25	000000					.psect	XMSTART	,ro,i,lcl,rel,con
+     26	000000	000167 	000000G		xmstart::jmp	kermit			  ; force transfer address here
+     27
+     28		000000'				.end	xmstart
+KRTXM	Kermit-11 root module f	MACRO V05.03b  00:01  Page 2-1
+Symbol table
+
+IMGTYP  000000RG    005	NONEIS= 000001   	XMFTOP  000000RG    004	XMSTAR  000000RG    007	$LIMIT  000002RG    005
+KERMIT= ****** GX	XMFLOW  000000RG    003
+
+. ABS.	000060    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$RTQUE	000000    002	(RW,D,GBL,REL,CON)
+HNBUFF	000002    003	(RW,D,LCL,REL,CON)
+HNBEND	000002    004	(RW,D,LCL,REL,CON)
+IMGTYP	000006    005	(RO,D,LCL,REL,CON)
+USERMD	000000    006	(RW,D,GBL,REL,CON)
+XMSTAR	000004    007	(RO,I,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 9075 Words  ( 36 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.02
+KRTXM,KRTXM=KRTNHD,KRTXM

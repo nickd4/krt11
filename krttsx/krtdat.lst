@@ -1,0 +1,748 @@
+KRTDAT	Global read/write data	MACRO V05.03b  00:01
+Table of contents
+
+    2-   1	KRTMAC	Various handy constants and macros
+    4-   2	Utility macros
+    6-   2	Global read/write data
+    7-   2	Data to be preserved at start-up
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTDAT	Global read/write data
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add rem.ack
+      7					;	dpmumber conformed to its current 16-bit max value
+      8					;	add spare0 buffer, for small stuff..
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	use erbfsiz to size errtxt buffer
+     13					;	add pkrate buffer
+     14
+     15					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     16					;
+     17					;	added a general use buffer, some flags and variables
+     18					;	SL editor insert mode default is set on here in edists
+     19
+     20						.include "IN:KRTMAC.MAC"
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 2
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 3-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 3-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 4-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 4-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 4-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 4-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 5
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1
+      2						.sbttl	Global read/write data
+      3	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+      4
+      5		000000'			RWDATA	== .			; top of this list
+      6	000000				$image:: .blkw	1		; for temp mods to image flag
+      7	000002				albuff:: .blkw	1		; /51/ malloc start of free memory pointter
+      8	000004				answer:: .blkw	1		; /62/ for SET PHONE [NO]ANSWER
+      9	000006				argbuf:: .blkw	1		; /53/ pointer to argument bufferin hi memory
+     10	000010				argpnt:: .blkw	1		; pointer used with argument buffer
+     11	000012				at$len:: .blkw	1		; current file length in blocks
+     12	000014				at$sys:: .blkw	1		; machine and os type from rec'd attributes
+     13	000016				b4speed::.blkw	1		; /BBS/ speed before fallback
+     14	000020				blind::	 .blkw	1		; /54/ SET PHONE BLIND
+     15	000022				blip::	 .blkw	1		; display stats every "blip" number of packets
+     16	000024				break::	 .blkw	2		; /BBS/ break duration (for .mrkt)
+     17	000030				cc$max:: .blkw	1		; /BBS/ number of ^Cs needed to abort
+     18	000032				cccnt::	 .blkw	1		; number of ^Cs typed so far
+     19	000034				charin:: .blkw	2		; /43/ total data bytes in
+     20	000040				charou:: .blkw	2		; /43/ total data bytes out
+     21	000044				chksiz:: .blkw	1		; current checksum size (length in bytes)
+     22	000046				chktyp:: .blkw	1		; current checksum type
+     23	000050				cl.pri:: .blkw	1		; /BBS/ run TSX handler at this priority
+     24	000052				clkflg:: .blkw	1		; /BBS/ store the clock rate here
+     25	000054				cmdadr:: .blkw	1		; saved address of command routine
+     26	000056				cmdbuf:: .blkw	1		; /53/ pointer to command line input buffer
+     27	000060				cmdlun:: .blkw	1		; current command file lun
+     28	000062				cmdnum:: .blkw	1		; index into the current command list
+     29	000064				con8bi:: .blkw	1		; if <> we pass eight bits to console
+     30	000066				conesc:: .blkw	1		; escape character for CONNECT
+     31	000070				conmsg:: .blkw	1		; /BBS/ flag to hold CONNECT sign-on
+     32	000072				conpar:: .blkb	20		; other Kermit's sinit parameters
+     33	000112				csi.fak::.blkw	1		; /62/ if <> use fake CSI comma parser
+     34	000114				ctlflgs::.blkb	<1.+32.+1.+32.>	; /63/ DEL&200 ,NUL..US ,DEL ,<NUL..US>&200
+     35	000216				datauk:: .blkw	1		; /62/ data unknown loop counter
+     36	000220				defpri:: .blkw	1		; /BBS/ TSX priority when Kermit was started
+     37	000222				diatmo:: .blkw	1		; /46/ SET DIAL TIME-OUT
+     38	000224				do8bit:: .blkw	1		; if <> doing 8-bit prefixing
+     39	000226				doattr:: .blkw	1		; if 0 don't send attribute packets
+     40	000230				doauto:: .blkw	1		; if <> check list for binary file type match
+     41	000232				dolong:: .blkw	1		; /42/ if <> do long packets
+     42	000234				dorpt::	 .blkw	1		; if <> do repeat counts
+     43					;doslid::.blkw	1		; /42/ if <> do sliding windows
+     44	000236				dowild:: .blkw	1		; /63/ if 0 wildcarding must be explicit
+     45	000240				dpnumb:: .blkw	1		; /63/ serial number of data packet
+     46	000242				duplex:: .blkw	1		; if 0, full (default), else half
+     47	000244				ebquot:: .blkw	1		; 8-bit prefixing quote char
+     48	000246				edilen:: .blkw	1		; SL current command line length
+     49	000250				edipos:: .blkw	1		; SL current cursor position
+     50	000252				errtxt:: .blkb	erbfsiz+2	; /62/ buffer for syserr(errnum,errtxt)
+     51	000444				exieof:: .blkw	1		; /45/ SET EOF [NO]EXIT
+     52	000446				exstal:: .blkw	1		; /41/ take file current line number pointer
+     53	000450				filein:: .blkw	2		; /43/ file data bytes in
+     54	000454				fileou:: .blkw	2		; /43/ file data bytes out
+     55	000460				filpro:: .blkw	1		; if <> don't overwrite files
+     56	000462				getcro:: .blkw	1		; alternate address for get char routine
+     57	000464				handch:: .blkw	1		; handshake char (for IBM systems)
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 6-1
+Global read/write data
+
+     58	000466				image::	 .blkw	1		; if <> in image mode
+     59	000470				incfile::.blkw	1		; /BBS/ set <> to keep incomplete file
+     60	000472				incpar:: .blkw	1		; /56/ parity was found in rec'd SOH char
+     61	000474				index::	 .blkw	1		; index into directory, for wildcarded lookups
+     62	000476				infoms:: .blkw	1		; /41/ if <> display information messages
+     63	000500				initry:: .blkw	1		; /BBS/ number of retries for init packet only
+     64	000502				inopn::	 .blkw	1		; did sensw ever open anything?
+     65	000504				inprog:: .blkw	1		; /BBS/ packets in progress flag
+     66	000506				inserv:: .blkw	1		; currently we are a server
+     67	000510				jobtyp:: .blkw	1		; /45/ 0 for interactive, <> for batch
+     68	000512				lastcmd::.blkw	1		; /BBS/ last command's dispatch address
+     69	000514				lastli:: .blkw	ln$cnt+1	; /BBS/ SL previous commands pointers
+     70	000542				linkst:: .blkw	1		; if <> the link device is active
+     71	000544				locase:: .blkw	1		; /BBS/ if <> pass lower case file name
+     72	000546				logini:: .blkw	1		; if <> cursor is not on a newline at column 1
+     73	000550				maxtry:: .blkw	1		; maximum number of retries for data packets
+     74	000552				mcrcmd:: .blkw	1		; if <> it's a MCR/CCL command line
+     75	000554				milnet:: .blkw	1		; /BBS/ if <> send XONs when first CONNECTing
+     76	000556				modem::	 .blkb	40		; /37/ ascii modem name
+     77	000616				modtype::.blkw	1		; /BBS/ address of modem data structure
+     78	000620				mready:: .blkw	1		; /BBS/ if <> modem is initialized to dial out
+     79	000622				msgtim:: .blkw	1		; /43/ warning message already done flag
+     80	000624				nakrec:: .blkw	1		; /BBS/ anti-resonating NAK shift register
+     81	000626				nextone::.blkw	1		; /62/ pointer to the next filespec in argbuf
+     82	000630				numtry:: .blkw	1		; number of retries currently attempted
+     83	000632				outlun:: .blkw	1		; zero for TT, else lun.ou
+     84	000634				outopn:: .blkw	1		; did recsw ever create anything?
+     85	000636				paknum:: .blkw	1		; current packet serial number mod 64
+     86	000640				parity:: .blkw	1		; save parity setting here
+     87	000642				pauset:: .blkw	1		; wait before sending each packet
+     88	000644				pcnt.n:: .blkw	2		; /43/ NAKs received count
+     89	000650				pcnt.r:: .blkw	2*34		; rpack packet counts by type
+     90	001030				pcnt.s:: .blkw	2*34		; spack packet counts by type
+     91	001210				pcnt.t:: .blkw	2		; /44/ time-out count
+     92	001214				pf2$ok:: .blkw	1		; /BBS/ if <> off PF2 can't overlay HELP
+     93	001216				phnum::	 .blkw	1		; /40/ last phone number dialed
+     94	001220				pkrate:: .blkw	4		; /62/ last packet start & duration
+     95	001230				pnhead:: .blkw	1		; /45/ listhead for SET PHONE numbers
+     96	001232				ports::	 .blkb	ln$max		; /BBS/ store TSX ports to try here
+     97	001436				prexon:: .blkw	1		; /53/ if <> prefix packets with an XON
+     98	001440				pulse::	 .blkw	1		; /54/ SET PHONE PULSE/TONE
+     99	001442				qedtst:: .blkw	1		; /63/ # .gtim loops to find clock ticking
+    100	001444				qu.ini:: .blkw	1		; /BBS/ store SET TT [NO]QUIET here
+    101	001446				ranerr:: .blkw	1		; if <> generate random checksum errors
+    102	001450				rawfil:: .blkw	1		; /54/ SET FILE NAMING
+    103	001452				rdrate:: .blkw	3		; /56/ exec I/O stats /62/ 3 words
+    104	001460				recbit:: .blkw	1		; /43/ find out if parity was on
+    105	001462				reclng:: .blkw	1		; /42/ max size I can read
+    106	001464				recsop:: .blkw	1		; SET RECEIVE START-OF-PACKET
+    107	001466				rectim:: .blkw	1		; /62/ SET RECEIVE TIME-OUT
+    108	001470				rem.ack::.blkw	1		; /63/ if <> ACK rec'd for REMOTE command
+    109	001472				remote:: .blkw	1		; if <> we are remote
+    110	001474				restof:: .blkw	1		; /BBS/ pointer to rest of args in argbuf
+    111	001476				rptcou:: .blkw	1		; number of repeated chars in a string
+    112	001500				rptini:: .blkw	1		; repeat init, meaning first time through proc
+    113	001502				rptlas:: .blkw	1		; the last char when checking repeats
+    114	001504				rptquo:: .blkw	1		; prefix char for repeat quoting
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 6-2
+Global read/write data
+
+    115	001506				rptsav:: .blkw	1		; save failed char in repeat encoding
+    116	001510				rtvol::	 .blkw	1		; if <> do dir disk volume id test
+    117	001512				seed::	 .blkw	1		; to generate random errors for debugging
+    118	001514				senlen:: .blkw	1		; /62/ save SET SEND p.spsiz
+    119	001516				senlng:: .blkw	1		; /42/ max size I am allowed to send
+    120	001520				sendly:: .blkw	1		; wait before sending sinit
+    121	001522				senpar:: .blkb	20		; our sinit parameters vector
+    122	001542				sensop:: .blkw	1		; SET SEND START-OF-PACKET
+    123	001544				sentim:: .blkw	1		; /62/ SET SEND TIME-OUT
+    124	001546				senwin:: .blkw	1		; /42/ sliding windows not yet here..
+    125	001550				sertim:: .blkw	1		; time-out waiting for server command
+    126	001552				serwai:: .blkw	1		; SET SERVER TIME-OUT
+    127	001554				set8bi:: .blkw	1		; if <> set bit seven on char
+    128	001556				setchk:: .blkw	1		; /62/ save SET BLO here
+    129	001560				setrpt:: .blkw	1		; used to set repeat encoding on/off
+    130	001562				settle:: .blkw	1		; /BBS/ modem settle ticks on reset
+    131	001564				signon:: .blkw	1		; /BBS/ if <> sign-on text has been displayed
+    132	001566				size::	 .blkw	1		; size of last call to buffer_fill
+    133	001570				skipfil::.blkw	1		; /BBS/ copy of inc-file-disp to file closer
+    134	001572				skipfl:: .blkw	1		; should we send a eof$discard packet?
+    135	001574				sl.ked:: .blkw	1		; /BBS/ make <> for SL's KED mode
+    136	001576				sl.on::	 .blkw	1		; /BBS/ make <> to turn on SL
+    137	001600				snd8bi:: .blkw	1		; local do 8-bit prefixing flag
+    138	001602				spare0:: .blkb	32.		; /63/ temp buffer, for small stuff..
+    139		000040 			 SP0SIZ	 ==	<.-spare0>	; /63/ size of above spare0 buffer
+    140	001642				spare1:: .blkb	256.		; /BBS/ temp buffer, max SVID filespec
+    141		000400 			 SP1SIZ	 ==	<.-spare1>	; /63/ size of above spare1 buffer
+    142	002242				sparsz:: .blkw	1		; size of our sinit packet
+    143	002244				state::	 .blkw	1		; current recsw or sensw state
+    144	002246				summary::.blkw	1		; /BBS/ if <> do dir summary only
+    145	002250				sy.ini:: .blkw	1		; init file is executing flag
+    146	002252				tgetad:: .blkw	1		; get text address for textsrc macro
+    147	002254				times::	 .blkw	10		; /43/ time stamp stats
+    148	002274				tk.err:: .blkw	1		; /BBS/ format init file error message display
+    149	002276				trace::	 .blkw	1		; file and packet logging status word
+    150	002300				tsxcl::	 .blkw	1		; if <> it's TSX and CL
+    151	002302				tt$io::	 .blkw	1		; /62/ if <> do I/O through TT
+    152	002304				ttname:: .blkb	16		; our current link device ascii name
+    153	002322				ttpar2:: .blkw	1		; /BBS/ $tcfig saved here
+    154	002324				ttparm:: .blkw	1		; /BBS/ jsw stored here
+    155	002326				undchr:: .blkb	2		; /BBS/ SL undel char buffer
+    156	002330				undlin:: .blkb	ln$max+2	; /BBS/ SL undel word/line buffer
+    157	002536				units::	 .blkb	16.		; /BBS/ store CL unit numbers to try here
+    158	002556				vttype:: .blkw	1		; the terminal type
+    159	002560				warn8d:: .blkw	1		; /BBS/ 8-bit quote warning has been done flag
+    160	002562				wasmore::.blkw	1		; /62/ flag for multiple arguments display
+    161	002564				wasnul:: .blkw	1		; /45/ for "?" processing in the command line
+    162	002566				xgottn:: .blkw	1		; server got an "X" packet
+    163	002570				xmode::	 .blkw	1		; if <> doing text output to TT
+    164	002572				xredial::.blkw	1		; /BBS/ if <> redial (retry) a failed call
+    165	002574				xresult::.blkb	4		; /BBS/ SET PHONE XMODE
+    166		002600 			RWSIZE	 == <.-rwdata>		; end of r/w data zero'd by start-up init
+    167
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 7
+Global read/write data
+
+      1
+      2						.sbttl	Data to be preserved at start-up
+      3
+      4	002600	177777 			edicmd::.word	-1		; SL hasn't saved anything yet
+      5	002602	000001 			edists::.word	1		; /BBS/ SL insert mode is init'd on here
+      6	002604	000000 			xprint::.word	0		; /62/ if <> dump TT to LP, here for safety..
+      7	002606	   113 	   122 	   124 	prompt::.asciz	"KRT> "		; /63/ say this is a special version
+      8						.even			; /62/ prompt buffer = 32. bytes total
+      9	002614					.blkb	26.		; /62/ if stack overflows, make it obvious!
+     10	002646				stklim::.blkw	400+<$allsiz/2>	; /62/ the stack, allowing for max long packet
+     11	007462	000000 			stack::	.word	0		; stack starts here..
+     12		004616 			STKSIZ	== <.-stklim>		; /62/ for debugger display
+     13
+     14		000001 				.end
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 7-1
+Symbol table
+
+ALBUFF  000002RG    004	C.LSPA= 000010   	LINKST  000542RG    004	P.MXL1= 000013   	SL.KED  001574RG    004
+ALSIZE= 002000   	C.SSPA= 000020   	LN$CNT= 000012   	P.MXL2= 000014   	SL.ON   001576RG    004
+ANSWER  000004RG    004	C.TSPA= 000200   	LN$MAX= 000204   	P.NPAD= 000002   	SND8BI  001600RG    004
+ARGBUF  000006RG    004	DATAUK  000216RG    004	LOCASE  000544RG    004	P.PADC= 000003   	SOH   = 000001
+ARGPNT  000010RG    004	DECNAT  000002   	LOGINI  000546RG    004	P.QBIN= 000006   	SPACE = 000040
+AT$LEN  000012RG    004	DEFPRI  000220RG    004	LOG$AL= 000003   	P.QCTL= 000005   	SPARE0  001602RG    004
+AT$SYS  000014RG    004	DEL   = 000177   	LOG$CO= 000002   	P.REPT= 000010   	SPARE1  001642RG    004
+AT.ALL  000177   	DIATMO  000222RG    004	LOG$DE= 000020   	P.SPSI= 000000   	SPARSZ  002242RG    004
+AT.CDT  000001   	DOATTR  000226RG    004	LOG$IO= 000010   	P.TIME= 000001   	SP0SIZ= 000040 G
+AT.INF  000002   	DOAUTO  000230RG    004	LOG$ON= 040000   	P.VEND= 000017   	SP1SIZ= 000400 G
+AT.LEN  000004   	DOLONG  000232RG    004	LOG$OP= 100000   	P.WIND= 000012   	STACK   007462RG    004
+AT.ON   100000   	DORPT   000234RG    004	LOG$PA= 000001   	QEDTST  001442RG    004	STATE   002244RG    004
+AT.PRO  000010   	DOT   = 000056   	LOG$RP= 000004   	QU.INI  001444RG    004	STKLIM  002646RG    004
+AT.SYS  000020   	DOWILD  000236RG    004	MAXLNG= 003600   	RANERR  001446RG    004	STKSIZ= 004616 G
+AT.TYP  000040   	DO8BIT  000224RG    004	MAXPAK  000136   	RAWFIL  001450RG    004	SUCCS$= 000001
+AT.XLE  000100   	DPNUMB  000240RG    004	MAXTRY  000550RG    004	RDRATE  001452RG    004	SUMMAR  002246RG    004
+BELL  = 000007   	DUPLEX  000242RG    004	MCRCMD  000552RG    004	RECBIT  001460RG    004	SY.INI  002250RG    004
+BINARY  000001   	EBQUOT  000244RG    004	MILNET  000554RG    004	RECLNG  001462RG    004	TAB   = 000011
+BLIND   000020RG    004	EDICMD  002600RG    004	MODEM   000556RG    004	RECSOP  001464RG    004	TERMIN  177777
+BLIP    000022RG    004	EDILEN  000246RG    004	MODTYP  000616RG    004	RECTIM  001466RG    004	TEXT    000000
+BREAK   000024RG    004	EDIPOS  000250RG    004	MREADY  000620RG    004	REMOTE  001472RG    004	TGETAD  002252RG    004
+BS    = 000010   	EDISTS  002602RG    004	MSGTIM  000622RG    004	REM.AC  001470RG    004	TILDE = 000176
+B4SPEE  000016RG    004	ERBFSI= 000170   	NAKREC  000624RG    004	RESTOF  001474RG    004	TIMES   002254RG    004
+CAPA.A= 000010   	ERRBYT= 000052   	NEXTON  000626RG    004	RPTCOU  001476RG    004	TK.ERR  002274RG    004
+CAPA.L= 000002   	ERROR$= 000004   	NOSCOP= 000000   	RPTINI  001500RG    004	TRACE   002276RG    004
+CAPA.S= 000004   	ERRTXT  000252RG    004	NUMTRY  000630RG    004	RPTLAS  001502RG    004	TSXCL   002300RG    004
+CCCNT   000032RG    004	ESC   = 000033   	OUTLUN  000632RG    004	RPTQUO  001504RG    004	TTNAME  002304RG    004
+CC$MAX  000030RG    004	EXIEOF  000444RG    004	OUTOPN  000634RG    004	RPTSAV  001506RG    004	TTPARM  002324RG    004
+CHARIN  000034RG    004	EXSTAL  000446RG    004	PAKNUM  000636RG    004	RTVOL   001510RG    004	TTPAR2  002322RG    004
+CHAROU  000040RG    004	FATAL$= 000020   	PARITY  000640RG    004	RWDATA= 000000RG    004	TTY   = 000001
+CHKSIZ  000044RG    004	FF    = 000014   	PAR$EV  000002   	RWSIZE= 002600 G 	TT$IO   002302RG    004
+CHKTYP  000046RG    004	FILEIN  000450RG    004	PAR$MA  000003   	SCOLON= 000073   	UNDCHR  002326RG    004
+CLKFLG  000052RG    004	FILEOU  000454RG    004	PAR$NO  000000   	SEED    001512RG    004	UNDLIN  002330RG    004
+CL.PRI  000050RG    004	FILPRO  000460RG    004	PAR$OD  000001   	SENDLY  001520RG    004	UNITS   002536RG    004
+CMDADR  000054RG    004	GETCRO  000462RG    004	PAR$SP  000004   	SENLEN  001514RG    004	USERRB= 000053
+CMDBUF  000056RG    004	HANDCH  000464RG    004	PAUSET  000642RG    004	SENLNG  001516RG    004	VTTYPE  002556RG    004
+CMDLUN  000060RG    004	IMAGE   000466RG    004	PCNT.N  000644RG    004	SENPAR  001522RG    004	VT100 = 000002
+CMDNUM  000062RG    004	INCFIL  000470RG    004	PCNT.R  000650RG    004	SENSOP  001542RG    004	VT200 = 000003
+COMMA = 000054   	INCPAR  000472RG    004	PCNT.S  001030RG    004	SENTIM  001544RG    004	WARN$ = 000002
+CONESC  000066RG    004	INDEX   000474RG    004	PCNT.T  001210RG    004	SENWIN  001546RG    004	WARN8D  002560RG    004
+CONMSG  000070RG    004	INFOMS  000476RG    004	PF2$OK  001214RG    004	SERTIM  001550RG    004	WASMOR  002562RG    004
+CONPAR  000072RG    004	INITRY  000500RG    004	PHNUM   001216RG    004	SERWAI  001552RG    004	WASNUL  002564RG    004
+CON$ES= 000034   	INOPN   000502RG    004	PKRATE  001220RG    004	SETCHK  001556RG    004	XGOTTN  002566RG    004
+CON8BI  000064RG    004	INPROG  000504RG    004	PNHEAD  001230RG    004	SETRPT  001560RG    004	XMODE   002570RG    004
+CR    = 000015   	INSERV  000506RG    004	PORTS   001232RG    004	SETTLE  001562RG    004	XOFF  = 000023
+CSI.FA  000112RG    004	JOBTYP  000510RG    004	PREXON  001436RG    004	SET8BI  001554RG    004	XON   = 000021
+CTLFLG  000114RG    004	JSW   = 000044   	PROMPT  002606RG    004	SEVER$= 000010   	XPRINT  002604RG    004
+CTRL$N= 000016   	KRTINC= 000001   	PULSE   001440RG    004	SIGNON  001564RG    004	XREDIA  002572RG    004
+CTRL$O= 000017   	LASTCM  000512RG    004	P.CAPA= 000011   	SIZE    001566RG    004	XRESUL  002574RG    004
+C.CRLF= 000004   	LASTLI  000514RG    004	P.CHKT= 000007   	SKIPFI  001570RG    004	$ALLSI= 003614
+C.LCUC= 000040   	LF    = 000012   	P.EOL = 000004   	SKIPFL  001572RG    004	$IMAGE  000000RG    004
+
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	000000    002	(RO,I,LCL,REL,CON)
+$PDATA	000000    003	(RO,D,LCL,REL,CON)
+KRTDAT	Global read/write data	MACRO V05.03b  00:01  Page 7-2
+Symbol table
+
+$RWDAT	007464    004	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 10768 Words  ( 43 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.07
+KRTDAT,KRTDAT=KRTDAT

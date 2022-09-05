@@ -1,0 +1,54 @@
+KRTSJ	Kermit-11 root module f	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTSJ	Kermit-11 root module for RT-11FB,SB,SJ or TSX-Plus
+      2						.ident	"V03.63"
+      3
+      4					; /63/  27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	for LOW MEMORY OVERLAYS
+      7
+      8		000000 			xmflow	== 0				   ; dummies for XM stuff
+      9		000000 			xmftop	== 0				   ; unused in this version
+     10
+     11	000000					.ASECT				   ; /62/ support SET RUN VBGEXE
+     12		000004 			. = 4					   ; /62/ $JSX job definition word
+     13	000004	000200 				.word	200			   ; /62/ set the VBGEXE$ bit
+     14
+     15	000000					.psect	$RTQUE	,rw,d,gbl,rel,con
+     16	000000					.psect	RTDIR	,rw,d,gbl,rel,con  ; /BBS/ force into root
+     17	000000					.psect	IMGTYPE	,ro,d,lcl,rel,con
+     18	000000	000000 			imgtyp::.word	0			   ; /62/ flag it's SJ/FB image
+     19	000002	000000 	000000 		$limit::.limit				   ; /62/ here to match KRTXM..
+     20	000000					.psect	USERMD	,rw,d,gbl,rel,con
+     21	000000					.psect	FBSTART	,ro,i,lcl,rel,con
+     22
+     23	000000	000167 	000000G		fbstart::jmp	kermit			   ; force transfer address here
+     24
+     25		000000'				.end	fbstart
+KRTSJ	Kermit-11 root module f	MACRO V05.03b  00:01  Page 1-1
+Symbol table
+
+FBSTAR  000000RG    006	KERMIT= ****** GX	XMFLOW= 000000 G 	XMFTOP= 000000 G 	$LIMIT  000002RG    004
+IMGTYP  000000RG    004
+
+. ABS.	000006    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$RTQUE	000000    002	(RW,D,GBL,REL,CON)
+RTDIR 	000000    003	(RW,D,GBL,REL,CON)
+IMGTYP	000006    004	(RO,D,LCL,REL,CON)
+USERMD	000000    005	(RW,D,GBL,REL,CON)
+FBSTAR	000004    006	(RO,I,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 58 Words  ( 1 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.01
+KRTSJ,KRTSJ=KRTSJ

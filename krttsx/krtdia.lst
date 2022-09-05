@@ -1,0 +1,2378 @@
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01
+Table of contents
+
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    7-   2	Local macros
+    8-   2	Local data
+    9-   3	SET MODEM-TYPE		; /BBS/ almost 100% new..
+   10-   2	SET DTR and HANGUP
+   11-   2	The real work of SET MODEM
+   12-   2	The real work of SET DTR
+   13-   2	The REDIAL command	; /BBS/ slightly modified..
+   14-   2	The DIAL command	; /BBS/ substantially changed..
+   15-   2	Reset the modem		; /BBS/ all new
+   16-   2	Restore last set speed	; /BBS/ added..
+   17-   2	Find location of a modem's data structure
+   18-   2	Find a defined phone number
+   19-   2	Wake up (init) modem	; /BBS/ almost 100% new..
+   20-   2	Dial the number		; /BBS/ moderately modified..
+   21-   2	Get final result of dialing	; /BBS/ somewhat modified
+   22-   2	Check modem's response	; /39/ 4-DEC-1985, Brian Nelson
+   23-   2	Format dial string
+   24-   2	Wait for a response	; /BBS/ moderately revised..
+   25-   2	Eat junk from modem
+   26-   2	Send a string to the modem
+   27-   2	SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTDIA	Dial command and related items
+      2						.ident	"V03.63"
+      3
+      4					; /63/  27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	use opentt in place of ttyini to set linksts flag
+      7					;	move the modem definitions to a separate module KRTMDM.MAC
+      8					;	SET$DTR and SET$MODEM back here from KRTDSP
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	add support for call back modems, SET DIAL/PHONE [NO]ANSWER
+     13					;
+     14					;	add a one-tick pacing delay in DODIAL's loop at 50$ (when the modem
+     15					;	doesn't echo commands) to match what was done for echoing modems
+     16					;
+     17					;	fix SHO MODEM for changes to SET DIAL [NO]ECHO and [NO]INIT-ONCE
+     18					;	add initiate-prompt, dial-ack, confirm-ack, [no]binary-response
+     19					;
+     20					;	added x.result (default "Hayes" xmode) and time.settle defaults,
+     21					;	and in "Hayes" and Telebit modem definitions
+     22					;
+     23					;	if DCD is high when exiting program, hang up modem
+     24					;	add support for 38.4kb
+     25					;	add Telebit T3000 modem def, needs KM handler and SET FLOW-CONTROL RTS
+     26					;
+     27					;	double the settle-time value for the wait after dropping DTR,
+     28					;	as some modems (like the T3000) need more time to recover
+     29
+     30					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     31					;
+     32					;	set$mo now won't write bad modem name into modem:
+     33					;	if DIAL/REDIAL succeeds jump to CONNECT automatically
+     34					;	set linksts when dialing so ^C abort will catch correct ttname
+     35					;	findmodem now does not try to process an empty string in modem:
+     36					;	added c$idle, call to reset modem to idle (answer) mode
+     37					;	findmodem/findnumber will match on partial input string
+     38					;	added %X format effector for setting Hayes extended response mode
+     39					;	added Telebit T2500 modem definitions
+     40					;
+     41					;	redial loop moved to c$dial, runs faster without initializing
+     42					;	the modem's lun every pass thru the loop, reduces cpu usage too
+     43					;
+     44					;	load buffer with defmsg after displaying RING, to not overwrite
+     45					;	the default message with call status stuff
+     46					;
+     47					;	if DIAL can't translate an alias, say so then die (instead of
+     48					;	prompting to continue with an empty number buffer)
+     49					;
+     50					;	added xredial flag word, for keeping return path straight when
+     51					;	connecting after a successful REDIAL. speed up redial process for
+     52					;	modems which define init.once by not initting before every retry.
+     53					;	init.once and mready (status flag) were added to support all this..
+     54					;
+     55					;	while waiting for a response after dialing modem, check for
+     56					;	input from keyboard, allowing an easy abort
+     57					;
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 1-1
+
+
+     58					;	.default patched to get/set handler speed from modem response,
+     59					;	old speed is saved and restored, unless set different after..
+     60					;	Hayes definition completed and moved to it.  this also renders
+     61					;	Hayes responses displayable via SHO MODEM.
+     62					;
+     63					;	diatmo from SET DIAL TIME-OUT gets written into dial.time(r4)
+     64					;	when either c$dial or sho$dial is called.  it's now usable with
+     65					;	any modem type (not just user-defined) by setting the modem's
+     66					;	internal timer to the max (ATS7=255 etc) then letting Kermit's
+     67					;	timer take action first.
+     68					;
+     69					;	modified waitfor to test for keyboard input, allowing a "strike
+     70					;	any char" abort during dialing, now including the init string.
+     71					;	DTR is dropped to ensure the modem will actually abort the call.
+     72					;
+     73					;	SHO MODEM expanded to display everything
+     74					;	result message must match from 1st byte to avoid embedded strings
+     75					;	save modem init status to drop unnecessary inits
+     76					;	SET MODEM now inits same, if a line (and speed) have been set
+     77					;	echo everything from modem (if it echoes) during DIAL
+     78					;	add CONNECT/nnnn for Hayes to alter DTE speed w/TSX and CL
+     79					;	add Concord Data Systems 224 Auto-dial modem
+     80					;
+     81					;	moved SET DTR code here, and reinit modem after DTR drop if one
+     82					;	was on-line before it
+     83
+     84					;	Copyright 1985,1986 Change Software, Inc.
+     85					;
+     86					;	18-Oct-85  20:06:09 Brian Nelson
+     87					;
+     88					;	04-Dec-85  11:22:32 BDN	 Add optional linked list structure to
+     89					;				 define modem responses, will be useful
+     90					;				 when adding a SET DIAL command
+     91					;	09-Jan-86  17:48:17 RTM  Added support for the RIXON Intelligent
+     92					;				 auto-dial modem (R212A) (edit RTM01)
+     93					;	13-Feb-86  10:10:08 BDN	 Put the DF112 and DF224 responses into
+     94					;				 linked lists
+     95					;	23-Sep-86  14:10:30 BDN	 Vadic 4224 modems
+     96					;	23-Sep-86  14:10:42 BDN	 Added format effector %M for pulse/tone
+     97					;				 if a SET PHONE PULSE/TONE was done
+     98					;				 Added %B for "blind" dialing, enabled if
+     99					;				 SET PHONE BLIND
+    100					;	30-Sep-86  13:05:53 BDN	 Added CTS2424, Also SHO DIAL
+    101					;	09-Feb-89  00:00:00 JCH  Complete definition of DF224 modem
+    102
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 2
+
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3
+      4					; /BBS/	This is used by SHOW MODEM to format the display of response messages
+      5					; and actions to them.  It's the column at which the actions begin and may be
+      6					; increased if longer response strings must accommodated.
+      7
+      8		000022 				COL.ACT	  =	18.
+      9
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1
+      2						.sbttl	Local macros
+      3
+      4		000000 				$$TRIP	= 0			; /63/ init trip counter
+      5
+      6						.macro	des  type ,offset ,title
+      7						.save				; /63/
+      8						.psect	$pdata			; /63/
+      9						.if  b	<type>
+     10						.byte	0	,0
+     11						.even				; /63/ do this here, once is enough..
+     12						$$trip=0			; /63/ reset for possible future use
+     13						.iff
+     14						  .if eq $$trip			; /63/ if at the first list entry
+     15					deslist:				; /63/ insert the label for the list
+     16						  .endc
+     17						  $$trip=1			; /63/ not the first entry any more
+     18						.byte	type	,offset		; type_0=integer, type_1=string
+     19						.asciz	@title@			; /62/ type_2=on/off
+     20						.endc
+     21						.restore			; /63/
+     22						.endm	des
+     23
+     24						.macro	ttgetc	wait		; get one char from the link device
+     25						.if  b	<wait>			; wait value is in seconds
+     26						calls	xbinread,<#1>		; /62/ this waits up to one second
+     27						.iff
+     28						calls	xbinread,<wait>
+     29						.endc
+     30						.endm	ttgetc
+     31
+     32						.macro	ttputc	c		; send one char to the link device
+     33						clr	-(sp)			; create a one word buffer
+     34						bisb	c	,(sp)		; stuff in byte sans sign extension
+     35						mov	sp	,r0		; point to buffer
+     36						calls	binwri	,<r0,#1>	; send it
+     37						tst	(sp)+			; pop buffer
+     38						.endm	ttputc
+     39
+     40						.macro	ttputs	s		; send a string to the link device
+     41						mov	r1	,-(sp)		; a one word buffer
+     42						mov	s	,r1		; pass string location to do.put
+     43						call	do.put			; /63/ send it
+     44						mov	(sp)+	,r1		; pop buffer
+     45						.endm	ttputstr
+     46
+     47						.macro	waitfor  s ,time ,fail	; wait for a response from modem
+     48						.if  b	<time>			; time value is in seconds
+     49						clr	-(sp)			; time buffer
+     50						inc	@sp			; /BBS/ default wait is one second
+     51						.iff
+     52						mov	time	,-(sp)		; pass time to wait
+     53						.endc
+     54						mov	s	,-(sp)		; and address of expected string
+     55						call	waitfor			; go look for it
+     56						.if nb	<fail>			; if given a failure routine address
+     57						tst	r0			; check to see if it worked..
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 7-1
+Local macros
+
+     58						beq	fail			; it did not
+     59						.endc
+     60						.endm	waitfor
+     61
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 8
+Local macros
+
+      1
+      2						.sbttl	Local data
+      3
+      4	000000					.psect	$pdata			; /63/ consolidate all data here
+      5	000000	   045 	   040 	   101 	abort:	.asciz	"% Aborted from keyboard"
+      6	000030	   007 	   007 	   000 	bells:	.byte	bell ,bell ,0		; two bells when CONNECTing
+      7	000033	   045 	   040 	   124 	defmsg:	.asciz	"% Timed out"
+      8	000047	   124 	   157 	   147 	dia.01:	.asciz	"Toggling DTR.."	; /63/ moved message macro data here
+      9	000066	   122 	   145 	   055 	dia.02:	.asciz	"Re-initting modem.."
+     10	000112	   040 	   155 	   157 	dia.03:	.asciz	" modem is on-line"<cr><lf>
+     11	000136	   124 	   162 	   171 	dia.04:	.asciz	"Try #"
+     12	000144	   072 	   015 	   012 	dia.05:	.asciz	":"<cr><lf>
+     13	000150	   124 	   150 	   145 	dia.06:	.asciz	"The known modem types are:"<cr><lf>
+     14	000205	   045 	   040 	   116 	dia.07:	.asciz	"% No answer"<cr><lf>
+     15	000223	   131 	   145 	   163 	dia.08:	.asciz	"Yes"
+     16	000227	   116 	   157 	   000 	dia.09:	.asciz	"No"
+     17	000232	   104 	   151 	   141 	dia.10:	.asciz	"Dial time-out secs: "
+     18	000257	   123 	   145 	   164 	dia.11:	.asciz	"Settle-time ticks:  "
+     19	000304	   045 	   130 	   040 	dia.12:	.asciz	'%X = "X'
+     20	000314	   102 	   151 	   156 	dia.13:	.asciz	"Binary-responses:   "
+     21	000341	   122 	   145 	   163 	dia.14:	.asciz	"Result strings:"<cr><lf>
+     22	000363	   123 	   165 	   143 	dia.15:	.asciz	"Success"
+     23	000373	   122 	   151 	   156 	dia.16:	.asciz	"Rings+1"<cr><lf>
+     24	000405	   106 	   141 	   151 	dia.17:	.asciz	"Failure"<cr><lf>
+     25	000417	   114 	   151 	   156 	dia.18:	.asciz	"Link "
+     26	000425	   040 	   144 	   151 	dia.19:	.asciz	" disconnected"<cr><lf>
+     27	000445	   054 	   040 	   040 	msg$dte:.asciz	",  DTE is forced to "	; /63/ tag messages that alter speed
+     28	000472	   106 	   157 	   162 	msg$fmt:.asciz	"Format effectors:   "	; /62/
+     29	000517	   045 	   040 	   116 	nodpro:	.asciz	"% No dial$prompt"
+     30	000540	   045 	   040 	   116 	nod.go:	.asciz	"% No dial$go"
+     31	000555	   045 	   040 	   116 	nod.ack:.asciz	"% No dial$ack"
+     32	000573	   040 	   075 	   040 	prefix:	.asciz	\ = "\			; /62/ prefix for format effector data
+     33	000600	   042 	   040 	   040 	tripsp:	.asciz	\"   \			; /62/ a " followed by three blanks
+     34						.even
+     35
+     36	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+     37	000000				buffer:	.blkb	84.			; /BBS/ general purpose buffer
+     38	000124	000000 			mute:	.word	0			; /BBS/ use to mute output to TT
+     39	000126	000000 			retries:.word	0			; /BBS/ redial this many times..
+     40
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 9
+Local data
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	SET MODEM-TYPE		; /BBS/ almost 100% new..
+      4
+      5	000000				set$mo::strcpy	#spare1	,#modem		; save copy of what's there now
+	000000	012746 	000000G			mov	#modem	,-(sp)
+	000004	012746 	000000G			mov	#spare1	,-(sp)
+	000010	004767 	000000G			jsr	pc	,strcpy
+      6	000014	016704 	000000G			mov	modtype	,r4		; address of its structure
+      7	000020	016703 	000000G			mov	mready	,r3		; and its status
+      8	000024					upcase	argbuf			; upper case the argument
+	000024	016700 	000000G			mov	argbuf	,r0
+	000030	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      9	000034					copyz	argbuf	,#modem ,#40	; copy new modem name over
+	000034	012746 	000040 			mov	#40	,-(sp)
+	000040	016746 	000000G			mov	argbuf	,-(sp)
+	000044	012746 	000000G			mov	#modem	,-(sp)
+	000050	004767 	000000G			call	copyz$
+     10	000054	004767 	001350 			call	findmodem		; and look for it in the list
+     11	000060	005700 				tst	r0			; did it work?
+     12	000062	001016 				bne	10$			; ya
+     13
+     14	000064					strcpy	#modem	,#spare1	; no, restore the old modem type
+	000064	012746 	000000G			mov	#spare1	,-(sp)
+	000070	012746 	000000G			mov	#modem	,-(sp)
+	000074	004767 	000000G			jsr	pc	,strcpy
+     15	000100	010367 	000000G			mov	r3	,mready		; its status
+     16	000104	010467 	000000G			mov	r4	,modtype	; and its structure's address
+     17	000110	004767 	000000G			call	incsts			; flag error, so r0 can be cleared
+     18	000114	005000 				clr	r0			; strcpy, just above, trashes this reg
+     19	000116	000207 				return				; error already handled by findmodem
+     20
+     21	000120	005067 	000000G		10$:	clr	blind			; reset this
+     22					;	clr	pulse			; commented out, phone line is same..
+     23	000124	016067 	000000G	000000G		mov	dial.time(r0),diatmo	; /62/ start with default time-out
+     24	000132	016067 	000000G	000000G		mov	time.set(r0) ,settle	; /62/ and settle-time
+     25	000140	012701 	000000G			mov	#xresult     ,r1	; /62/ where to put new extended mode
+     26	000144	016000 	000000G			mov	x.result(r0) ,r0	; /62/ default supplied?
+     27	000150	100402 				bmi	20$			; /62/ no, let null say it's nothing..
+     28	000152	004767 	000000G			call	L10012			; /62/ ya, write it as ascii number(s)
+     29	000156	105011 			20$:	clrb	(r1)			; /62/ null terminate the string
+     30	000160	005000 				clr	r0			; preset to no error
+     31	000162	105767 	000000G			tstb	ttname			; is line to modem set yet?
+     32	000166	001422 				beq	30$			; no
+     33	000170	004767 	000000G			call	ttyhang			; ya, assert DTR on PRO, reset modem
+     34	000174	005700 				tst	r0			; did it work?
+     35	000176	001016 				bne	30$			; no, ttyini handles its own error
+     36	000200	016700 	000000G			mov	settle	,r0		; /62/ double the wait here because
+     37	000204	006300 				asl	r0			; /62/ some modems are just too slow!
+     38	000206					calls	suspend	,<#0,r0>	; /62/ let modem recover from DTR drop
+	000206	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000210	010046 				        mov	r0	,-(sp)	; push it
+	000212	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000216	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000220	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	000224	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000226	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 9-1
+SET MODEM-TYPE		; /BBS/ almost 100% new..
+
+     39	000230	004767 	000104 			call	set.mo			; shared code
+     40	000234	005700 			30$:	tst	r0			; did all this work?
+     41	000236	001031 				bne	dia.er			; /63/ no, goto error handler
+     42	000240	000207 				return
+     43
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 10
+SET MODEM-TYPE		; /BBS/ almost 100% new..
+
+      1
+      2						.sbttl	SET DTR and HANGUP
+      3
+      4	000242	004767 	000210 		set$dt::call	set.dtr			; toggle DTR
+      5	000246	005700 				tst	r0			; did it work?
+      6	000250	001024 				bne	dia.er			; /63/ no
+      7	000252					.newline
+	000252	004767 	000000G			call	l$pcrlf
+      8	000256	000207 				return
+      9
+     10	000260	004767 	000172 		c$hang::call	set.dtr			; toggle DTR
+     11	000264	005700 				tst	r0			; did it work?
+     12	000266	001015 				bne	dia.er			; /63/ no
+     13	000270					wrtall	#dia.18			; "Link "
+	000270	012746 	000417'			mov	#dia.18	,-(sp)		; pass the address
+	000274	004767 	000000G			call	wrtall			; do it
+     14	000300					wrtall	#ttname			; include the device name
+	000300	012746 	000000G			mov	#ttname	,-(sp)		; pass the address
+	000304	004767 	000000G			call	wrtall			; do it
+     15	000310					wrtall	#dia.19			; " disconnected"<cr><lf>
+	000310	012746 	000425'			mov	#dia.19	,-(sp)		; pass the address
+	000314	004767 	000000G			call	wrtall			; do it
+     16	000320	000207 				return
+     17
+     18	000322				dia.er:	direrr	r0			; /63/ dump error message
+	000322	010046 				mov	r0	,-(sp)
+	000324	004767 	000000G			call	direr$
+     19	000330	004767 	000000G			call	incsts			; flag error, so r0 can be cleared
+     20	000334	005000 				clr	r0			; only do error message once
+     21	000336	000207 				return
+     22
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 11
+SET DTR and HANGUP
+
+      1
+      2						.sbttl	The real work of SET MODEM
+      3
+      4	000340	016702 	000000G		set.mo:	mov	linksts	,r2		; save link open/closed status
+      5	000344	001004 				bne	10$			; it's open now
+      6	000346	004767 	000000G			call	opentt			; /63/ open link device
+      7	000352	005700 				tst	r0			; successful open on line?
+      8	000354	001030 				bne	20$			; no, give up
+      9
+     10	000356	004767 	001012 		10$:	call	fixspeed		; restore set speed if need be
+     11	000362	010667 	000124'			mov	sp	,mute		; turn off echo
+     12	000366	004767 	001532 			call	getatn			; try to get modems attention
+     13	000372	005067 	000124'			clr	mute			; turn echo back on
+     14	000376	005700 				tst	r0			; success?
+     15	000400	001016 				bne	20$			; no
+     16	000402	005767 	000000G			tst	sy.ini			; come here while executing KRT.INI?
+     17	000406	001013 				bne	20$			; ya, don't echo modem I/O
+     18	000410	005767 	000000G			tst	infomsg			; SET TT QUIET?
+     19	000414	001410 				beq	20$			; ya..
+     20	000416					wrtall	#modem			; no, display name of modem
+	000416	012746 	000000G			mov	#modem	,-(sp)		; pass the address
+	000422	004767 	000000G			call	wrtall			; do it
+     21	000426					wrtall	#dia.03			; /63/ " modem is on-line"<cr><lf>
+	000426	012746 	000112'			mov	#dia.03	,-(sp)		; pass the address
+	000432	004767 	000000G			call	wrtall			; do it
+     22										; note r0 still =0 here, from above..
+     23	000436	010046 			20$:	mov	r0	,-(sp)		; save error
+     24	000440	010267 	000000G			mov	r2	,linksts	; restore link status
+     25	000444	001002 				bne	30$			; it was open, leave it that way
+     26	000446	004767 	000000G			call	ttyfin			; close the link
+     27	000452	012600 			30$:	mov	(sp)+	,r0		; restore error
+     28	000454	000207 				return
+     29
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 12
+The real work of SET MODEM
+
+      1
+      2						.sbttl	The real work of SET DTR
+      3						.enabl	lsb
+      4
+      5	000456				set.dtr:wrtall	#dia.01			; /63/ "Toggling DTR.."
+	000456	012746 	000047'			mov	#dia.01	,-(sp)		; pass the address
+	000462	004767 	000000G			call	wrtall			; do it
+      6	000466	004767 	000000G			call	l$nolf			; just a return, unless TT is NOSCOPE
+      7	000472	004767 	000000G			call	ttyhang			; drop DTR for 0.5sec
+      8	000476	005700 				tst	r0			; did it work?
+      9	000500	001035 				bne	10$			; no
+     10	000502	005767 	000000G			tst	modtype			; was a modem on-line?
+     11	000506	001432 				beq	10$			; no
+     12	000510	016700 	000000G			mov	settle	,r0		; /62/ double the wait here because
+     13	000514	006300 				asl	r0			; /62/ some modems are just too slow!
+     14	000516					calls	suspend	,<#0,r0>	; /62/ let modem recover from DTR drop
+	000516	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000520	010046 				        mov	r0	,-(sp)	; push it
+	000522	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000526	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000530	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	000534	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000536	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	000540					.br	reinit			; /63/
+     16
+     17	000540				reinit::wrtall	#dia.02			; /63/ "Re-initting modem.."
+	000540	012746 	000066'			mov	#dia.02	,-(sp)		; pass the address
+	000544	004767 	000000G			call	wrtall			; do it
+     18	000550	004767 	000000G			call	l$nolf			; just a return
+     19	000554	016746 	000000G			mov	infomsg	,-(sp)		; save state of SET TT [NO]QUIET
+     20	000560	005067 	000000G			clr	infomsg			; temporarily off display
+     21	000564	004767 	177550 			call	set.mo			; go re-init the modem
+     22	000570	012667 	000000G			mov	(sp)+	,infomsg	; restore SET TT [NO]QUIET
+     23	000574	000207 			10$:	return
+     24
+     25						.dsabl	lsb
+     26
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 13
+The real work of SET DTR
+
+      1
+      2						.sbttl	The REDIAL command	; /BBS/ slightly modified..
+      3
+      4	000576	016703 	000000G		c$redi::mov	argbuf	,r3		; argbuf address
+      5	000602	016702 	000000G			mov	phnum	,r2		; address of phone number
+      6	000606	012704 	177777 			mov	#-1	,r4		; default repeat count = 65535.
+      7	000612	105713 				tstb	@r3			; any repeat count passed?
+      8	000614	001416 				beq	20$			; no
+      9	000616					calls	l$val	,<r3>		; convert ascii to integer
+	000616	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000620	010346 				  mov	r3	,-(sp)		; doing it thusly generates less code
+	000622	010605 				  mov	sp	,r5		; set pointer to argument list
+	000624	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	000630	005726 				  tst	(sp)+			; pop parameter list from stack
+	000632	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     10	000634	005700 				tst	r0			; success?
+     11	000636	001002 				bne	10$			; no
+     12	000640	010104 				mov	r1	,r4		; save repeat count
+     13	000642	001003 				bne	20$			; disallow 0, it would really = 65536.
+     14	000644	012700 	000000G		10$:	mov	#er$inr	,r0		; invalid number of retires
+     15	000650	000420 				br	40$			; go handle error
+     16	000652	105712 			20$:	tstb	@r2			; anything to dial?
+     17	000654	001003 				bne	30$			; yes
+     18	000656	012700 	000000G			mov	#er$npn	,r0		; no previous number dialed
+     19	000662	000413 				br	40$			; bail out
+     20	000664				30$:	strcpy	r3	,r2		; copy old phone num to argbuf
+	000664	010246 				mov	r2	,-(sp)
+	000666	010346 				mov	r3	,-(sp)
+	000670	004767 	000000G			jsr	pc	,strcpy
+     21	000674	010667 	000000G			mov	sp	,xredial	; flag c$dial was called by c$redial
+     22	000700	005067 	000126'			clr	retries			; init number of tries counter
+     23	000704	004767 	000020 			call	c$dial			; redial loop moved to c$dial
+     24	000710	000405 				br	50$			; c$dial handles its own errors
+     25
+     26	000712				40$:	direrr	r0			; for local errors
+	000712	010046 				mov	r0	,-(sp)
+	000714	004767 	000000G			call	direr$
+     27	000720	004767 	000000G			call	incsts			; set global flag also
+     28	000724	005000 			50$:	clr	r0			; error was just handled
+     29	000726	000207 				return
+     30
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 14
+The REDIAL command	; /BBS/ slightly modified..
+
+      1
+      2						.sbttl	The DIAL command	; /BBS/ substantially changed..
+      3						.enabl	lsb
+      4
+      5	000730	005767 	000000G		c$dial::tst	signon			; if coming here from init file
+      6	000734	001002 				bne	10$			; dump sign-on stuff before dial
+      7	000736	004767 	000000G			call	sho$line
+      8
+      9	000742	105767 	000000G		10$:	tstb	ttname			; check for a real terminal name
+     10	000746	001003 				bne	20$			; ok
+     11	000750	012700 	000000G			mov	#er$pls	,r0		; please SET LINE first
+     12	000754	000457 				br	70$			; goto error handler
+     13
+     14	000756	004767 	000000G		20$:	call	inqcd			; /62/ check to see if already talking
+     15	000762	005700 				tst	r0			; /62/ or prior session not dead yet
+     16	000764	003403 				ble	30$			; /62/ no data carrier is now present
+     17	000766	012700 	000000G			mov	#er$dcd	,r0		; /62/ can't DIAL whilst DCD asserted
+     18	000772	000450 				br	70$			; goto error handler
+     19
+     20	000774	004767 	000664 		30$:	call	findnumber		; perhaps a SET PHONE NUMBER?
+     21	001000	103505 				bcs	100$			; findnu handles its own error
+     22	001002	004767 	000000G			call	loamdm			; /63/ ensure modem data are loaded
+     23	001006	016700 	000000G			mov	modtype	,r0		; recover the address of descriptor
+     24	001012	001003 				bne	40$			; ok
+     25	001014	012700 	000000G			mov	#er$mdm	,r0		; please SET MODEM first
+     26	001020	000435 				br	70$			; goto error handler
+     27
+     28	001022	005067 	000124'		40$:	clr	mute			; turn echo back on just in case
+     29	001026	016000 	000000G			mov	dial.string(r0),r0	; get dial format string address
+     30	001032	105710 				tstb	@r0			; anything there?
+     31	001034	001003 				bne	50$			; yes
+     32	001036	012700 	000000G			mov	#er$ndf	,r0		; no dial format string defined
+     33	001042	000424 				br	70$			; goto error handler
+     34
+     35	001044	004767 	000000G		50$:	call	opentt			; /63/ open the link device
+     36	001050	005700 				tst	r0			; successful?
+     37	001052	001060 				bne	100$			; no, ttyini does the error message
+     38	001054	004767 	000314 			call	fixspeed		; restore set speed if need be
+     39	001060	004767 	003766 			call	eatjunk			; /63/ flush any late redial response
+     40	001064	016700 	000000G			mov	modtype	,r0		; recover top of list
+     41	001070	005760 	000000G			tst	init.once(r0)		; need to re-init modem?
+     42	001074	001403 				beq	60$			; evidently..
+     43	001076	005767 	000000G			tst	mready			; is the modem now on-line?
+     44	001102	001010 				bne	80$			; ya
+     45	001104	004767 	001014 		60$:	call	getatn			; try to get modems attention
+     46	001110	005700 				tst	r0			; did getting modems attn succeed?
+     47	001112	001404 				beq	80$			; ya
+     48	001114				70$:	direrr	r0			; no, emit error msg
+	001114	010046 				mov	r0	,-(sp)
+	001116	004767 	000000G			call	direr$
+     49	001122	000434 				br	100$			; /62/ and exit
+     50
+     51	001124	005767 	000000G		80$:	tst	cccnt			; abort?
+     52	001130	001031 				bne	100$			; ya..
+     53	001132	005767 	000000G			tst	xredial			; redialing?
+     54	001136	001416 				beq	90$			; no
+     55	001140	005267 	000126'			inc	retries			; ya, bump retries count
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 14-1
+The DIAL command	; /BBS/ substantially changed..
+
+     56	001144					wrtall	#dia.04			; /63/ "Try #"
+	001144	012746 	000136'			mov	#dia.04	,-(sp)		; pass the address
+	001150	004767 	000000G			call	wrtall			; do it
+     57	001154	016700 	000126'			mov	retries	,r0		; copy for integer to ascii conv
+     58	001160	004767 	000000G			call	L10266			; print integer as decimal numb
+     59	001164					wrtall	#dia.05			; /63/ ":"<cr><lf>
+	001164	012746 	000144'			mov	#dia.05	,-(sp)		; pass the address
+	001170	004767 	000000G			call	wrtall			; do it
+     60
+     61	001174	004767 	001470 		90$:	call	dodial			; actually try to dial the number now
+     62	001200	005700 				tst	r0			; returns 1 for success, 0 if failed
+     63	001202	001014 				bne	130$			; success, go CONNECT
+     64	001204	005767 	000000G			tst	xredial			; redialing this?
+     65	001210	001401 				beq	100$			; no, die..
+     66	001212	077434 				sob	r4	,80$		; ya, try again?
+     67
+     68	001214	004767 	000000G		100$:	call	incsts			; set global error flag
+     69
+     70	001220	004767 	000000G		110$:	call	ttyfin			; close the handler
+     71	001224	005067 	000000G			clr	linksts			; flag for ccast
+     72	001230	005000 			120$:	clr	r0			; /62/ error already handled
+     73	001232	000207 				return
+     74
+     75	001234	005767 	000000G		130$:	tst	xredial			; come here from c$redial?
+     76	001240	001401 				beq	140$			; nope
+     77	001242	005726 				tst	(sp)+			; ya, pop its return address
+     78	001244	000167 	000000G		140$:	jmp	c$conn			; and CONNECT automatically..
+     79
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 15
+The DIAL command	; /BBS/ substantially changed..
+
+      1
+      2						.sbttl	Reset the modem		; /BBS/ all new
+      3
+      4	001250	004767 	000000G		c$idle::call	loamdm			; /63/ ensure modem data are loaded
+      5	001254	016704 	000000G			mov	modtype	,r4		; get modem type
+      6	001260	001763 				beq	120$			; no modem is on-line
+      7	001262	005767 	000000G			tst	r50dev			; is there a line set?
+      8	001266	001760 				beq	120$			; no, thus can't talk to modem
+      9	001270	004767 	000000G			call	inqcd			; /62/ ya, is the modem active?
+     10	001274	005700 				tst	r0			; /62/ well..
+     11	001276	003414 				ble	150$			; /62/ probably not, do the init
+     12	001300	004767 	000000G			call	ttyhang			; /62/ ya, try to hang it up!
+     13	001304					calls	suspend	,<#0,settle>	; /62/ let modem recover from DTR drop
+	001304	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001306	016746 	000000G			        mov	settle	,-(sp)	; push it
+	001312	012746 	000000 			        mov	#0	,-(sp)	; push it
+	001316	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001320	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	001324	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001326	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	001330	005067 	000000G		150$:	clr	mready			; no longer ready no matter what
+     15	001334	004767 	000000G			call	opentt			; /63/ init handler, etc..
+     16	001340	005700 				tst	r0			; get a successful open on line?
+     17	001342	001403 				beq	160$			; ya
+     18	001344	012700 	000000G			mov	#er$idl	,r0		; can't release modem
+     19	001350	000661 				br	70$			; and off to common code..
+     20
+     21	001352	004767 	000016 		160$:	call	fixspeed		; restore set speed if need be
+     22	001356					ttputs	dial.idle(r4)		; send idle command string to modem
+	001356	010146 				mov	r1	,-(sp)		; a one word buffer
+	001360	016401 	000000G			mov	dial.idle(r4)	,r1		; pass string location to do.put
+	001364	004767 	003520 			call	do.put			; /63/ send it
+	001370	012601 				mov	(sp)+	,r1		; pop buffer
+     23	001372	000712 				br	110$			; and off to common code..
+     24
+     25						.dsabl	lsb
+     26
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 16
+Reset the modem		; /BBS/ all new
+
+      1
+      2						.sbttl	Restore last set speed	; /BBS/ added..
+      3
+      4	001374	005767 	000000G		fixspeed:tst	b4speed			; did last call alter speed?
+      5	001400	001412 				beq	10$			; nope
+      6	001402					calls	setspd	,<b4speed>	; restore speed before that happened
+	001402	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001404	016746 	000000G			  mov	b4speed	,-(sp)		; doing it thusly generates less code
+	001410	010605 				  mov	sp	,r5		; set pointer to argument list
+	001412	004767 	000000G			  jsr	pc	,setspd		; call the subroutine
+	001416	005726 				  tst	(sp)+			; pop parameter list from stack
+	001420	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	001422	005067 	000000G			clr	b4speed			; once iz enuff..
+      8	001426	000207 			10$:	return
+      9
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 17
+Restore last set speed	; /BBS/ added..
+
+      1
+      2						.sbttl	Find location of a modem's data structure
+      3
+      4					;	F I N D M O D E M		; /BBS/ substantially revised..
+      5					;
+      6					;	assumes:  modem	= name of the desired modem
+      7					;	returns:    r0	= address of modem data structure or 0 if not found
+      8
+      9	001430				findmo:	save	<r3>
+	001430	010346 				 mov	r3	,-(sp)
+     10	001432	105767 	000000G			tstb	modem			; did caller supply a modem name?
+     11	001436	001507 				beq	80$			; nope..
+     12	001440	004767 	000000G			call	loamdm			; /63/ load predefined modems' data
+     13	001444	010003 				mov	r0	,r3		; /63/ get address of head of list
+     14	001446	122767 	000077 	000000G		cmpb	#'?	,modem		; come here for help?
+     15	001454	001434 				beq	40$			; ya, format display accordingly
+     16
+     17	001456	016300 	000000G		10$:	mov	mod.string(r3),r0	; allow match if ok up to end of
+     18	001462	012701 	000000G			mov	#modem	,r1		; argbuf so partial string works
+     19	001466	122021 			20$:	cmpb	(r0)+	,(r1)+		; are they the same
+     20	001470	001014 				bne	30$			; no
+     21	001472	105711 				tstb	(r1)			; end of argbuf?
+     22	001474	001374 				bne	20$			; no, continue
+     23	001476	010367 	000000G			mov	r3	,modtype	; save address of the structure
+     24	001502					copyz	mod.string(r3),#modem	; be sure whole name is there
+	001502	005046 				clr	-(sp)
+	001504	016346 	000000G			mov	mod.string(r3)	,-(sp)
+	001510	012746 	000000G			mov	#modem	,-(sp)
+	001514	004767 	000000G			call	copyz$
+     25	001520	000454 				br	70$			; done
+     26
+     27	001522	016303 	000000G		30$:	mov	mod.next(r3),r3		; no, try the next one please
+     28	001526	001353 				bne	10$			; keep going
+     29	001530					direrr	#er$unm			; modem type is unknown
+	001530	012746 	000000G			mov	#er$unm	,-(sp)
+	001534	004767 	000000G			call	direr$
+     30	001540	005767 	000000G			tst	infomsg			; SET TT QUIET?
+     31	001544	001444 				beq	80$			; ya, skip list of possibilities
+     32
+     33	001546				40$:	wrtall	#dia.06			; /63/ "..known modem types.."<cr><lf>
+	001546	012746 	000150'			mov	#dia.06	,-(sp)		; pass the address
+	001552	004767 	000000G			call	wrtall			; do it
+     34	001556	004767 	000000G			call	loamdm			; /63/ load predefined modems' data
+     35	001562	010003 				mov	r0	,r3		; /63/ get address of head of list
+     36	001564				50$:	wrtall	mod.string(r3)		; now print the list of modems
+	001564	016346 	000000G			mov	mod.string(r3)	,-(sp)		; pass the address
+	001570	004767 	000000G			call	wrtall			; do it
+     37	001574					strlen	mod.string(r3)		; length of modem type
+	001574	016300 	000000G			mov	mod.string(r3)	,r0
+	001600	004767 	000000G			call	l$len
+     38	001604	162700 	000020 			sub	#20	,r0		; cut to 16. for tighter display
+     39	001610	005400 				neg	r0			; make it a positive number
+     40	001612	010001 				mov	r0	,r1		; stash a copy for the loop
+     41	001614	012700 	000040 			mov	#space	,r0		; load up a space
+     42	001620	004767 	000000G		60$:	call	writ1ch			; write it to TT
+     43	001624	077103 				sob	r1	,60$		; loop until properly padded
+     44	001626					wrtall	mod.com(r3)		; dump comment string
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 17-1
+Find location of a modem's data structure
+
+	001626	016346 	000000G			mov	mod.com(r3)	,-(sp)		; pass the address
+	001632	004767 	000000G			call	wrtall			; do it
+     45	001636					.newline
+	001636	004767 	000000G			call	l$pcrlf
+     46	001642	016303 	000000G			mov	mod.next(r3),r3		; next one in list
+     47	001646	001346 				bne	50$			; ok
+     48	001650	000402 				br	80$			; exit with failure
+     49
+     50	001652	010300 			70$:	mov	r3	,r0		; return address of structure
+     51	001654	000401 				br	90$
+     52	001656	005000 			80$:	clr	r0			; failure
+     53	001660				90$:	unsave	<r3>
+	001660	012603 				 mov	(sp)+	,r3
+     54	001662	000207 				return
+     55
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 18
+Find location of a modem's data structure
+
+      1
+      2						.sbttl	Find a defined phone number
+      3
+      4	001664				findnu:	save	<r3,r2>			; /45/ Added 20-Feb-86 13:00:50 BDN
+	001664	010346 				 mov	r3	,-(sp)
+	001666	010246 				 mov	r2	,-(sp)
+      5	001670					strcpy	#errtxt	,argbuf		; /63/ save a copy of input string
+	001670	016746 	000000G			mov	argbuf	,-(sp)
+	001674	012746 	000000G			mov	#errtxt	,-(sp)
+	001700	004767 	000000G			jsr	pc	,strcpy
+      6	001704	127727 	000000G	000060 		cmpb	@argbuf	,#'0		; only if not number in first position
+      7	001712	103404 				blo	10$			; ok
+      8	001714	127727 	000000G	000071 		cmpb	@argbuf	,#'9		; well?
+      9	001722	101464 				blos	70$			; /BBS/ it's a number
+     10	001724	012702 	000000G		10$:	mov	#pnhead	,r2		; get listhead
+     11
+     12	001730	011202 			20$:	mov	(r2)	,r2		; loop a little, get next entry
+     13	001732	001452 				beq	60$			; nothing there
+     14	001734	010203 				mov	r2	,r3		; get address of text
+     15	001736	062703 	000002 			add	#2	,r3		; +2 is offset for the data
+     16
+     17	001742					strcpy	#errtxt	,r3		; /63/ save a copy of input string
+	001742	010346 				mov	r3	,-(sp)
+	001744	012746 	000000G			mov	#errtxt	,-(sp)
+	001750	004767 	000000G			jsr	pc	,strcpy
+     18	001754	012701 	000000G			mov	#errtxt	,r1		; /63/ save un-upper-cased name here
+     19	001760	012700 	000000'			mov	#buffer	,r0		; store temp copy here
+     20	001764	121327 	000040 		30$:	cmpb	(r3)	,#space		; all done looking?
+     21	001770	001403 				beq	40$			; yes
+     22	001772	111321 				movb	(r3)	,(r1)+		; /63/ copy for "last # dialed"
+     23	001774	112320 				movb	(r3)+	,(r0)+		; no, copy more of the name
+     24	001776	001372 				bne	30$			; and continue
+     25	002000	105010 			40$:	clrb	(r0)			; ensure .asciz please
+     26	002002	105011 				clrb	(r1)			; /63/ ditto
+     27
+     28						; /BBS/ checking for end of argbuf matches on any partial string
+     29	002004					upcase	argbuf			; also leaves r0 -> argbuf
+	002004	016700 	000000G			mov	argbuf	,r0
+	002010	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     30	002014	010001 				mov	r0	,r1		; save pointer
+     31	002016					upcase	#buffer			; /62/ temp buff allows upcasing name
+	002016	012700 	000000'			mov	#buffer	,r0
+	002022	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     32	002026	122021 			50$:	cmpb	(r0)+	,(r1)+		; are they the same?
+     33	002030	001337 				bne	20$			; no
+     34	002032	105711 				tstb	(r1)			; ya, hit end of argbuf yet?
+     35	002034	001374 				bne	50$			; no, continue
+     36	002036	005203 				inc	r3			; point to number field
+     37	002040	105713 				tstb	(r3)			; anything really there?
+     38	002042	001406 				beq	60$			; /BBS/ no, go print error message
+     39	002044					strcpy	argbuf	,r3		; copy into the real argument buffer
+	002044	010346 				mov	r3	,-(sp)
+	002046	016746 	000000G			mov	argbuf	,-(sp)
+	002052	004767 	000000G			jsr	pc	,strcpy
+     40	002056	000406 				br	70$			; /BBS/ go clear carry and exit
+     41
+     42	002060				60$:	direrr	#er$nnf			; /BBS/ say why it's gonna die
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 18-1
+Find a defined phone number
+
+	002060	012746 	000000G			mov	#er$nnf	,-(sp)
+	002064	004767 	000000G			call	direr$
+     43	002070	000261 				sec				; /51/ failure
+     44	002072	000411 				br	80$
+     45	002074				70$:	copyz	#errtxt	,phnum,#60	; /63/ stash copy for "last # dialed"
+	002074	012746 	000060 			mov	#60	,-(sp)
+	002100	012746 	000000G			mov	#errtxt	,-(sp)
+	002104	016746 	000000G			mov	phnum	,-(sp)
+	002110	004767 	000000G			call	copyz$
+     46	002114	000241 				clc				; /51/ success
+     47	002116				80$:	unsave	<r2,r3>
+	002116	012602 				 mov	(sp)+	,r2
+	002120	012603 				 mov	(sp)+	,r3
+     48	002122	000207 				return
+     49
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 19
+Find a defined phone number
+
+      1
+      2						.sbttl	Wake up (init) modem	; /BBS/ almost 100% new..
+      3
+      4					;	G E T A T N
+      5					;
+      6					;	In case the modem is already awake (at command prompt mode)
+      7					;	we will dump the string,  wait for the  acknowledgment  and
+      8					;	loop until we are sure there are no more data.  For example
+      9					;	the VA212 will send back an  INVALID  COMMAND\n* string for
+     10					;	for the ^E and one also for the <CR>.  We could, of course,
+     11					;	first send the modem its idle command,  but there are times
+     12					;	when that may be undesirable,  like when the modem is being
+     13					;	accessed via some sort of LAN or PABX.
+     14					;
+     15					;	input:	modtyp	= address of modem descriptor
+     16					;	return:	  r0	= if <>, the error code
+     17
+     18	002124				getatn:	save	<r1,r2,r3,r4>
+	002124	010146 				 mov	r1	,-(sp)
+	002126	010246 				 mov	r2	,-(sp)
+	002130	010346 				 mov	r3	,-(sp)
+	002132	010446 				 mov	r4	,-(sp)
+     19	002134	005046 				clr	-(sp)			; init "msg rec'd" flag
+     20	002136	012702 	000000'			mov	#buffer	,r2		; write init string here
+     21	002142	004767 	000000G			call	loamdm			; /63/ ensure modem data are loaded
+     22	002146	016704 	000000G			mov	modtype	,r4		; get address of structure
+     23	002152	005067 	000000G			clr	mready			; modem is no longer ready
+     24	002156	016403 	000000G			mov	wake.string(r4),r3	; point to the init string
+     25	002162	105713 				tstb	(r3)			; is there one to send?
+     26	002164	001004 				bne	10$			; ya
+     27	002166	012700 	000000G			mov	#er$wks	,r0		; nope..
+     28	002172	000167 	000446 			jmp	200$			; handle the error
+     29
+     30	002176	105713 			10$:	tstb	(r3)			; done?
+     31	002200	001432 				beq	70$			; yes
+     32	002202	121327 	000045 			cmpb	(r3)	,#'%		; look for a format effector
+     33	002206	001024 				bne	50$			; ya, not no..
+     34	002210	126327 	000001 	000170 		cmpb	1(r3)	,#'x!40		; "%X" to set Hayes extended mode?
+     35	002216	001404 				beq	20$			; yes
+     36	002220	126327 	000001 	000130 		cmpb	1(r3)	,#'X&137	; check both cases
+     37	002226	001014 				bne	50$			; not formatting, copy char over
+     38	002230	105767 	000000G		20$:	tstb	xresult			; is there an extended mode set?
+     39	002234	001406 				beq	40$			; no, kill leading space here
+     40	002236	112722 	000130 			movb	#'X&137	,(r2)+		; ya, insert an "X"
+     41	002242	012701 	000000G			mov	#xresult,r1		; make copy to auto-increment
+     42	002246	112122 			30$:	movb	(r1)+	,(r2)+		; then insert the mode, ala "X4"
+     43	002250	001376 				bne	30$			; stop on the first null
+     44	002252	005302 			40$:	dec	r2			; then back up over it
+     45	002254	005203 				inc	r3			; skip over the "%" please
+     46	002256	000401 				br	60$			; next please
+     47	002260	111322 			50$:	movb	(r3)	,(r2)+		; not formatting, copy character
+     48	002262	005203 			60$:	inc	r3			; skip over current char now
+     49	002264	000744 				br	10$			; next
+     50	002266	105012 			70$:	clrb	(r2)			; .asciz
+     51
+     52	002270	012703 	000003 			mov	#3	,r3		; loop a little to get modem going
+     53	002274	004767 	002552 		80$:	call	eatjunk			; trash stuff that may be waiting
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 19-1
+Wake up (init) modem	; /BBS/ almost 100% new..
+
+     54	002300	012702 	000000'			mov	#buffer	,r2		; get address of wakeup string
+     55	002304	000422 				br	100$			; for display format on abort
+     56
+     57	002306	105722 			90$:	tstb	(r2)+			; /62/ next byte..
+     58	002310	001520 				beq	140$			; /62/ that's all there is
+     59	002312	005767 	000124'			tst	mute			; allow strike any key abort?
+     60	002316	001015 				bne	100$			; no, not this time
+     61	002320	004767 	000000G			call	chkabo			; strike any key to abort
+     62	002324	005700 				tst	r0			; get anything?
+     63	002326	001411 				beq	100$			; nope
+     64	002330	005267 	000000G			inc	cccnt			; fake abort so modem is stopped
+     65	002334	004767 	000000G			call	clrcns			; eat LF after a CR, etc..
+     66	002340	005716 				tst	(sp)			; /62/ anything typed out yet?
+     67	002342	001533 				beq	180$			; /62/ no
+     68	002344					.newline			; ya, ensure abort message is on \n
+	002344	004767 	000000G			call	l$pcrlf
+     69	002350	000530 				br	180$			; and bail out..
+     70
+     71	002352				100$:	ttputc	(r2)			; /62/ put a char to the modem
+	002352	005046 				clr	-(sp)			; create a one word buffer
+	002354	151216 				bisb	(r2)	,(sp)		; stuff in byte sans sign extension
+	002356	010600 				mov	sp	,r0		; point to buffer
+	002360	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002362	012746 	000001 			        mov	#1	,-(sp)	; push it
+	002366	010046 				        mov	r0	,-(sp)	; push it
+	002370	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002372	004767 	000000G			  jsr	pc	,binwri		; and go to the routine
+	002376	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002400	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	002402	005726 				tst	(sp)+			; pop buffer
+     72	002404	005764 	000000G			tst	dial.echo(r4)		; /62/ does it echo?
+     73	002410	001424 				beq	110$			; /62/ no
+     74	002412					ttgetc	#-1			; then look for its echo
+	002412	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002414	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	002420	010605 				  mov	sp	,r5		; set pointer to argument list
+	002422	004767 	000000G			  jsr	pc	,xbinread		; call the subroutine
+	002426	005726 				  tst	(sp)+			; pop parameter list from stack
+	002430	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     75	002432	005700 				tst	r0			; anything there?
+     76	002434	001033 				bne	130$			; no
+     77	002436	142701 	177600 			bicb	#^c<177>,r1		; remove parity always
+     78	002442	120127 	000015 			cmpb	r1	,#cr		; is it a return?
+     79	002446	001426 				beq	130$			; ya, don't echo it
+     80	002450	120127 	000012 			cmpb	r1	,#lf		; is it a line feed?
+     81	002454	001423 				beq	130$			; ya, don't echo it
+     82	002456	110100 				movb	r1	,r0		; get a copy of it
+     83	002460	000413 				br	120$			; /62/ and go dump same to the screen
+     84	002462				110$:	calls	suspend	,<#0,#1>	; /62/ match above ttgetc 1 tick lag
+	002462	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002464	012746 	000001 			        mov	#1	,-(sp)	; push it
+	002470	012746 	000000 			        mov	#0	,-(sp)	; push it
+	002474	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002476	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	002502	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002504	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     85	002506	111300 				movb	(r3)	,r0		; cop char just sent
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 19-2
+Wake up (init) modem	; /BBS/ almost 100% new..
+
+     86	002510	005767 	000124'		120$:	tst	mute			; echo this to TT?
+     87	002514	001003 				bne	130$			; no, don't echo modem I/O
+     88	002516	010016 				mov	r0	,@sp		; set "msg rec'd" flag
+     89	002520	004767 	000000G			call	writ1char		; and echo to TT
+     90	002524				130$:	calls	suspend	,<#0,wake.rate(r4)> ; no, pause if need be
+	002524	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002526	016446 	000000G			        mov	wake.rate(r4)	,-(sp)	; push it
+	002532	012746 	000000 			        mov	#0	,-(sp)	; push it
+	002536	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002540	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	002544	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002546	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     91	002550	000656 				br	90$			; and do some more
+     92
+     93	002552	005716 			140$:	tst	(sp)			; was anything echo'd to TT?
+     94	002554	001402 				beq	150$			; no, skip the newline
+     95	002556					.newline			; ya, tag it
+	002556	004767 	000000G			call	l$pcrlf
+     96	002562				150$:	waitfor	wake.prompt(r4),#2,160$	; now wait 2 secs for a response
+	002562	012746 	000002 			mov	#2	,-(sp)		; pass #2 to wait
+	002566	016446 	000000G			mov	wake.prompt(r4)	,-(sp)		; and address of expected string
+	002572	004767 	002042 			call	waitfor			; go look for it
+	002576	005700 				tst	r0			; check to see if it worked..
+	002600	001401 				beq	160$			; it did not
+     97	002602	000407 				br	170$			; success
+     98	002604	005767 	000000G		160$:	tst	cccnt			; abort?
+     99	002610	001010 				bne	180$			; ya..
+    100	002612	005303 				dec	r3			; decrement loop counter
+    101	002614	001411 				beq	190$			; a complete failure, exit
+    102	002616	000167 	177452 			jmp	80$			; next please
+    103
+    104	002622	010467 	000000G		170$:	mov	r4	,mready		; flag that modem is initialized
+    105	002626	005000 				clr	r0			; return(success)
+    106	002630	000407 				br	210$
+    107
+    108	002632	012700 	000000G		180$:	mov	#er$abk	,r0		; say it's a keyboard abort
+    109	002636	000402 				br	200$
+    110	002640	012700 	000000G		190$:	mov	#er$wke	,r0		; can't get wake$pmpt from modem
+    111	002644	005067 	000000G		200$:	clr	mready			; modem is not now ready
+    112	002650	004767 	002176 		210$:	call	eatjunk			; just to be sure..
+    113	002654	005726 				tst	(sp)+			; pop "msg rec'd" flag buffer
+    114	002656					unsave	<r4,r3,r2,r1>
+	002656	012604 				 mov	(sp)+	,r4
+	002660	012603 				 mov	(sp)+	,r3
+	002662	012602 				 mov	(sp)+	,r2
+	002664	012601 				 mov	(sp)+	,r1
+    115	002666	000207 				return
+    116
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 20
+Wake up (init) modem	; /BBS/ almost 100% new..
+
+      1
+      2						.sbttl	Dial the number		; /BBS/ moderately modified..
+      3
+      4					;	Note that the waitfor routine,  called by macro of same name, will
+      5					;	exit immediately if the string to compare against is NULL, thus it
+      6					;	won't hurt anything to call it for modems that may not respond, as
+      7					;	long dmod.* aren't defined for such a modem, that is..
+      8
+      9	002670				dodial:	save	<r2,r3,r4>
+	002670	010246 				 mov	r2	,-(sp)
+	002672	010346 				 mov	r3	,-(sp)
+	002674	010446 				 mov	r4	,-(sp)
+     10	002676	005046 				clr	-(sp)			; /62/ init "msg rec'd" flag
+     11	002700	012703 	000000'			mov	#buffer	,r3		; pointer to a handy buffer
+     12	002704	016704 	000000G			mov	modtype	,r4		; get address of modem descriptor
+     13	002710	004767 	001402 			call	fmtstr			; format the dialing string
+     14
+     15	002714					ttputs	dmod.string(r4)		; dump the prompt for dialing out
+	002714	010146 				mov	r1	,-(sp)		; a one word buffer
+	002716	016401 	000000G			mov	dmod.string(r4)	,r1		; pass string location to do.put
+	002722	004767 	002162 			call	do.put			; /63/ send it
+	002726	012601 				mov	(sp)+	,r1		; pop buffer
+     16	002730					waitfor	dmod.prompt(r4),#4,70$	; wait for a response
+	002730	012746 	000004 			mov	#4	,-(sp)		; pass #4 to wait
+	002734	016446 	000000G			mov	dmod.prompt(r4)	,-(sp)		; and address of expected string
+	002740	004767 	001674 			call	waitfor			; go look for it
+	002744	005700 				tst	r0			; check to see if it worked..
+	002746	001512 				beq	70$			; it did not
+     17	002750	004767 	002076 			call	eatjunk			; let things settle a bit
+     18	002754	000420 				br	30$			; display format on abort kludge
+     19
+     20	002756	105723 			10$:	tstb	(r3)+			; next byte..
+     21	002760	001510 				beq	80$			; that's all there is
+     22
+     23	002762	004767 	000000G			call	chkabo			; strike any key to abort
+     24	002766	005700 				tst	r0			; get anything?
+     25	002770	001412 				beq	30$			; nope
+     26	002772	005267 	000000G			inc	cccnt			; fake abort so modem is stopped
+     27	002776	004767 	000000G			call	clrcns			; eat LF after a CR, etc..
+     28	003002	005716 				tst	(sp)			; /62/ was anything echo'd to TT?
+     29	003004	001402 				beq	20$			; /62/ no, skip the newline
+     30	003006					.newline			; /62/ ya, tag it
+	003006	004767 	000000G			call	l$pcrlf
+     31	003012	000167 	000402 		20$:	jmp	150$			; /62/ go clean up
+     32
+     33	003016				30$:	ttputc	(r3)			; send a char to the modem
+	003016	005046 				clr	-(sp)			; create a one word buffer
+	003020	151316 				bisb	(r3)	,(sp)		; stuff in byte sans sign extension
+	003022	010600 				mov	sp	,r0		; point to buffer
+	003024	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003026	012746 	000001 			        mov	#1	,-(sp)	; push it
+	003032	010046 				        mov	r0	,-(sp)	; push it
+	003034	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003036	004767 	000000G			  jsr	pc	,binwri		; and go to the routine
+	003042	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003044	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	003046	005726 				tst	(sp)+			; pop buffer
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 20-1
+Dial the number		; /BBS/ moderately modified..
+
+     34	003050	005764 	000000G			tst	dial.echo(r4)		; does it echo?
+     35	003054	001416 				beq	40$			; no
+     36	003056					ttgetc	#-1			; ya, wait one tick for echo
+	003056	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003060	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	003064	010605 				  mov	sp	,r5		; set pointer to argument list
+	003066	004767 	000000G			  jsr	pc	,xbinread		; call the subroutine
+	003072	005726 				  tst	(sp)+			; pop parameter list from stack
+	003074	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	003076	005700 				tst	r0			; get anything?
+     38	003100	001022 				bne	60$			; no
+     39	003102	142701 	177600 			bicb	#^c<177>,r1		; remove parity always
+     40	003106	110100 				movb	r1	,r0		; copy the char
+     41	003110	000413 				br	50$			; and go dump same to the screen
+     42	003112				40$:	calls	suspend	,<#0,#1>	; /62/ match above ttgetc 1 tick lag
+	003112	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003114	012746 	000001 			        mov	#1	,-(sp)	; push it
+	003120	012746 	000000 			        mov	#0	,-(sp)	; push it
+	003124	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003126	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	003132	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003134	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     43	003136	111300 				movb	(r3)	,r0		; cop char just sent
+     44	003140	010016 			50$:	mov	r0	,@sp		; /62/ set "msg rec'd" flag
+     45	003142	004767 	000000G			call	writ1char		; and echo it to TT
+     46	003146				60$:	calls	suspend	,<#0,dial.rate(r4)> ; pace chars if dial.rate is not 0
+	003146	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003150	016446 	000000G			        mov	dial.rate(r4)	,-(sp)	; push it
+	003154	012746 	000000 			        mov	#0	,-(sp)	; push it
+	003160	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003162	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	003166	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003170	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     47	003172	000671 				br	10$			; loop
+     48
+     49	003174	012700 	000517'		70$:	mov	#nodprompt,r0		; no dial prompt
+     50	003200	000477 				br	130$
+     51
+     52	003202	005716 			80$:	tst	(sp)			; /62/ ever type anything to TT?
+     53	003204	001402 				beq	90$			; /62/ no, thus a newline isn't needed
+     54	003206					.newline			; for dial string above
+	003206	004767 	000000G			call	l$pcrlf
+     55	003212	012703 	000000'		90$:	mov	#buffer	,r3		; restore buffer pointer
+     56	003216					waitfor	dial.ack(r4),#4,110$	; wait for numb to echo perhaps
+	003216	012746 	000004 			mov	#4	,-(sp)		; pass #4 to wait
+	003222	016446 	000000G			mov	dial.ack(r4)	,-(sp)		; and address of expected string
+	003226	004767 	001406 			call	waitfor			; go look for it
+	003232	005700 				tst	r0			; check to see if it worked..
+	003234	001454 				beq	110$			; it did not
+     57	003236					ttputs	dial.conf(r4)		; stuff a confirm (ok if null)
+	003236	010146 				mov	r1	,-(sp)		; a one word buffer
+	003240	016401 	000000G			mov	dial.conf(r4)	,r1		; pass string location to do.put
+	003244	004767 	001640 			call	do.put			; /63/ send it
+	003250	012601 				mov	(sp)+	,r1		; pop buffer
+     58	003252					waitfor	dial.go(r4),#5,120$	; maybe wait for any confirming string
+	003252	012746 	000005 			mov	#5	,-(sp)		; pass #5 to wait
+	003256	016446 	000000G			mov	dial.go(r4)	,-(sp)		; and address of expected string
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 20-2
+Dial the number		; /BBS/ moderately modified..
+
+	003262	004767 	001352 			call	waitfor			; go look for it
+	003266	005700 				tst	r0			; check to see if it worked..
+	003270	001441 				beq	120$			; it did not
+     59	003272	004767 	000260 			call	getsts			; get final result of the call please
+     60	003276	005767 	000000G			tst	cccnt			; did this die from a keyboard abort?
+     61	003302	001041 				bne	140$			; ya
+     62	003304	005200 				inc	r0			; success?
+     63	003306	003110 				bgt	180$			; yes
+     64	003310	001420 				beq	100$			; no, but modem stopped itself
+     65	003312					ttputs	dial.xabort(r4)		; get the modem to stop
+	003312	010146 				mov	r1	,-(sp)		; a one word buffer
+	003314	016401 	000000G			mov	dial.xabort(r4)	,r1		; pass string location to do.put
+	003320	004767 	001564 			call	do.put			; /63/ send it
+	003324	012601 				mov	(sp)+	,r1		; pop buffer
+     66	003326					calls	suspend	,<#0,settle>	; let modem recover from abort!
+	003326	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003330	016746 	000000G			        mov	settle	,-(sp)	; push it
+	003334	012746 	000000 			        mov	#0	,-(sp)	; push it
+	003340	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003342	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	003346	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003350	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     67	003352	105767 	000000'		100$:	tstb	buffer			; anything in the buffer?
+     68	003356	001062 				bne	170$			; ya, message already displayed..
+     69	003360	012700 	000033'			mov	#defmsg	,r0		; no, must have timed out, say so
+     70	003364	000405 				br	130$			; go dump failure message
+     71
+     72	003366	012700 	000555'		110$:	mov	#nod.ack,r0		; no dial ack
+     73	003372	000402 				br	130$
+     74	003374	012700 	000540'		120$:	mov	#nod.go	,r0		; no dial.go confirmation
+     75	003400	005767 	000000G		130$:	tst	cccnt			; was ^C typed?
+     76	003404	001442 				beq	160$			; no
+     77
+     78	003406	105767 	000000'		140$:	tstb	buffer			; anything in the buffer?
+     79	003412	001402 				beq	150$			; no, don't need a newline
+     80	003414					.newline			; ya, goto a clean line
+	003414	004767 	000000G			call	l$pcrlf
+     81	003420				150$:	ttputs	dial.xabort(r4)		; get the modem to stop
+	003420	010146 				mov	r1	,-(sp)		; a one word buffer
+	003422	016401 	000000G			mov	dial.xabort(r4)	,r1		; pass string location to do.put
+	003426	004767 	001456 			call	do.put			; /63/ send it
+	003432	012601 				mov	(sp)+	,r1		; pop buffer
+     82	003434					calls	suspend	,<#0,settle>	; let modem recover from abort!
+	003434	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003436	016746 	000000G			        mov	settle	,-(sp)	; push it
+	003442	012746 	000000 			        mov	#0	,-(sp)	; push it
+	003446	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003450	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	003454	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003456	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     83	003460	016746 	000000G			mov	cccnt	,-(sp)		; save number of times ^C typed
+     84	003464	005067 	000000G			clr	cccnt			; do this so set.dtr can call getatn
+     85	003470	004767 	174762 			call	set.dtr			; drop DTR and re-init modem
+     86	003474					direrr	r0			; /62/ if set.dtr failed, say why
+	003474	010046 				mov	r0	,-(sp)
+	003476	004767 	000000G			call	direr$
+     87	003502	012667 	000000G			mov	(sp)+	,cccnt		; restore ^C count
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 20-3
+Dial the number		; /BBS/ moderately modified..
+
+     88	003506	012700 	000000'			mov	#abort	,r0		; user interrupt message
+     89
+     90	003512				160$:	wrtall	r0			; say why we are here..
+	003512	010046 				mov	r0	,-(sp)		; pass the address
+	003514	004767 	000000G			call	wrtall			; do it
+     91	003520					.newline
+	003520	004767 	000000G			call	l$pcrlf
+     92	003524	005000 			170$:	clr	r0			; failure
+     93	003526	000406 				br	190$
+     94
+     95	003530				180$:	wrtall	#bells			; beep just before CONNECTing
+	003530	012746 	000030'			mov	#bells	,-(sp)		; pass the address
+	003534	004767 	000000G			call	wrtall			; do it
+     96	003540	012700 	000001 			mov	#1	,r0		; success
+     97	003544	005726 			190$:	tst	(sp)+			; /62/ pop "msg rec'd" flag buffer
+     98	003546					unsave	<r4,r3,r2>
+	003546	012604 				 mov	(sp)+	,r4
+	003550	012603 				 mov	(sp)+	,r3
+	003552	012602 				 mov	(sp)+	,r2
+     99	003554	000207 				return
+    100
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 21
+Dial the number		; /BBS/ moderately modified..
+
+      1
+      2						.sbttl	Get final result of dialing	; /BBS/ somewhat modified
+      3
+      4		000007 				NOREPLY	=	7		; /62/ fail call after this many rings
+      5
+      6						; offsets to local data on stack
+      7		000000 				STATUS	=	0		; current status
+      8		000002 				NRINGS	=	2		; number of rings
+      9		000004 				LOCSIZ	=	4		; size of the above
+     10
+     11					;	passed:	  r4	= pointer to modem's data structure
+     12					;	return:	  r0	= if <>, the error code
+     13
+     14	003556				getsts:	save	<r5>
+	003556	010546 				 mov	r5	,-(sp)
+     15	003560	016703 	000000G			mov	diatmo	,r3		; /62/ # secs to wait for response
+     16	003564	070367 	000000G			mul	clkflg	,r3		; convert to ticks per second
+     17	003570	010302 				mov	r3	,r2		; save 16-bit product here
+     18	003572	162706 	000004 			sub	#locsiz	,sp		; allocate a local data buffer
+     19	003576	010605 				mov	sp	,r5		; and a pointer to it
+     20	003600	005046 				clr	-(sp)			; init "msg rec'd" flag
+     21	003602	012765 	000007 	000002 		mov	#noreply,nrings(r5)	; after this many rings, give up..
+     22	003610	005015 				clr	(r5)			; status = 0
+     23
+     24	003612	005715 			10$:	tst	(r5)			; while (status == 0)
+     25	003614	001075 				bne	90$			; exit with result
+     26	003616	012703 	000000'			mov	#buffer	,r3		; a buffer pointer
+     27	003622	105013 				clrb	(r3)			; init buffer
+     28
+     29	003624	004767 	000000G		20$:	call	chkabo			; strike any key to abort
+     30	003630	005700 				tst	r0			; get anything?
+     31	003632	001405 				beq	30$			; nope
+     32	003634	005267 	000000G			inc	cccnt			; fake abort so modem is stopped
+     33	003640	004767 	000000G			call	clrcns			; eat LF after a CR, etc..
+     34	003644	000413 				br	40$			; and bail out
+     35
+     36	003646				30$:	calls	xbinrea	,<#-1>		; this actually waits one tick
+	003646	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003650	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	003654	010605 				  mov	sp	,r5		; set pointer to argument list
+	003656	004767 	000000G			  jsr	pc	,xbinrea		; call the subroutine
+	003662	005726 				  tst	(sp)+			; pop parameter list from stack
+	003664	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	003666	005700 				tst	r0			; did that work?
+     38	003670	001404 				beq	50$			; ya
+     39	003672	077224 				sob	r2	,20$		; no, try it all again
+     40
+     41	003674	012715 	000000G		40$:	mov	#aborted,(r5)		; flag modem needs to be killed
+     42	003700	000443 				br	90$			; exit loop
+     43
+     44	003702	105701 			50$:	tstb	r1			; never suffer embedded nulls
+     45	003704	001747 				beq	20$			; a null, skip it
+     46	003706	142701 	177600 			bicb	#^c<177>,r1		; ensure a real seven bit character
+     47	003712	110123 				movb	r1	,(r3)+		; copy the byte over
+     48	003714	105013 				clrb	(r3)			; ensure we stay .asciz
+     49	003716	005764 	000000G			tst	res.bin(r4)		; exit loop on single character I/O?
+     50	003722	001023 				bne	70$			; yes
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 21-1
+Get final result of dialing	; /BBS/ somewhat modified
+
+     51	003724	120127 	000015 			cmpb	r1	,#cr		; carriage return finally found?
+     52	003730	001410 				beq	60$			; yes
+     53	003732	120127 	000012 			cmpb	r1	,#lf		; no, but
+     54	003736	001405 				beq	60$			; a line feed will do nicely
+     55	003740	010116 				mov	r1	,@sp		; it's neither, set "msg rec'd" flag
+     56	003742	010100 				mov	r1	,r0		; pass char to writ1char
+     57	003744	004767 	000000G			call	writ1char		; echo to TT
+     58	003750	000725 				br	20$			; then go back for more input
+     59
+     60	003752	126727 	000000'	000015 	60$:	cmpb	buffer	,#cr		; leading return?
+     61	003760	001714 				beq	10$			; can't be a valid response
+     62	003762	126727 	000000'	000012 		cmpb	buffer	,#lf		; leading line feed?
+     63	003770	001710 				beq	10$			; ditto..
+     64
+     65	003772	005716 			70$:	tst	(sp)			; was anything echo'd to TT?
+     66	003774	001402 				beq	80$			; no, cursor is already on column one
+     67	003776					.newline			; ya, tag it
+	003776	004767 	000000G			call	l$pcrlf
+     68	004002	004767 	000016 		80$:	jsr	pc,.default		; go check result message
+     69	004006	000701 				br	10$			; next please
+     70
+     71	004010	011500 			90$:	mov	(r5)	,r0		; recover error
+     72	004012	005726 				tst	(sp)+			; pop "msg rec'd" flag buffer
+     73	004014	062706 	000004 			add	#locsiz	,sp		; pop temp buffer
+     74	004020					unsave	<r5>
+	004020	012605 				 mov	(sp)+	,r5
+     75	004022	000207 				return
+     76
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 22
+Get final result of dialing	; /BBS/ somewhat modified
+
+      1
+      2						.sbttl	Check modem's response	; /39/ 4-DEC-1985, Brian Nelson
+      3
+      4					;	Read possible responses and their message classes from a linked
+      5					;	list whose first address is in res.header(modem_address).  If a
+      6					;	modem has no mod$res entries this routine will fail any call.
+      7
+      8	004024				.default:save	<r3>			; /BBS/ about 50% new..
+	004024	010346 				 mov	r3	,-(sp)
+      9	004026	016403 	000000G			mov	res.head(r4),r3		; get listhead of responses
+     10	004032	001525 				beq	90$			; nothing defined..
+     11	004034				10$:	save	<r1,r2,r3>
+	004034	010146 				 mov	r1	,-(sp)
+	004036	010246 				 mov	r2	,-(sp)
+	004040	010346 				 mov	r3	,-(sp)
+     12	004042	062703 	000004 			add	#4	,r3		; 4 byte offset for text
+     13	004046	012702 	000000'			mov	#buffer	,r2		; address of response to find text in
+     14	004052	121227 	000040 		20$:	cmpb	(r2)	,#space		; is this a space or below?
+     15	004056	003002 				bgt	30$			; no, continue
+     16	004060	005202 				inc	r2			; ya, skip past leading blanks and non
+     17	004062	000773 				br	20$			; printing stuff before checking match
+     18	004064				30$:	upcase	r3			; uppercase text
+	004064	010300 				mov	r3	,r0
+	004066	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     19	004072					strlen	r3			; get its length
+	004072	010300 				mov	r3	,r0
+	004074	004767 	000000G			call	l$len
+     20	004100	010001 				mov	r0	,r1		; save it
+     21	004102					upcase	r2			; uppercase response from modem
+	004102	010200 				mov	r2	,r0
+	004104	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     22	004110					strlen	r2			; get its length
+	004110	010200 				mov	r2	,r0
+	004112	004767 	000000G			call	l$len
+     23	004116					calls	instr	,<r2,r0,r3,r1>	; see if desired text is in response
+	004116	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004120	010146 				        mov	r1	,-(sp)	; push it
+	004122	010346 				        mov	r3	,-(sp)	; push it
+	004124	010046 				        mov	r0	,-(sp)	; push it
+	004126	010246 				        mov	r2	,-(sp)	; push it
+	004130	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004132	004767 	000000G			  jsr	pc	,instr		; and go to the routine
+	004136	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004142	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     24	004144					unsave	<r3,r2,r1>
+	004144	012603 				 mov	(sp)+	,r3
+	004146	012602 				 mov	(sp)+	,r2
+	004150	012601 				 mov	(sp)+	,r1
+     25	004152	005300 				dec	r0			; match must begin from the top of
+     26	004154	001403 				beq	40$			; the response string, else ignore it
+     27	004156	011303 				mov	(r3)	,r3		; get the next in the list
+     28	004160	001325 				bne	10$			; something is left to try
+     29	004162	000453 				br	100$			; tried 'em all..
+     30	004164	016315 	000002 		40$:	mov	2(r3)	,(r5)		; response class
+     31	004170	002402 				blt	50$			; /62/ < is 38.4kb or a failed call
+     32	004172	003004 				bgt	60$			; 1 = ring, >1 = connect..
+     33	004174	000446 				br	100$			; 0 = info only, display but no action
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 22-1
+Check modem's response	; /39/ 4-DEC-1985, Brian Nelson
+
+     34	004176	021527 	000000G		50$:	cmp	(r5)	,#con38400	; /62/ is it 38.4kb?
+     35	004202	001041 				bne	90$			; /62/ no, it's a failed call..
+     36
+     37	004204	021527 	000002 		60$:	cmp	(r5)	,#2		; what to do ??
+     38	004210	103423 				blo	80$			; it wuz ring /62/ fix for 38.4kb
+     39	004212	001437 				beq	100$			; connect without speed check
+     40	004214	004767 	000000G			call	ttspeed			; speed supplied, get handler's speed
+     41	004220	005700 				tst	r0			; is it settable?
+     42	004222	001413 				beq	70$			; /62/ nope..
+     43	004224	020015 				cmp	r0	,(r5)		; does modem speed = handler speed?
+     44	004226	001411 				beq	70$			; ya..
+     45	004230	010067 	000000G			mov	r0	,b4speed	; no, save speed before fallback..
+     46	004234					calls	setspd	,<@r5>		; set it now
+	004234	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004236	011546 				  mov	@r5	,-(sp)		; doing it thusly generates less code
+	004240	010605 				  mov	sp	,r5		; set pointer to argument list
+	004242	004767 	000000G			  jsr	pc	,setspd		; call the subroutine
+	004246	005726 				  tst	(sp)+			; pop parameter list from stack
+	004250	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     47	004252	012715 	000000G		70$:	mov	#connect,@r5		; say it's time to connect
+     48	004256	000415 				br	100$
+     49
+     50	004260	005015 			80$:	clr	@r5			; turn ring into an info message
+     51	004262	005365 	000002 			dec	nrings(r5)		; if more than number in nrings
+     52	004266	001011 				bne	100$			; then give up
+     53	004270					wrtall	#dia.07			; /63/ "% No answer"<cr><lf>
+	004270	012746 	000205'			mov	#dia.07	,-(sp)		; pass the address
+	004274	004767 	000000G			call	wrtall			; do it
+     54	004300	012715 	000000G			mov	#aborted,(r5)		; flag need to make modem stop
+     55	004304	000402 				br	100$
+     56	004306	012715 	000000G		90$:	mov	#failed	,(r5)		; come here if modem stopped itself
+     57	004312				100$:	unsave	<r3>
+	004312	012603 				 mov	(sp)+	,r3
+     58	004314	000207 				return
+     59
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 23
+Check modem's response	; /39/ 4-DEC-1985, Brian Nelson
+
+      1
+      2						.sbttl	Format dial string
+      3
+      4					;	passed:	  r3	= address of buffer to place result
+      5					;		argbuf	= the phone number to insert via %S
+      6
+      7	004316				fmtstr:	save	<r3>
+	004316	010346 				 mov	r3	,-(sp)
+      8	004320	016402 	000000G			mov	dial.string(r4),r2	; point to the dial format string
+      9	004324	105712 			10$:	tstb	(r2)			; done?
+     10	004326	001541 				beq	140$			; yes
+     11	004330	121227 	000045 			cmpb	(r2)	,#'%		; look for a format effector
+     12	004334	001133 				bne	120$			; no
+     13
+     14	004336	016700 	000000G			mov	argbuf	,r0		; assume phone number insertion
+     15	004342	126227 	000001 	000163 		cmpb	1(r2)	,#'s!40		; %S formatting?
+     16	004350	001520 				beq	100$			; yes
+     17	004352	126227 	000001 	000123 		cmpb	1(r2)	,#'S&137	; check both cases
+     18	004360	001514 				beq	100$			; yes
+     19
+     20	004362	016400 	000000G			mov	dial.wait(r4),r0	; no, assume pause string formatting
+     21	004366	126227 	000001 	000160 		cmpb	1(r2)	,#'p!40		; %P for pause string?
+     22	004374	001506 				beq	100$			; yes
+     23	004376	126227 	000001 	000120 		cmpb	1(r2)	,#'P&137	; check both cases
+     24	004404	001502 				beq	100$			; yes
+     25
+     26	004406	126227 	000001 	000170 		cmpb	1(r2)	,#'x!40		; /BBS/ "%X" for Hayes extended mode?
+     27	004414	001404 				beq	20$			; /BBS/ yes
+     28	004416	126227 	000001 	000130 		cmpb	1(r2)	,#'X&137	; /BBS/ check both cases
+     29	004424	001014 				bne	40$			; /BBS/ no
+     30	004426	105767 	000000G		20$:	tstb	xresult			; /BBS/ is there an xmode set?
+     31	004432	001407 				beq	30$			; /BBS/ no, kill leading space here
+     32	004434	112723 	000130 			movb	#'X&137	,(r3)+		; /BBS/ ya, insert an "X"
+     33	004440	116723 	000000G			movb	xresult	,(r3)+		; /BBS/ then the mode, ala "X4"
+     34	004444	116723 	000001G			movb	xresult+1,(r3)+		; /BBS/ one char or two?
+     35	004450	001063 				bne	110$			; /BBS/ it was two this time..
+     36	004452	005303 			30$:	dec	r3			; /BBS/ it was one, fix pointer
+     37	004454	000461 				br	110$			; /BBS/ and continue
+     38
+     39	004456	126227 	000001 	000115 	40$:	cmpb	1(r2)	,#'M&137	; /54/ mode (ie PULSE, TONE)?
+     40	004464	001404 				beq	50$			; /54/ found it
+     41	004466	126227 	000001 	000155 		cmpb	1(r2)	,#'m!40		; /54/ try lower case also..
+     42	004474	001011 				bne	60$			; /54/ nope
+     43	004476	016400 	000000G		50$:	mov	dial.pulse(r4),r0	; /54/ assume PULSE dialing
+     44	004502	005767 	000000G			tst	pulse			; /54/ ever SET PHONE PULSE or TONE?
+     45	004506	001444 				beq	110$			; /54/ no, ignore string
+     46	004510	100440 				bmi	100$			; /54/ ya, it's PULSE
+     47	004512	016400 	000000G			mov	dial.nopulse(r4),r0	; /54/ it's TONE
+     48	004516	000435 				br	100$
+     49
+     50	004520	126227 	000001 	000102 	60$:	cmpb	1(r2)	,#'B&137	; /54/ SET PHONE BLIND?
+     51	004526	001404 				beq	70$			; /54/ ya..
+     52	004530	126227 	000001 	000142 		cmpb	1(r2)	,#'b!40		; /54/ no, perhaps lower case?
+     53	004536	001006 				bne	80$			; /62/ nope
+     54	004540	005767 	000000G		70$:	tst	blind			; /54/ ever do the SET PHONE BLIND?
+     55	004544	001425 				beq	110$			; /54/ no, ignore string
+     56	004546	016400 	000000G			mov	dial.blind(r4),r0	; /54/ yes, insert the data then
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 23-1
+Format dial string
+
+     57	004552	000417 				br	100$
+     58
+     59	004554	126227 	000001 	000101 	80$:	cmpb	1(r2)	,#'A&137	; /62/ auto-answer format effector?
+     60	004562	001404 				beq	90$			; /62/ ya
+     61	004564	126227 	000001 	000141 		cmpb	1(r2)	,#'a!40		; /62/ try lower case also..
+     62	004572	001014 				bne	120$			; /62/ no, copy data then
+     63	004574	016400 	000000G		90$:	mov	ph.noanswer(r4),r0	; /62/ default to not answering phone
+     64	004600	005767 	000000G			tst	answer			; /62/ did user SET PHONE ANSWER?
+     65	004604	001402 				beq	100$			; /62/ no
+     66	004606	016400 	000000G			mov	ph.answer(r4),r0	; /62/ ya, insert answer command
+     67
+     68	004612	112023 			100$:	movb	(r0)+	,(r3)+		; copy a byte please
+     69	004614	001376 				bne	100$			; not a null, next please
+     70	004616	005303 				dec	r3			; fix current pointer up
+     71	004620	005202 			110$:	inc	r2			; skip over the "%" please
+     72	004622	000401 				br	130$			; next please
+     73	004624	111223 			120$:	movb	(r2)	,(r3)+		; not formatting, copy character
+     74	004626	005202 			130$:	inc	r2			; skip over current character now
+     75	004630	000635 				br	10$			; next
+     76
+     77	004632	105013 			140$:	clrb	(r3)			; ensure dial string is .asciz
+     78	004634					unsave	<r3>
+	004634	012603 				 mov	(sp)+	,r3
+     79	004636	000207 				return
+     80
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 24
+Format dial string
+
+      1
+      2						.sbttl	Wait for a response	; /BBS/ moderately revised..
+      3
+      4					;	passed:	 2(sp)	= string
+      5					;		 4(sp)	= time-out
+      6					;	return:	   r0	= <> for success, 0 for time out
+      7
+      8	004640				waitfor:save	<r2,r3,r4>		; this decrements stack pointer 6
+	004640	010246 				 mov	r2	,-(sp)
+	004642	010346 				 mov	r3	,-(sp)
+	004644	010446 				 mov	r4	,-(sp)
+      9	004646	016604 	000010 			mov	2+6(sp)	,r4		; string we are expecting
+     10	004652	016603 	000012 			mov	4+6(sp)	,r3		; time-out in seconds
+     11	004656	070367 	000000G			mul	clkflg	,r3		; make it ticks
+     12	004662	005046 				clr	-(sp)			; init data rec'd flag
+     13	004664	112402 			10$:	movb	(r4)+	,r2		; next character to await
+     14	004666	001453 				beq	50$			; success, we can leave now
+     15
+     16	004670	005767 	000124'		20$:	tst	mute			; allow strike any key abort?
+     17	004674	001011 				bne	30$			; no
+     18	004676	004767 	000000G			call	chkabo			; strike any key to abort
+     19	004702	005700 				tst	r0			; get anything?
+     20	004704	001405 				beq	30$			; nope
+     21	004706	005267 	000000G			inc	cccnt			; fake abort so modem is stopped
+     22	004712	004767 	000000G			call	clrcns			; eat LF after a CR, etc..
+     23	004716	000441 				br	60$			; and bail out
+     24
+     25	004720	005303 			30$:	dec	r3			; one less tick to wait
+     26	004722	001437 				beq	60$			; no more ticks left
+     27	004724					calls	xbinrea	,<#-1>		; this actually waits one tick
+	004724	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004726	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	004732	010605 				  mov	sp	,r5		; set pointer to argument list
+	004734	004767 	000000G			  jsr	pc	,xbinrea		; call the subroutine
+	004740	005726 				  tst	(sp)+			; pop parameter list from stack
+	004742	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     28	004744	005700 				tst	r0			; success?
+     29	004746	001350 				bne	20$			; no
+     30	004750	142701 	177600 			bicb	#^c<177>,r1		; remove parity always
+     31	004754	120127 	000015 			cmpb	r1	,#cr		; is it a return?
+     32	004760	001413 				beq	40$			; ya, don't echo it
+     33	004762	120127 	000012 			cmpb	r1	,#lf		; is it a line feed?
+     34	004766	001410 				beq	40$			; ya, don't echo it
+     35	004770	110100 				movb	r1	,r0		; get a copy of it
+     36	004772	001736 				beq	20$			; dump nulls
+     37	004774	005767 	000124'			tst	mute			; echo to TT this time?
+     38	005000	001003 				bne	40$			; no, don't echo modem I/O
+     39	005002	010016 				mov	r0	,@sp		; set "msg rec'd" flag
+     40	005004	004767 	000000G			call	writ1char		; keep user informed of what's up..
+     41	005010	120102 			40$:	cmpb	r1	,r2		; did we get the correct character?
+     42	005012	001326 				bne	20$			; no, keep waiting then
+     43	005014	000723 				br	10$			; found it, check for next character
+     44
+     45	005016	010600 			50$:	mov	sp	,r0		; success
+     46	005020	000401 				br	70$
+     47	005022	005000 			60$:	clr	r0			; failure
+     48	005024	005726 			70$:	tst	(sp)+			; was anything dumped to TT?
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 24-1
+Wait for a response	; /BBS/ moderately revised..
+
+     49	005026	001402 				beq	80$			; nope
+     50	005030					.newline			; ya, tag it with a newline
+	005030	004767 	000000G			call	l$pcrlf
+     51	005034				80$:	unsave	<r4,r3,r2>
+	005034	012604 				 mov	(sp)+	,r4
+	005036	012603 				 mov	(sp)+	,r3
+	005040	012602 				 mov	(sp)+	,r2
+     52	005042	011666 	000004 			mov	(sp)	,4(sp)		; move return address up and fix stack
+     53	005046	022626 				cmp	(sp)+	,(sp)+		; here instead of in calling macro
+     54	005050	000207 				return
+     55
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 25
+Wait for a response	; /BBS/ moderately revised..
+
+      1
+      2						.sbttl	Eat junk from modem
+      3
+      4	005052				eatjunk:save	<r0,r1>
+	005052	010046 				 mov	r0	,-(sp)
+	005054	010146 				 mov	r1	,-(sp)
+      5	005056				10$:	ttgetc	#-1			; /BBS/ speed up junk consumption
+	005056	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005060	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	005064	010605 				  mov	sp	,r5		; set pointer to argument list
+	005066	004767 	000000G			  jsr	pc	,xbinread		; call the subroutine
+	005072	005726 				  tst	(sp)+			; pop parameter list from stack
+	005074	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      6	005076	005700 				tst	r0			; /BBS/ and thus redial faster..
+      7	005100	001766 				beq	10$			; loop until nothing remains
+      8	005102					unsave	<r1,r0>
+	005102	012601 				 mov	(sp)+	,r1
+	005104	012600 				 mov	(sp)+	,r0
+      9	005106	000207 				return
+     10
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 26
+Eat junk from modem
+
+      1
+      2						.sbttl	Send a string to the modem
+      3
+      4	005110				do.put:	strlen	r1			; /63/ get length
+	005110	010100 			6 				        mov	r1	,-(sp)	; push it
+	005130	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005132	004767 	000000G			  jsr	pc	,binwri		; and go to the routine
+	005136	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	005140	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      8	005142	000207 			10$:	return
+      9
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27
+Send a string to the modem
+
+      1
+      2						.sbttl	SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
+      3
+      4	005144	004767 	000000G		shodia::call	loamdm			; /63/ ensure correct overlay loaded
+      5	005150	016704 	000000G			mov	modtype	,r4		; get address of descriptor
+      6	005154	001005 				bne	10$			; got it
+      7	005156					direrr	#er$mdm			; no modem type has been set
+	005156	012746 	000000G			mov	#er$mdm	,-(sp)
+	005162	004767 	000000G			call	direr$
+      8	005166	000207 				return
+      9
+     10	005170	012703 	000606'		10$:	mov	#deslist,r3		; /63/ info list start
+     11	005174	112301 			20$:	movb	(r3)+	,r1		; /62/ type 2=on/off,1=string,0=number
+     12	005176	112302 				movb	(r3)+	,r2		; /62/ offset, zero implies end
+     13	005200	001456 				beq	100$			; all done
+     14	005202	060402 				add	r4	,r2		; move to the correct offset
+     15	005204	010346 				mov	r3	,-(sp)		; /62/ save the header address
+     16	005206	105723 			30$:	tstb	(r3)+			; now look for the end of it
+     17	005210	001376 				bne	30$			; not yet
+     18	005212	105301 				decb	r1			; /62/ determine data type
+     19	005214	003027 				bgt	70$			; /62/ it's "2"  goto on/off displayer
+     20	005216	001407 				beq	40$			; /62/ it's "1"  goto string handler
+     21	005220					wrtall	(sp)+			; /62/ dump the header
+	005220	012646 				mov	(sp)+	,-(sp)		; pass the address
+	005222	004767 	000000G			call	wrtall			; do it
+     22	005226	011200 				mov	@r2	,r0		; it is "0"  copy number to display
+     23	005230	004767 	000000G			call	L10266			; write it to terminal
+     24	005234	000435 				br	90$			; next please
+     25
+     26	005236	011200 			40$:	mov	(r2)	,r0		; get the string address
+     27	005240	001402 				beq	50$			; /62/ nothing there
+     28	005242	105710 				tstb	@r0			; again
+     29	005244	001002 				bne	60$			; /62/ there is something to see
+     30	005246	005726 			50$:	tst	(sp)+			; /62/ nothing, dump unused header
+     31	005250	000751 				br	20$			; /62/ skip newline, try next one
+     32	005252				60$:	wrtall	(sp)+			; /62/ dump the header
+	005252	012646 				mov	(sp)+	,-(sp)		; pass the address
+	005254	004767 	000000G			call	wrtall			; do it
+     33	005260	004767 	000000G			call	unfmts			; convert and print it
+     34	005264					wrtall	r0			; do it
+	005264	010046 				mov	r0	,-(sp)		; pass the address
+	005266	004767 	000000G			call	wrtall			; do it
+     35	005272	000416 				br	90$			; next
+     36
+     37	005274				70$:	wrtall	(sp)+			; /62/ dump the header
+	005274	012646 				mov	(sp)+	,-(sp)		; pass the address
+	005276	004767 	000000G			call	wrtall			; do it
+     38	005302	011200 				mov	(r2)	,r0		; /62/ get the data
+     39	005304	001405 				beq	80$			; /62/ 0 = no
+     40	005306					wrtall	#dia.08			; /63/ anything_else = "Yes"
+	005306	012746 	000223'			mov	#dia.08	,-(sp)		; pass the address
+	005312	004767 	000000G			call	wrtall			; do it
+     41
+     42	005316	000404 				br	90$			; /62/
+     43	005320				80$:	wrtall	#dia.09			; /63/ "No"
+	005320	012746 	000227'			mov	#dia.09	,-(sp)		; pass the address
+	005324	004767 	000000G			call	wrtall			; do it
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27-1
+SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
+
+     44	005330				90$:	.newline
+	005330	004767 	000000G			call	l$pcrlf
+     45	005334	000717 				br	20$			; next
+     46
+     47	005336				100$:	wrtall	#dia.10			; /63/ "Dial time-out secs: "
+	005336	012746 	000232'			mov	#dia.10	,-(sp)		; pass the address
+	005342	004767 	000000G			call	wrtall			; do it
+     48	005346	016700 	000000G			mov	diatmo	,r0		; /62/ get time-out time
+     49	005352	004767 	000000G			call	L10266			; /62/ display it
+     50	005356					.newline			; /62/
+	005356	004767 	000000G			call	l$pcrlf
+     51
+     52	005362					wrtall	#dia.11			; /63/ "Settle-time ticks:  "
+	005362	012746 	000257'			mov	#dia.11	,-(sp)		; pass the address
+	005366	004767 	000000G			call	wrtall			; do it
+     53	005372	016700 	000000G			mov	settle	,r0		; get settle time
+     54	005376	004767 	000000G			call	L10266			; display it
+     55	005402					.newline			; /62/
+	005402	004767 	000000G			call	l$pcrlf
+     56
+     57	005406	005046 				clr	-(sp)			; a flag, if <> something found
+     58
+     59	005410	016401 	000000G			mov	ph.noanswer(r4),r1	; /62/ default to not answering phone
+     60	005414	005767 	000000G			tst	answer			; /62/ did user SET PHONE ANSWER?
+     61	005420	001402 				beq	110$			; /62/ no
+     62	005422	016401 	000000G			mov	ph.answer(r4),r1	; /62/ ya, insert answer command
+     63	005426	105711 			110$:	tstb	@r1			; /62/ if there is any..
+     64	005430	001404 				beq	120$			; /62/ there isn't
+     65	005432	112702 	000101 			movb	#'A&137	,r2		; /62/ there is, and it's this type
+     66	005436	004767 	000420 			call	foreff			; /62/ go display it
+     67
+     68	005442	005767 	000000G		120$:	tst	blind			; ever SET PHONE BLIND?
+     69	005446	001410 				beq	130$			; no, ignore string
+     70	005450	016401 	000000G			mov	dial.blind(r4),r1	; yes, insert the data then
+     71	005454	105711 				tstb	@r1			; if there is any..
+     72	005456	001404 				beq	130$			; there isn't
+     73	005460	112702 	000102 			movb	#'B&137	,r2		; /62/ there is, and it's this type
+     74	005464	004767 	000372 			call	foreff			; go display it
+     75
+     76	005470	016401 	000000G		130$:	mov	dial.pulse(r4),r1	; assume PULSE dialing
+     77	005474	005767 	000000G			tst	pulse			; ever SET PHONE PULSE or TONE?
+     78	005500	001411 				beq	150$			; no, ignore string
+     79	005502	100402 				bmi	140$			; ya, it's PULSE
+     80	005504	016401 	000000G			mov	dial.nopulse(r4),r1	; it's TONE
+     81	005510	105711 			140$:	tstb	@r1			; anything defined?
+     82	005512	001404 				beq	150$			; nope
+     83	005514	112702 	000115 			movb	#'M&137	,r2		; /62/ there is, and it's this type
+     84	005520	004767 	000336 			call	foreff			; go display it
+     85
+     86	005524	105767 	000000G		150$:	tstb	xresult			; anything set here?
+     87	005530	001423 				beq	170$			; nope..
+     88	005532	005716 				tst	(sp)			; /62/ has this stuff been identified?
+     89	005534	001005 				bne	160$			; /62 ya
+     90	005536					wrtall	#msg$fmt		; /62/ no, do that now
+	005536	012746 	000472'			mov	#msg$fmt	,-(sp)		; pass the address
+	005542	004767 	000000G			call	wrtall			; do it
+     91	005546	010616 				mov	sp	,(sp)		; /62/ and set flag it has been done
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27-2
+SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
+
+     92	005550				160$:	wrtall	#dia.12			; /63/ ya, dump a header: '%X = "X'
+	005550	012746 	000304'			mov	#dia.12	,-(sp)		; pass the address
+	005554	004767 	000000G			call	wrtall			; do it
+     93	005560					wrtall	#xresult		; and the actual number
+	005560	012746 	000000G			mov	#xresult	,-(sp)		; pass the address
+	005564	004767 	000000G			call	wrtall			; do it
+     94	005570	012700 	000042 			mov	#'"	,r0		; /62/
+     95	005574	004767 	000000G			call	writ1char		; /62/
+     96
+     97	005600	005726 			170$:	tst	(sp)+			; /62/ dump formatter flag buffer
+     98	005602	001402 				beq	180$			; /62/ no newline needed..
+     99	005604					.newline			; done with format effectors
+	005604	004767 	000000G			call	l$pcrlf
+    100
+    101	005610				180$:	wrtall	#dia.13			; /63/ "Binary-responses:   "
+	005610	012746 	000314'			mov	#dia.13	,-(sp)		; pass the address
+	005614	004767 	000000G			call	wrtall			; do it
+    102	005620	005764 	000000G			tst	res.bin(r4)		; /62/ on or off?
+    103	005624	001405 				beq	190$			; /62/ 0 = no
+    104	005626					wrtall	#dia.08			; /63/ anything_else = "Yes"
+	005626	012746 	000223'			mov	#dia.08	,-(sp)		; pass the address
+	005632	004767 	000000G			call	wrtall			; do it
+    105	005636	000404 				br	200$			; /62/
+    106	005640				190$:	wrtall	#dia.09			; /63/ "No"
+	005640	012746 	000227'			mov	#dia.09	,-(sp)		; pass the address
+	005644	004767 	000000G			call	wrtall			; do it
+    107	005650				200$:	.newline			; /62/
+	005650	004767 	000000G			call	l$pcrlf
+    108
+    109	005654	016403 	000000G			mov	res.head(r4),r3		; response header
+    110	005660	001476 				beq	290$			; nothing present
+    111	005662					wrtall	#dia.14			; /63/ "Result strings:"<cr><lf>
+	005662	012746 	000341'			mov	#dia.14	,-(sp)		; pass the address
+	005666	004767 	000000G			call	wrtall			; do it
+    112	005672	010300 			210$:	mov	r3	,r0		; /62/ get the response address
+    113	005674	001470 				beq	290$			; all done
+    114	005676	062700 	000004 			add	#4	,r0		; /62/ offset to text
+    115	005702	004767 	000000G			call	unfmts			; /62/ convert it
+    116	005706					wrtall	r0			; /62/ and print it
+	005706	010046 				mov	r0	,-(sp)		; pass the address
+	005710	004767 	000000G			call	wrtall			; do it
+    117	005714					strlen	r0			; /62/ ..more efficient
+	005714	010000 				mov	r0	,r0
+	005716	004767 	000000G			call	l$len
+    118	005722	162700 	000022 			sub	#col.act,r0		; number of blanks needed to pad
+    119	005726	005400 				neg	r0			; make it positive
+    120	005730	010005 				mov	r0	,r5		; save it in a safe place
+    121	005732	003405 				ble	230$			; avoid this please
+    122	005734	012700 	000040 			mov	#space	,r0		; load up a space
+    123	005740	004767 	000000G		220$:	call	writ1ch			; this way is more efficient
+    124	005744	077503 				sob	r5	,220$		; loop until done
+    125
+    126	005746	016300 	000002 		230$:	mov	2(r3)	,r0		; what is the message class?
+    127	005752	100430 				bmi	270$			; if < it's failure to connect
+    128	005754	005300 			240$:	dec	r0			; if = 1 it's ringing
+    129	005756	001421 				beq	260$			; it was one, because now it's 0
+    130	005760					wrtall	#dia.15			; /63/ "Success"
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27-3
+SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
+
+	005760	012746 	000363'			mov	#dia.15	,-(sp)		; pass the address
+	005764	004767 	000000G			call	wrtall			; do it
+    131	005770	005300 				dec	r0			; if = 2 connect w/o speed check
+    132	005772	001410 				beq	250$			; it wuz 2
+    133	005774	005200 				inc	r0			; restore
+    134	005776	005200 				inc	r0			; r0
+    135	006000					wrtall	#msg$dte		; "  DTE is forced to "
+	006000	012746 	000445'			mov	#msg$dte	,-(sp)		; pass the address
+	006004	004767 	000000G			call	wrtall			; do it
+    136	006010	004767 	000000G			call	L10266			; tag above with speed
+    137	006014				250$:	.newline
+	006014	004767 	000000G			call	l$pcrlf
+    138	006020	000414 				br	280$
+    139	006022				260$:	wrtall	#dia.16			; /63/ "Rings+1"<cr><lf>
+	006022	012746 	000373'			mov	#dia.16	,-(sp)		; pass the address
+	006026	004767 	000000G			call	wrtall			; do it
+    140	006032	000407 				br	280$
+    141	006034	020027 	000000G		270$:	cmp	r0	,#con38400	; /62/ kludge to see if it's 38.4kb
+    142	006040	001745 				beq	240$			; /62/ it is..
+    143	006042					wrtall	#dia.17			; /63/ "Failure"<cr><lf>
+	006042	012746 	000405'			mov	#dia.17	,-(sp)		; pass the address
+	006046	004767 	000000G			call	wrtall			; do it
+    144	006052	011303 			280$:	mov	(r3)	,r3		; pick up link to..
+    145	006054	000706 				br	210$			; ..next please
+    146
+    147	006056	005000 			290$:	clr	r0			; /62/
+    148	006060	000207 				return
+    149
+    150	006062	005766 	000002 		foreff:	tst	2(sp)			; /62/ need to print header?
+    151	006066	001006 				bne	10$			; /62/ nope..
+    152	006070					wrtall	#msg$fmt		; /62/ ya
+	006070	012746 	000472'			mov	#msg$fmt	,-(sp)		; pass the address
+	006074	004767 	000000G			call	wrtall			; do it
+    153	006100	010666 	000002 			mov	sp	,2(sp)		; /62/ but not anymore
+    154	006104	012700 	000045 		10$:	mov	#'%	,r0		; /62/ a percent sign char
+    155	006110	004767 	000000G			call	writ1char		; /62/ dump it to the terminal
+    156	006114	110200 				movb	r2	,r0		; /62/ the format effector character
+    157	006116	004767 	000000G			call	writ1char		; /62/ now dump it to tt
+    158	006122					wrtall	#prefix			; /62/ do some display formatting
+	006122	012746 	000573'			mov	#prefix	,-(sp)		; pass the address
+	006126	004767 	000000G			call	wrtall			; do it
+    159	006132					wrtall	r1			; /62/ now display what is inserted
+	006132	010146 				mov	r1	,-(sp)		; pass the address
+	006134	004767 	000000G			call	wrtall			; do it
+    160	006140					wrtall	#tripsp			; /62/ format display
+	006140	012746 	000600'			mov	#tripsp	,-(sp)		; pass the address
+	006144	004767 	000000G			call	wrtall			; do it
+    161	006150	000207 				return
+    162
+    163	006152					des	1 ,mod.string	,<Modem name:         >
+	000606	   001 	   000G			.byte	1	,mod.string		; 1_0=integer, 1_1=string
+	000610	   115 	   157 	   144 		.asciz	@Modem name:         @			; /62/ 1_2=on/off
+    164	006152					des	1 ,mod.comment	,<Modem type:         >
+	000635	   001 	   000G			.byte	1	,mod.comment		; 1_0=integer, 1_1=string
+	000637	   115 	   157 	   144 		.asciz	@Modem type:         @			; /62/ 1_2=on/off
+    165	006152					des	1 ,wake.string	,<Wakeup string:      >
+	000664	   001 	   000G			.byte	1	,wake.string		; 1_0=integer, 1_1=string
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27-4
+SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
+
+	000666	   127 	   141 	   153 		.asciz	@Wakeup string:      @			; /62/ 1_2=on/off
+    166	006152					des	0 ,wake.rate	,<Wake-rate in ticks: >
+	000713	   000 	   000G			.byte	0	,wake.rate		; 0_0=integer, 0_1=string
+	000715	   127 	   141 	   153 		.asciz	@Wake-rate in ticks: @			; /62/ 0_2=on/off
+    167	006152					des	1 ,wake.prompt	,<Response to wakeup: >
+	000742	   001 	   000G			.byte	1	,wake.prompt		; 1_0=integer, 1_1=string
+	000744	   122 	   145 	   163 		.asciz	@Response to wakeup: @			; /62/ 1_2=on/off
+    168	006152					des	1 ,dial.string	,<Dial FORMAT string: >
+	000771	   001 	   000G			.byte	1	,dial.string		; 1_0=integer, 1_1=string
+	000773	   104 	   151 	   141 		.asciz	@Dial FORMAT string: @			; /62/ 1_2=on/off
+    169	006152					des	0 ,dial.rate	,<Dial-rate in ticks: >
+	001020	   000 	   000G			.byte	0	,dial.rate		; 0_0=integer, 0_1=string
+	001022	   104 	   151 	   141 		.asciz	@Dial-rate in ticks: @			; /62/ 0_2=on/off
+    170	006152					des	1 ,dial.wait	,<Pause character(s): >
+	001047	   001 	   000G			.byte	1	,dial.wait		; 1_0=integer, 1_1=string
+	001051	   120 	   141 	   165 		.asciz	@Pause character(s): @			; /62/ 1_2=on/off
+    171	006152					des	1 ,dial.ack	,<Dial-acknowledge:   >
+	001076	   001 	   000G			.byte	1	,dial.ack		; 1_0=integer, 1_1=string
+	001100	   104 	   151 	   141 		.asciz	@Dial-acknowledge:   @			; /62/ 1_2=on/off
+    172	006152					des	1 ,dmod.string	,<"Initiate" string:  >
+	001125	   001 	   000G			.byte	1	,dmod.string		; 1_0=integer, 1_1=string
+	001127	   042 	   111 	   156 		.asciz	@"Initiate" string:  @			; /62/ 1_2=on/off
+    173	006152					des	1 ,dmod.prompt	,<"Initiate" prompt:  >
+	001154	   001 	   000G			.byte	1	,dmod.prompt		; 1_0=integer, 1_1=string
+	001156	   042 	   111 	   156 		.asciz	@"Initiate" prompt:  @			; /62/ 1_2=on/off
+    174	006152					des	1 ,dial.confirm	,<"Confirm" string:   >
+	001203	   001 	   000G			.byte	1	,dial.confirm		; 1_0=integer, 1_1=string
+	001205	   042 	   103 	   157 		.asciz	@"Confirm" string:   @			; /62/ 1_2=on/off
+    175	006152					des	1 ,dial.go	,<"Confirm" ack:      >
+	001232	   001 	   000G			.byte	1	,dial.go		; 1_0=integer, 1_1=string
+	001234	   042 	   103 	   157 		.asciz	@"Confirm" ack:      @			; /62/ 1_2=on/off
+    176	006152					des	2 ,dial.echo	,<Echoes dial string: >
+	001261	   002 	   000G			.byte	2	,dial.echo		; 2_0=integer, 2_1=string
+	001263	   105 	   143 	   150 		.asciz	@Echoes dial string: @			; /62/ 2_2=on/off
+    177	006152					des	2 ,init.once	,<Redial w/o reinit:  >
+	001310	   002 	   000G			.byte	2	,init.once		; 2_0=integer, 2_1=string
+	001312	   122 	   145 	   144 		.asciz	@Redial w/o reinit:  @			; /62/ 2_2=on/off
+    178	006152					des	1 ,dial.blind	,<Blind dial string:  >
+	001337	   001 	   000G			.byte	1	,dial.blind		; 1_0=integer, 1_1=string
+	001341	   102 	   154 	   151 		.asciz	@Blind dial string:  @			; /62/ 1_2=on/off
+    179	006152					des	1 ,dial.pulse	,<Pulse dial string:  >
+	001366	   001 	   000G			.byte	1	,dial.pulse		; 1_0=integer, 1_1=string
+	001370	   120 	   165 	   154 		.asciz	@Pulse dial string:  @			; /62/ 1_2=on/off
+    180	006152					des	1 ,dial.nopulse	,<Tone dial string:   >
+	001415	   001 	   000G			.byte	1	,dial.nopulse		; 1_0=integer, 1_1=string
+	001417	   124 	   157 	   156 		.asciz	@Tone dial string:   @			; /62/ 1_2=on/off
+    181	006152					des	1 ,dial.xabort	,<Dial abort string:  >
+	001444	   001 	   000G			.byte	1	,dial.xabort		; 1_0=integer, 1_1=string
+	001446	   104 	   151 	   141 		.asciz	@Dial abort string:  @			; /62/ 1_2=on/off
+    182	006152					des	1 ,dial.idle	,<Reset/idle string:  >
+	001473	   001 	   000G			.byte	1	,dial.idle		; 1_0=integer, 1_1=string
+	001475	   122 	   145 	   163 		.asciz	@Reset/idle string:  @			; /62/ 1_2=on/off
+    183	006152					des	1 ,ph.answer	,<Enable autoanswer:  >
+	001522	   001 	   000G			.byte	1	,ph.answer		; 1_0=integer, 1_1=string
+	001524	   105 	   156 	   141 		.asciz	@Enable autoanswer:  @			; /62/ 1_2=on/off
+    184	006152					des	1 ,ph.noasnwer	,<Disable autoanswer: >
+	001551	   001 	   000G			.byte	1	,ph.noasnwer		; 1_0=integer, 1_1=string
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27-5
+SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
+
+	001553	   104 	   151 	   163 		.asciz	@Disable autoanswer: @			; /62/ 1_2=on/off
+    185	006152					des
+	001600	   000 	   000 			.byte	0	,0
+    186
+    187		000001 				.end
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27-6
+Symbol table
+
+ABORT   000000R     003	DEL   = 000177   	ER$INR= ****** GX	MODTYP= ****** GX	SET.DT  000456R     002
+ABORTE= ****** GX	DESLIS  000606R     003	ER$MDM= ****** GX	MOD.CO= ****** GX	SET.MO  000340R     002
+ALSIZE= 002000   	DIAL.A= ****** GX	ER$NDF= ****** GX	MOD.NE= ****** GX	SEVER$= 000010
+ANSWER= ****** GX	DIAL.B= ****** GX	ER$NNF= ****** GX	MOD.ST= ****** GX	SHODIA  005144RG    002
+ARGBUF= ****** GX	DIAL.C= ****** GX	ER$NPN= ****** GX	MREADY= ****** GX	SHO$LI= ****** GX
+AT.ALL  000177   	DIAL.E= ****** GX	ER$PLS= ****** GX	MSG$DT  000445R     003	SIGNON= ****** GX
+AT.CDT  000001   	DIAL.G= ****** GX	ER$UNM= ****** GX	MSG$FM  000472R     003	SOH   = 000001
+AT.INF  000002   	DIAL.I= ****** GX	ER$WKE= ****** GX	MUTE    000124R     004	SPACE = 000040
+AT.LEN  000004   	DIAL.N= ****** GX	ER$WKS= ****** GX	NODPRO  000517R     003	SPARE1= ****** GX
+AT.ON   100000   	DIAL.P= ****** GX	ESC   = 000033   	NOD.AC  000555R     003	STATUS= 000000
+AT.PRO  000010   	DIAL.R= ****** GX	FAILED= ****** GX	NOD.GO  000540R     003	STRCPY= ****** GX
+AT.SYS  000020   	DIAL.S= ****** GX	FATAL$= 000020   	NOREPL= 000007   	SUCCS$= 000001
+AT.TYP  000040   	DIAL.T= ****** GX	FF    = 000014   	NOSCOP= 000000   	SUSPEN= ****** GX
+AT.XLE  000100   	DIAL.W= ****** GX	FINDMO  001430R     002	NRINGS= 000002   	SY.INI= ****** GX
+BELL  = 000007   	DIAL.X= ****** GX	FINDNU  001664R     002	OPENTT= ****** GX	TAB   = 000011
+BELLS   000030R     003	DIATMO= ****** GX	FIXSPE  001374R     002	PAR$EV  000002   	TERMIN  177777
+BINARY  000001   	DIA.ER  000322R     002	FMTSTR  004316R     002	PAR$MA  000003   	TEXT    000000
+BINWRI= ****** GX	DIA.01  000047R     003	FOREFF  006062R     002	PAR$NO  000000   	TILDE = 000176
+BLIND = ****** GX	DIA.02  000066R     003	GETATN  002124R     002	PAR$OD  000001   	TIME.S= ****** GX
+BS    = 000010   	DIA.03  000112R     003	GETSTS  003556R     002	PAR$SP  000004   	TRIPSP  000600R     003
+BUFFER  000000R     004	DIA.04  000136R     003	INCSTS= ****** GX	PHNUM = ****** GX	TTNAME= ****** GX
+B4SPEE= ****** GX	DIA.05  000144R     003	INFOMS= ****** GX	PH.ANS= ****** GX	TTSPEE= ****** GX
+CAPA.A= 000010   	DIA.06  000150R     003	INIT.O= ****** GX	PH.NOA= ****** GX	TTY   = 000001
+CAPA.L= 000002   	DIA.07  000205R     003	INQCD = ****** GX	PNHEAD= ****** GX	TTYFIN= ****** GX
+CAPA.S= 000004   	DIA.08  000223R     003	INSTR = ****** GX	PREFIX  000573R     003	TTYHAN= ****** GX
+CCCNT = ****** GX	DIA.09  000227R     003	JSW   = 000044   	PULSE = ****** GX	UNFMTS= ****** GX
+CHKABO= ****** GX	DIA.10  000232R     003	KRTINC= 000001   	P.CAPA= 000011   	UPCASE= ****** GX
+CLKFLG= ****** GX	DIA.11  000257R     003	LF    = 000012   	P.CHKT= 000007   	USERRB= 000053
+CLRCNS= ****** GX	DIA.12  000304R     003	LINKST= ****** GX	P.EOL = 000004   	VT100 = 000002
+COL.AC= 000022   	DIA.13  000314R     003	LN$CNT= 000012   	P.MXL1= 000013   	VT200 = 000003
+COMMA = 000054   	DIA.14  000341R     003	LN$MAX= 000204   	P.MXL2= 000014   	WAITFO  004640R     002
+CONNEC= ****** GX	DIA.15  000363R     003	LOAMDM= ****** GX	P.NPAD= 000002   	WAKE.P= ****** GX
+CON$ES= 000034   	DIA.16  000373R     003	LOCSIZ= 000004   	P.PADC= 000003   	WAKE.R= ****** GX
+CON384= ****** GX	DIA.17  000405R     003	LOG$AL= 000003   	P.QBIN= 000006   	WAKE.S= ****** GX
+COPYZ$= ****** GX	DIA.18  000417R     003	LOG$CO= 000002   	P.QCTL= 000005   	WARN$ = 000002
+CR    = 000015   	DIA.19  000425R     003	LOG$DE= 000020   	P.REPT= 000010   	WRIT1C= ****** GX
+CTRL$N= 000016   	DIRER$= ****** GX	LOG$IO= 000010   	P.SPSI= 000000   	WRTALL= ****** GX
+CTRL$O= 000017   	DMOD.P= ****** GX	LOG$ON= 040000   	P.TIME= 000001   	XBINRE= ****** GX
+C$CONN= ****** GX	DMOD.S= ****** GX	LOG$OP= 100000   	P.VEND= 000017   	XOFF  = 000023
+C$DIAL  000730RG    002	DODIAL  002670R     002	LOG$PA= 000001   	P.WIND= 000012   	XON   = 000021
+C$HANG  000260RG    002	DOT   = 000056   	LOG$RP= 000004   	REINIT  000540RG    002	XREDIA= ****** GX
+C$IDLE  001250RG    002	DO.PUT  005110R     002	L$LEN = ****** GX	RES.BI= ****** GX	XRESUL= ****** GX
+C$REDI  000576RG    002	EATJUN  005052R     002	L$NOLF= ****** GX	RES.HE= ****** GX	X.RESU= ****** GX
+C.CRLF= 000004   	ERBFSI= 000170   	L$PCRL= ****** GX	RETRIE  000126R     004	$ALLSI= 003614
+C.LCUC= 000040   	ERRBYT= 000052   	L$VAL = ****** GX	R50DEV= ****** GX	$$    = 000002
+C.LSPA= 000010   	ERROR$= 000004   	L10012= ****** GX	SCOLON= 000073   	$$TRIP= 000000
+C.SSPA= 000020   	ERRTXT= ****** GX	L10266= ****** GX	SETSPD= ****** GX	$$1   = 000001
+C.TSPA= 000200   	ER$ABK= ****** GX	MAXLNG= 003600   	SETTLE= ****** GX	$$2   = 000000
+DECNAT  000002   	ER$DCD= ****** GX	MAXPAK  000136   	SET$DT  000242RG    002	$$5   = 000001
+DEFMSG  000033R     003	ER$IDL= ****** GX	MODEM = ****** GX	SET$MO  000000RG    002	.DEFAU  004024R     002
+
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	006152    002	(RO,I,LCL,REL,CON)
+$PDATA	001602    003	(RO,D,LCL,REL,CON)
+$RWDAT	000130    004	(RW,D,LCL,REL,CON)
+KRTDIA	Dial command and relate	MACRO V05.03b  00:01  Page 27-7
+Symbol table
+
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 12104 Words  ( 48 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.43
+KRTDIA,KRTDIA=KRTDIA

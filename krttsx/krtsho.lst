@@ -1,0 +1,3655 @@
+KRTSHO	The SHOW command	MACRO V05.03b  00:01
+Table of contents
+
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    7-   1	KRTCDF	Define command macro
+   10-   2	Local data		; /63/ consolidated all data here..
+   11-   3	SHOW command processor
+   12-   2	Command dispatch data table
+   13-   2	SHOW ALL		; /63/ split to insert SHO MODEM
+   14-   2	SHOW DIAL
+   15-   2	SHOW DEBUG		; /62/ major revision
+   16-   2	SHOW DATE, DAYTIME, DEFAULT, HOME, TIME
+   17-   2	SHOW SUBMOUNTS		; /BBS/ all new routine..
+   18-   2	SHOW FILE-TYPE
+   19-   2	SHOW BLOCK, EOF, INCOMPLETE-FILE-DISPOSITION	; /63/
+   20-   2	SHOW ESCAPE		; /BBS/ modified..
+   21-   2	SHOW PARAMETERS
+   22-   2	SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
+   23-   2	STATUS
+   24-   2	SHOW DELAY, HANDSHAKE, PAUSE, PARITY
+   25-   2	SHOW TERMINAL, CONSOLE
+   26-   2	SHOW ATTRIBUTES		; /63/ individual attrs ala C-Kermit
+   27-   2	SHOW CL:		; /62/ all new
+   28-   2	SHOW START-OF-PACKET
+   29-   2	SHOW BINARY-TYPE
+   31-   2	SHOW PHONE		; /BBS/ modified..
+   32-   2	SHOW VLSWCH
+   33-   2	SHOW SL			; /BBS/ added..
+   34-   2	SHOW MEMORY	; /BBS/ all new
+   35-   2	SHOW REPEAT-QUOTING, SERVER, UPDATE	; /BBS/ added
+   36-   2	SHOW CONTROL-CHARACTER	; /63/ all new..
+   37-   2	COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
+   38-   2	Get second argument for a command
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTSHO	The SHOW command
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	enhanced SHOW CL
+      7					;	individually display attributes, ala C-Kermit
+      8					;	add SHOW CONTROL-CHARACTER
+      9					;	add SHOW WILDCARDS
+     10					;	moved SHO VERSION to KRTCMD so the server can also call it..
+     11					;	add SHO DAYTIME
+     12					;	SHO ALL now shows all, moved to KRTCMD so it can call everything
+     13
+     14					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     15					;
+     16					;	added SHO BAUD, DTR, DUPLEX, END-OF-LINE, FLOW-CONTROL, HOME, LD:,
+     17					;	LOCAL-ECHO, LOGFILE, LONG-PACKETS, RANDOM, RECEIVE, SEED, SEND, SPEED
+     18					;	cleanup, condense logging (debug) modes display
+     19					;	display current-block-number and size-of logfile in SHO DEBUG
+     20					;	move SETTLE-TIME to SHO DIAL
+     21					;	conform to major sinit stuff update in KRTINI.MAC
+     22					;	include last number dialed in SH PHONE
+     23					;	add SHOW CL, EOF
+     24
+     25					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     26					;
+     27					;	SHOW command with no args displays assigns ala RT-11
+     28					;	sho$all - shortened up
+     29					;	added sho$attributes
+     30					;	added sho$devices - displays the bbs access permission list only
+     31					;	added sho$submounts, using TSX emts
+     32					;	added sho$vl - displays status of vlswch under TSX+
+     33					;	add DEC-Multinational type to sho$file
+     34					;	moved release notes to the help text file
+     35					;	sho$packet - display "^A" notation in addition to octal numbers
+     36					;	also lists long-packets max length, set length, rec'd length
+     37					;	add xtime for spiffier transfer time display, other small fixes
+     38					;	sho$file - indicate if file name conversion disabled, lower case on
+     39					;	added home directory to sho$default
+     40					;	fixed display formatting for sho$phone_numbers
+     41					;	sho$params indicates if SET LONG OFF or SET NOLONG
+     42					;	added MILNET to SHO CONSOLE
+     43					;	added c$print
+     44					;	moved sho$line to krtcm1
+     45					;	added SHO TERMINAL
+     46					;	added SHO RETRY, TIME-OUT, made PACKET do parameters, not stats
+     47					;	add SHOW INCOMPLETE-FILE-DISPOSITION
+     48					;	add SHO MEMORY, display remaining handler free space under RT-11
+     49					;	add SHO SL, SHO UPDATE, added LOCAL-ECHO, BREAK to SHO CONSOLE
+     50					;	add SHO REPEAT-CHAR, SERVER
+     51					;	pass file date/time/prot to COPY output file
+     52					;	use DEC method of version numbering for SHO VERSION
+     53
+     54					;	31-Jan-84  08:28:16  Brian Nelson
+     55					;
+     56					;	Remove SHOW code from KRTCMD.MAC for placement into an overlay.
+     57
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 2
+
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2						.include "IN:KRTCDF.MAC"
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 7
+KRTCDF	Define command macro
+
+      1						.sbttl	KRTCDF	Define command macro
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	modify optional prompt arg to use address of prompt string
+      7					;	allows longer strings to be used and eliminates redundancy
+      8					;	drop $CMGLOBAL
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	$$trip hack to avoid "ndf/df" tests blowing up .LST output
+     13
+     14					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     15					;
+     16					;	dump unused argtyp
+     17
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 8
+KRTCDF	Define command macro
+
+      1
+      2					;	usage example:
+      3					;
+      4					;	command	cmdlst	SEND ,3 ,c$send ,optional_prompt_addr
+      5					;
+      6					;	Would define the SEND command with a minimum length of
+      7					;	three characters, and dispatch it to c$send.  Use of a
+      8					;	prompt will cause  same  to appear when the command is
+      9					;	given without argument(s).  cmdlst is the listhead for
+     10					;	all commands and is  only  used once, but must be used
+     11					;	in all entries to keep other arguments in place.
+     12
+     13
+     14		000001 				KRTCDF	=  1			; used to detect an .include error
+     15		000004 				$LISTL	== 4			; number of args stuffed in list here
+     16		000000 				$$TRIP	=  0			; /62/ init trip counter
+     17
+     18						.macro	command	list ,name ,min ,address ,arg
+     19						.list me
+     20						.save
+     21						.nlist me
+     22						.if b <name>			; command name supplied this time?
+     23						.list me
+     24						.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of list
+     25						.nlist me
+     26						.word	0			; /62/ mark it with a null
+     27						.list me			; /63/
+     28						.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+     29						.even				; /63/ doing this at the end of a list
+     30						.nlist me			; /63/
+     31						$$trip	= 0			; /62/ reset trip counter for next cmd
+     32						.iff	; b <name>		; ya, process args into command data
+     33						.list me
+     34						.psect	cmdtxt	,ro,d,lcl,rel,con
+     35						.nlist me
+     36						$$name	= .
+     37						.asciz	#name#			; store the command name
+     38						.psect	cmddsp	,ro,d,lcl,rel,con
+     39						.nlist me
+     40						  .if eq $$trip			; /62/ if first pass label listhead
+     41					'list:					; global flag was not set
+     42						  $$trip = 1			; /62/ not first time through anymore
+     43						  .endc				; no
+     44						.word	$$name			; store address of command name text
+     45						.word	min			; min number of chars to match
+     46						.word	address			; the command routine's address
+     47						  .if b <arg>			; /63/ optional_prompt address given?
+     48						  .word	0			; /63/ no, say so with a null here
+     49						  .iff
+     50						  .word	arg			; /63/ ya, stuff in its location
+     51						  .endc
+     52						.endc	; b <name>
+     53						.list me
+     54						.restore
+     55						.nlist me
+     56						.endm
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 9
+KRTCDF	Define command macro
+
+      1						.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
+      2
+      3						.mcall	.PURGE			; /62/
+      4
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 10
+KRTCDF	Define command macro
+
+      1
+      2						.sbttl	Local data		; /63/ consolidated all data here..
+      3
+      4	000000					.psect	$pdata
+      5	000000	000001 	000100 	000004 	attlst:	.word	at.cdt	,at.xle	,at.len	,at.pro	,at.sys	,at.inf	,at.typ	,0
+      6	000020	000036'	000044'	000062'	atthdr:	.word	10$	,20$	,30$	,40$	,50$	,60$	,70$
+      7	000036	   040 	   104 	   141 	 10$:	.asciz	" Date"
+      8	000044	   040 	   105 	   170 	 20$:	.asciz	" Exact-Length"
+      9	000062	   040 	   114 	   145 	 30$:	.asciz	" Length"
+     10	000072	   040 	   120 	   162 	 40$:	.asciz	" Protection"
+     11	000106	   040 	   123 	   171 	 50$:	.asciz	" System-ID"
+     12	000121	   040 	   123 	   171 	 60$:	.asciz	" System-Info"
+     13	000136	   040 	   124 	   171 	 70$:	.asciz	" Type (text/binary)"
+     14						.even
+     15	000162	000170'	000210'	000230'	blolst:	.word	10$	,20$	,30$
+     16	000170	   061 	   055 	   102 	 10$:	.asciz	"1-Byte-Checksum"
+     17	000210	   062 	   055 	   102 	 20$:	.asciz	"2-Byte-Checksum"
+     18	000230	   063 	   055 	   102 	 30$:	.asciz	"3-Byte-CRC-CCITT"
+     19						.even
+     20	000252	000002 	000001 	000010 	deblst:	.word	log$co	,log$pa	,log$io	,log$rp	,log$de	,0
+     21	000266	000300'	000331'	000362'	debhdr:	.word	10$	,20$	,30$	,40$	,50$
+     22	000300	   103 	   117 	   116 	 10$:	.asciz	"CONNECT session logging:"
+     23	000331	   120 	   101 	   103 	 20$:	.asciz	"PACKET exchange logging:"
+     24	000362	   122 	   101 	   127 	 30$:	.asciz	"RAW  binary I/O logging:"
+     25	000413	   122 	   120 	   101 	 40$:	.asciz	"RPACK rec packets to TT:"
+     26	000444	   124 	   105 	   122 	 50$:	.asciz	"TERMINAL  debug display:"
+     27						.even
+     28	000476	000504'	000527'	000527'	fillst:	.word	10$	,20$	,20$
+     29	000504	   101 	   123 	   103 	 10$:	.asciz	"ASCII (7-bit text)"
+     30	000527	   102 	   111 	   116 	 20$:	.asciz	"BINARY (fixed 512, no carriage control)"
+     31	000577	   104 	   105 	   103 	 30$:	.asciz	"DEC-Multinational (8-bit text)"
+     32						.even
+     33	000636	000650'	000655'	000661'	parlst:	.word	10$	,20$	,30$	,40$	,50$
+     34	000650	   116 	   117 	   116 	 10$:	.asciz	"NONE"
+     35	000655	   117 	   104 	   104 	 20$:	.asciz	"ODD"
+     36	000661	   105 	   126 	   105 	 30$:	.asciz	"EVEN"
+     37	000666	   115 	   101 	   122 	 40$:	.asciz	"MARK"
+     38	000673	   123 	   120 	   101 	 50$:	.asciz	"SPACE"
+     39						.even
+     40	000702	000712'	000722'	000726'	ttlst:	.word	10$	,20$	,30$	,40$
+     41	000712	   116 	   117 	   123 	 10$:	.asciz	"NOSCOPE"
+     42	000722	   124 	   124 	   131 	 20$:	.asciz	"TTY"
+     43	000726	   126 	   124 	   061 	 30$:	.asciz	"VT100"
+     44	000734	   126 	   124 	   062 	 40$:	.asciz	"VT200"
+     45						.even
+     46	000742	   102 	   154 	   157 	sh.001:	.asciz	"Block-check-type: "
+     47	000765	   111 	   156 	   143 	sh.002:	.asciz	"Incomplete-file-disposition: "
+     48	001023	   122 	   101 	   116 	sh.003:	.asciz	"RANDOM error generation:"
+     49	001054	   040 	   040 	   123 	sh.004:	.asciz	"  SEED = "
+     50	001066	   056 	   015 	   012 	sh.005:	.asciz	"."<cr><lf>
+     51	001072	   040 			sh.006:	.ascii	" "
+     52	001073	   105 	   116 	   101 	sh.007:	.asciz	"ENABLED"
+     53	001103	   040 	   144 	   151 	sh.008:	.asciz	" disabled"
+     54	001115	   114 	   157 	   147 	sh.009:	.asciz	"Logfile is "
+     55	001131	   054 	   040 	   143 	sh.010:	.asciz	", cur/max blk: "
+     56	001151	   057 	   000 		sh.011:	.asciz	"/"
+     57	001153	   116 	   157 	   040 	sh.012:	.asciz	"No LOGFILE is open"
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 10-1
+Local data		; /63/ consolidated all data here..
+
+     58	001176	   105 	   123 	   103 	sh.013:	.asciz	"ESCAPE connect command prefix  "
+     59	001236	   106 	   111 	   114 	sh.014:	.asciz	"FILE-TYPE set to "
+     60	001260	   101 	   165 	   164 	sh.015:	.asciz	"Auto ASCII/Binary"
+     61	001302	   105 	   170 	   151 	sh.016:	.asciz	"Existing file protection:"
+     62	001334	   106 	   151 	   154 	sh.017:	.asciz	"File  naming  conversion:"
+     63	001366	   040 			sh.018:	.ascii	" "
+     64	001367	   104 	   111 	   123 	sh.019:	.asciz	"DISABLED"
+     65	001400	   040 			sh.020:	.ascii	" "
+     66	001401	   145 	   156 	   141 	sh.021:	.asciz	"enabled"
+     67	001411	   114 	   157 	   167 	sh.022:	.asciz	"Lower case  file  naming:"
+     68	001443	   126 	   157 	   154 	sh.023:	.asciz	"Volume  verification  is:"
+     69	001475	   114 	   157 	   143 	sh.024:	.asciz	"Local comma CSI-Parsing:  "
+     70	001530	   162 	   145 	   141 	sh.025:	.asciz	"real"
+     71	001535	   105 	   115 	   125 	sh.026:	.asciz	"EMULATED"
+     72	001546	   106 	   151 	   154 	sh.027:	.asciz	"File create-size blocks:  "
+     73	001601	   111 	   156 	   151 	sh.028:	.asciz	"Init file: "
+     74	001615	   127 	   111 	   114 	sh.029:	.asciz	"WILDCARDS are set "
+     75	001640	   111 	   155 	   160 	sh.030:	.asciz	"Implicit"
+     76	001651	   105 	   130 	   120 	sh.031:	.asciz	"EXPLICIT"
+     77	001662	   124 	   141 	   153 	sh.032:	.asciz	"Take file EOF action: "
+     78	001711	   116 	   117 	   000 	sh.033:	.asciz	"NO"
+     79	001714	   105 	   130 	   111 	sh.034:	.asciz	"EXIT"
+     80	001721	   113 	   105 	   105 	sh.035:	.asciz	"KEEP"
+     81	001726	   144 	   151 	   163 	sh.036:	.asciz	"discard"
+     82	001736	   122 	   105 	   103 	sh.037:	.asciz	"RECEIVE "
+     83	001747	   040 	   143 	   157 	sh.038:	.asciz	" conpar+p.eol   EOL  "
+     84	001775	   040 	   123 	   105 	sh.039:	.asciz	" SEND "
+     85	002004	   040 	   040 	   040 	sh.040:	.asciz	"   senpar+p.eol   EOL  "
+     86	002034	   040 	   040 		sh.041:	.ascii	"  "
+     87	002036	   156 	   157 	   155 	sh.042:	.asciz	"nominal packet  LEN"
+     88	002062	   163 	   145 	   164 	sh.043:	.asciz	"set packet limit  LEN"
+     89	002110	   114 	   117 	   116 	sh.044:	.asciz	"LONG-PACKETS "
+     90	002126	   163 	   145 	   164 	sh.045:	.asciz	"set locally to"
+     91	002145	   040 	   040 	   040 	sh.046:	.ascii	"   "
+     92	002150	   117 	   106 	   106 	sh.047:	.asciz	"OFF"
+     93	002154	   137 	   162 	   145 	sh.048:	.asciz	"_received_ LEN"
+     94	002173	   155 	   141 	   170 	sh.049:	.asciz	"max avail buff"
+     95	002212	   124 	   111 	   115 	sh.050:	.asciz	"TIME-OUT "
+     96	002224	   040 	   122 	   105 	sh.051:	.asciz	" REC  seconds wait"
+     97	002247	   040 	   123 	   105 	sh.052:	.asciz	" SEND seconds wait"
+     98	002272	   137 	   162 	   145 	sh.053:	.asciz	"_received_ seconds"
+     99	002315	   122 	   105 	   124 	sh.054:	.asciz	"RETRY "
+    100	002324	   151 	   156 	   151 	sh.055:	.asciz	"initial-connect limit"
+    101	002352	   155 	   141 	   170 	sh.056:	.asciz	"max for other packets"
+    102	002400	   040 			sh.057:	.ascii	" "
+    103	002401	   040 	   136 	   000 	sh.058:	.asciz	" ^"
+    104	002404	   040 	   055 	   055 	sh.059:	.ascii	" ----------------- Packet Stats -----------------"<cr><lf>
+    105	002467	   124 	   171 	   160 		.asciz	"Type  Last Sent   Last Rec    Prev Sent   Prev Rec"<cr><lf>
+    106	002554	   040 	   055 	   055 	sh.060:	.asciz	" --- Last Transaction ---"<cr><lf>
+    107	002610	   101 	   114 	   114 	sh.061:	.asciz	"ALL"
+    108	002614	   102 	   171 	   164 	sh.062:	.asciz	"Bytes "
+    109	002623	   163 	   145 	   156 	sh.063:	.asciz	"sent:    "
+    110	002635	   162 	   145 	   143 	sh.064:	.asciz	"received:"
+    111	002647	   106 	   157 	   162 	sh.065:	.asciz	"For data bytes:"
+    112	002667	   124 	   151 	   155 	sh.066:	.asciz	"Time to transfer: "
+    113	002712	   120 	   150 	   171 	sh.067:	.asciz	"Physical data rate: "
+    114	002737	   040 	   143 	   150 	sh.068:	.asciz	" chars/second"<cr><lf>
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 10-2
+Local data		; /63/ consolidated all data here..
+
+    115	002757	   106 	   151 	   154 	sh.069:	.asciz	"File transfer rate: "
+    116	003004	   103 	   150 	   141 	sh.070:	.asciz	"Chars per read:     "
+    117	003031	   104 	   105 	   114 	sh.071:	.asciz	"DELAY"
+    118	003037	   120 	   101 	   125 	sh.072:	.ascii	"PAUSE"
+    119	003044	   040 	   163 	   145 	sh.073:	.asciz	" secs before send-"
+    120	003067	   160 	   141 	   143 	sh.074:	.asciz	"pack"
+    121	003074	   151 	   156 	   151 	sh.075:	.asciz	"init"
+    122	003101	   116 	   157 	   040 	sh.076:	.asciz	"No handshaking in use"
+    123	003127	   110 	   141 	   156 	sh.077:	.asciz	"Handshake set to "
+    124	003151	   123 	   057 	   127 	sh.078:	.asciz	"S/W Parity"
+    125	003164	   040 	   151 	   163 	sh.079:	.asciz	" is set "
+    126	003175	   124 	   145 	   162 	sh.080:	.asciz	"Terminal"
+    127	003206	   054 	   040 	   000 	sh.081:	.asciz	", "
+    128	003211	   121 	   125 	   111 	sh.082:	.asciz	"QUIET, "
+    129	003221	   103 	   157 	   156 	sh.083:	.asciz	"Console"
+    130	003231	   067 	   000 		sh.084:	.asciz	"7"
+    131	003233	   070 	   000 		sh.085:	.asciz	"8"
+    132	003235	   055 	   142 	   151 	sh.086:	.asciz	"-bit, "
+    133	003244	   106 	   165 	   154 	sh.087:	.asciz	"Full"
+    134	003251	   110 	   101 	   114 	sh.088:	.asciz	"HALF"
+    135	003256	   040 	   104 	   165 	sh.089:	.asciz	" Duplex, MILNET XON is "
+    136	003306	   054 	   040 	   102 	sh.090:	.asciz	", BREAK is "
+    137	003322	   163 	   150 	   157 	sh.091:	.asciz	"short"
+    138	003330	   114 	   117 	   116 	sh.092:	.asciz	"LONG"
+    139	003335	   101 	   164 	   164 	sh.093:	.asciz	"Attributes"
+    140	003350	   072 	   040 	   117 	sh.094:	.asciz	": On"
+    141	003355	   072 	   040 	   117 	sh.095:	.asciz	": Off"
+    142	003363	   103 	   114 	   040 	sh.096:	.asciz	"CL Ports: "
+    143	003376	   103 	   114 	   040 	sh.097:	.asciz	"CL Units: "
+    144	003411	   103 	   114 	   040 	sh.098:	.asciz	"CL Priority: "
+    145	003427	   116 	   157 	   164 	sh.099:	.asciz	"Nothing SET"
+    146	003443	   163 	   164 	   141 	sh.100:	.asciz	"start of packet SOH  "
+    147	003471	   040 	   040 	   000 	sh.101:	.asciz	"  "
+    148	003474	   102 	   111 	   116 	sh.102:	.asciz	"BINARY-TYPE file extents: "
+    149	003527	   040 	   052 	   000 	sh.103:	.asciz	" *"
+    150	003532	   101 	   143 	   143 	sh.104:	.asciz	"Accessable devices:"
+    151	003556	   116 	   157 	   040 	sh.105:	.asciz	"No phone numbers defined"<cr><lf>	; /63/ for SHOW ALL
+    152	003611	   114 	   141 	   163 	sh.106:	.asciz	"Last number dialed:  "
+    153	003637	   116 	   157 	   164 	sh.107:	.asciz	"Not available under RT-11"
+    154	003671	   126 	   114 	   123 	sh.108:	.asciz	"VLSWCH (^W,^B) during CONNECT"
+    155	003727	   122 	   105 	   115 	sh.109:	.asciz	"REMOTE"
+    156	003736	   114 	   117 	   103 	sh.110:	.asciz	"LOCAL"
+    157	003744	   123 	   114 	   040 	sh.111:	.asciz	"SL status: "
+    158	003760	   117 	   116 	   000 	sh.112:	.asciz	"ON"
+    159	003763	   113 	   105 	   104 	sh.113:	.asciz	"KED"
+    160	003767	   124 	   123 	   130 	sh.114:	.asciz	"TSX-Plus keeps all handlers resident"
+    161	004034	   122 	   124 	   055 	sh.115:	.asciz	"RT-11 can't fetch from an FRUNed program"
+    162	004105	   126 	   102 	   107 	sh.116:	.asciz	"VBGEXE is running this program"
+    163	004144	   056 	   040 	   167 	sh.117:	.asciz	". word"
+    164	004153	   163 	   000 		sh.118:	.asciz	"s"
+    165	004155	   040 	   146 	   162 	sh.119:	.asciz	" free to load handlers"
+    166	004204	   120 	   141 	   143 	sh.120:	.asciz	"Packets between display updates: "
+    167	004246	   123 	   145 	   162 	sh.121:	.asciz	"Server time-out: "
+    168	004270	   122 	   145 	   160 	sh.122:	.asciz	"Repeated character quoting: "
+    169	004325	   040 	   163 	   145 	sh.123:	.asciz	" seconds"
+    170	004336	   143 	   157 	   156 	sh.124:	.asciz	"control quote = "
+    171	004357	   040 	   050 	   000 	sh.125:	.asciz	" ("
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 10-3
+Local data		; /63/ consolidated all data here..
+
+    172	004362	   051 	   054 	   040 	sh.126:	.asciz	"), applied to (0 = unprefixed, 1 = prefixed):"<cr><lf>
+    173	004442	   072 	   040 	   000 	sh.127:	.asciz	": "
+    174	004445	   040 	   040 	   040 	sh.128:	.asciz	"         "	; 9 spaces
+    175	004457	   040 	   162 	   145 	sh.129:	.asciz	" renamed to "
+    176	004474	   040 	   144 	   145 	sh.130:	.asciz	" deleted"
+    177	004505	   040 	   142 	   154 	sh.131:	.asciz	" block"
+    178	004514	   040 	   143 	   157 	sh.132:	.asciz	" copied to "
+    179	004530	   137 	   124 	   157 	sh.133:	.asciz	"_To: "
+    180	004536	   116 	   157 	   040 	sh.134:	.asciz	"No logical disks are mounted"<cr><lf>
+    181	004575	   104 	   113 	   040 	dkslug:	.asciz	"DK  --> "
+    182	004606	   110 	   117 	   115 	hoslug:	.asciz	"HOME--> "
+    183	004617	   100 	   101 	   102 	lis.ct:	.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
+    184	004657	   114 	   120 	   072 	pridev:	.asciz	"LP:"
+    185	004663	   040 	   040 	   050 	raslug:	.asciz	"  ("
+    186	004667	   110 	   172 	   051 	ratag:	.asciz	"Hz)"<cr><lf>
+    187	004675	   056 	   114 	   123 	typdef:	.asciz	".LST"
+    188						.even
+    189
+    190	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+    191	000000	   004 	   135 		ld$stat:.byte	4 ,135			; get status of
+    192	000002	   000 	   000 		ld$num:	.byte	0 ,0			; this LD unit
+    193	000004	000006'				.word	ld$buf			; and put it here
+    194	000006	000000 	000000 	000000 	ld$buf:	.word	0 ,0 ,0 ,0 ,0		; ld$num emt writes data here
+    195	000020	000000 			txflag:	.word	0			; /BBS/ if <>, sending
+    196	000022	000000 			C2:	.word	0			; hours
+    197	000024	000000 			C3:	.word	0			; mins
+    198	000026	000000 			C4:	.word	0			; secs
+    199	000030	   040 	   040 	   040 	conn:	.asciz	"     :00"<cr><lf>	; write converted time here
+    200	000043	   114 	   104 	   060 	ld$data:.ascii	"LD0 --> "		; WARNING: DON'T MODIFY LD$NAME STRING
+    201	000053	   104 	   125 	   065 	ld$name:.asciz	"DU5:JAYSEN.DSK  R/O  [not available]" ; TO LEFT OF "[" CHAR!!
+    202						.even
+    203
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 11
+Local data		; /63/ consolidated all data here..
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	SHOW command processor
+      4
+      5	000000	105777 	000000G		c$show::tstb	@argbuf			; /BBS/ any arg there?
+      6	000004	001426 				beq	20$			; /BBS/ no, do devs ala RT-11
+      7	000006					upcase	argbuf			; /BBS/ upper case the args
+	000006	016700 	000000G			mov	argbuf	,r0
+	000012	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      8	000016					calls	getcm0	,<argbuf,#sholst> ; look for a valid command
+	000016	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000020	012746 	000000'			        mov	#sholst	,-(sp)	; push it
+	000024	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	000030	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000032	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	000036	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000040	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	000042	005700 				tst	r0			; find one?
+     10	000044	100411 				bmi	30$			; no
+     11	000046	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+     12	000052	001001 				bne	10$			; /BBS/ ya
+     13	000054	004711 				jsr	pc	,@r1		; dispatch the command
+     14	000056	005000 			10$:	clr	r0			; /62/ if it can fail it must do its
+     15	000060	000207 				return				; error handling before returning here
+     16
+     17	000062	004767 	001022 		20$:	call	sho$df			; /BBS/ display default disk ala RT-11
+     18	000066	000773 				br	10$			; /62/
+     19
+     20	000070	020027 	000000G		30$:	cmp	r0	,#cmd$un	; /BBS/ ambiguous?
+     21	000074	001003 				bne	40$			; /BBS/ no
+     22	000076	012700 	000000G			mov	#er$tam	,r0		; /62/ ya, make it ambiguous arg
+     23	000102	000402 				br	50$			; /62/
+     24	000104	012700 	000000G		40$:	mov	#er$tun	,r0		; /62/ unrecognizable arg
+     25	000110				50$:	direrr	r0			; /62/
+	000110	010046 				mov	r0	,-(sp)
+	000112	004767 	000000G			call	direr$
+     26	000116	000207 				return
+     27
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12
+SHOW command processor
+
+      1
+      2						.sbttl Command dispatch data table
+      3
+      4	000120				command	sholst	,ALL		,2	,sho$al
+						.list me
+						.save
+						.list me
+	000000					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000000	   101 	   114 	   114 		.asciz	#ALL#			; store the command ALL
+	000000	000000'				.word	$$name			; store sho$al of command ALL text
+	000002	000002 				.word	2			; 2 number of chars to match
+	000004	000000G				.word	sho$al			; the command routine's sho$al
+	000006	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+      5	000120				command	sholst	,ASSIGNS	,2	,sho$df
+						.list me
+						.save
+						.list me
+	000004					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000004	   101 	   123 	   123 		.asciz	#ASSIGNS#			; store the command ASSIGNS
+	000010	000004'				.word	$$name			; store sho$df of command ASSIGNS text
+	000012	000002 				.word	2			; 2 number of chars to match
+	000014	001110'				.word	sho$df			; the command routine's sho$df
+	000016	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+      6	000120				command	sholst	,ATTRIBUTES	,2	,sho$at	; /BBS/ wuz missing..
+						.list me
+						.save
+						.list me
+	000014					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000014	   101 	   124 	   124 		.asciz	#ATTRIBUTES#			; store the command ATTRIBUTES
+	000020	000014'				.word	$$name			; store sho$at of command ATTRIBUTES text
+	000022	000002 				.word	2			; 2 number of chars to match
+	000024	005432'				.word	sho$at			; the command routine's sho$at
+	000026	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+      7	000120				command	sholst	,BAUD		,2	,sho$li	; /62/
+						.list me
+						.save
+						.list me
+	000027					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000027	   102 	   101 	   125 		.asciz	#BAUD#			; store the command BAUD
+	000030	000027'				.word	$$name			; store sho$li of command BAUD text
+	000032	000002 				.word	2			; 2 number of chars to match
+	000034	000000G				.word	sho$li			; the command routine's sho$li
+	000036	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+      8	000120				command	sholst	,BINARY-TYPE	,2	,sho$bt
+						.list me
+						.save
+						.list me
+	000034					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000034	   102 	   111 	   116 		.asciz	#BINARY-TYPE#			; store the command BINARY-TYPE
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-1
+Command dispatch data table
+
+	000040	000034'				.word	$$name			; store sho$bt of command BINARY-TYPE text
+	000042	000002 				.word	2			; 2 number of chars to match
+	000044	006110'				.word	sho$bt			; the command routine's sho$bt
+	000046	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+      9	000120				command	sholst	,BLOCK-CHECK-TYPE,2	,sho$bl
+						.list me
+						.save
+						.list me
+	000050					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000050	   102 	   114 	   117 		.asciz	#BLOCK-CHECK-TYPE#			; store the command BLOCK-CHECK-TYPE
+	000050	000050'				.word	$$name			; store sho$bl of command BLOCK-CHECK-TYPE text
+	000052	000002 				.word	2			; 2 number of chars to match
+	000054	002220'				.word	sho$bl			; the command routine's sho$bl
+	000056	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     10	000120				command	sholst	,CL:		,2	,sho$cl	; /62/
+						.list me
+						.save
+						.list me
+	000071					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000071	   103 	   114 	   072 		.asciz	#CL:#			; store the command CL:
+	000060	000071'				.word	$$name			; store sho$cl of command CL: text
+	000062	000002 				.word	2			; 2 number of chars to match
+	000064	005564'				.word	sho$cl			; the command routine's sho$cl
+	000066	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     11	000120				command	sholst	,CONSOLE	,2	,sho$co
+						.list me
+						.save
+						.list me
+	000075					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000075	   103 	   117 	   116 		.asciz	#CONSOLE#			; store the command CONSOLE
+	000070	000075'				.word	$$name			; store sho$co of command CONSOLE text
+	000072	000002 				.word	2			; 2 number of chars to match
+	000074	005176'				.word	sho$co			; the command routine's sho$co
+	000076	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     12	000120				command	sholst	,CONTROL-PREFIXING,4	,sho$ct	; /63/
+						.list me
+						.save
+						.list me
+	000105					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000105	   103 	   117 	   116 		.asciz	#CONTROL-PREFIXING#			; store the command CONTROL-PREFIXING
+	000100	000105'				.word	$$name			; store sho$ct of command CONTROL-PREFIXING text
+	000102	000004 				.word	4			; 4 number of chars to match
+	000104	007052'				.word	sho$ct			; the command routine's sho$ct
+	000106	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     13	000120				command	sholst	,DATE		,2	,sho$da
+						.list me
+						.save
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-2
+Command dispatch data table
+
+						.list me
+	000127					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000127	   104 	   101 	   124 		.asciz	#DATE#			; store the command DATE
+	000110	000127'				.word	$$name			; store sho$da of command DATE text
+	000112	000002 				.word	2			; 2 number of chars to match
+	000114	000714'				.word	sho$da			; the command routine's sho$da
+	000116	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     14	000120				command	sholst	,DAYTIME	,3	,sho$dy	; /63/
+						.list me
+						.save
+						.list me
+	000134					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000134	   104 	   101 	   131 		.asciz	#DAYTIME#			; store the command DAYTIME
+	000120	000134'				.word	$$name			; store sho$dy of command DAYTIME text
+	000122	000003 				.word	3			; 3 number of chars to match
+	000124	000764'				.word	sho$dy			; the command routine's sho$dy
+	000126	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     15	000120				command	sholst	,DEBUG		,3	,sho$de
+						.list me
+						.save
+						.list me
+	000144					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000144	   104 	   105 	   102 		.asciz	#DEBUG#			; store the command DEBUG
+	000130	000144'				.word	$$name			; store sho$de of command DEBUG text
+	000132	000003 				.word	3			; 3 number of chars to match
+	000134	000424'				.word	sho$de			; the command routine's sho$de
+	000136	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     16	000120				command	sholst	,DEFAULT	,3	,sho$df
+						.list me
+						.save
+						.list me
+	000152					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000152	   104 	   105 	   106 		.asciz	#DEFAULT#			; store the command DEFAULT
+	000140	000152'				.word	$$name			; store sho$df of command DEFAULT text
+	000142	000003 				.word	3			; 3 number of chars to match
+	000144	001110'				.word	sho$df			; the command routine's sho$df
+	000146	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     17	000120				command	sholst	,DELAY		,3	,sho$dl
+						.list me
+						.save
+						.list me
+	000162					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000162	   104 	   105 	   114 		.asciz	#DELAY#			; store the command DELAY
+	000150	000162'				.word	$$name			; store sho$dl of command DELAY text
+	000152	000003 				.word	3			; 3 number of chars to match
+	000154	004642'				.word	sho$dl			; the command routine's sho$dl
+	000156	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-3
+Command dispatch data table
+
+     18					;comman	sholst	,DEVICES	,3	,sho$dv	; /BBS/ devlst only!!
+     19	000120				command	sholst	,DIAL		,2	,sho$dp
+						.list me
+						.save
+						.list me
+	000170					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000170	   104 	   111 	   101 		.asciz	#DIAL#			; store the command DIAL
+	000160	000170'				.word	$$name			; store sho$dp of command DIAL text
+	000162	000002 				.word	2			; 2 number of chars to match
+	000164	000416'				.word	sho$dp			; the command routine's sho$dp
+	000166	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     20	000120				command	sholst	,DTR		,2	,sho$li	; /62/
+						.list me
+						.save
+						.list me
+	000175					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000175	   104 	   124 	   122 		.asciz	#DTR#			; store the command DTR
+	000170	000175'				.word	$$name			; store sho$li of command DTR text
+	000172	000002 				.word	2			; 2 number of chars to match
+	000174	000000G				.word	sho$li			; the command routine's sho$li
+	000176	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     21	000120				command	sholst	,DUPLEX		,2	,sho$co	; /62/
+						.list me
+						.save
+						.list me
+	000201					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000201	   104 	   125 	   120 		.asciz	#DUPLEX#			; store the command DUPLEX
+	000200	000201'				.word	$$name			; store sho$co of command DUPLEX text
+	000202	000002 				.word	2			; 2 number of chars to match
+	000204	005176'				.word	sho$co			; the command routine's sho$co
+	000206	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     22	000120				command	sholst	,END-OF-LINE	,2	,sho$pa	; /62/
+						.list me
+						.save
+						.list me
+	000210					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000210	   105 	   116 	   104 		.asciz	#END-OF-LINE#			; store the command END-OF-LINE
+	000210	000210'				.word	$$name			; store sho$pa of command END-OF-LINE text
+	000212	000002 				.word	2			; 2 number of chars to match
+	000214	002422'				.word	sho$pa			; the command routine's sho$pa
+	000216	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     23	000120				command	sholst	,EOF		,2	,sho$eo	; /62/
+						.list me
+						.save
+						.list me
+	000224					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000224	   105 	   117 	   106 		.asciz	#EOF#			; store the command EOF
+	000220	000224'				.word	$$name			; store sho$eo of command EOF text
+	000222	000002 				.word	2			; 2 number of chars to match
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-4
+Command dispatch data table
+
+	000224	002254'				.word	sho$eo			; the command routine's sho$eo
+	000226	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     24	000120				command	sholst	,ESCAPE		,2	,sho$es
+						.list me
+						.save
+						.list me
+	000230					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000230	   105 	   123 	   103 		.asciz	#ESCAPE#			; store the command ESCAPE
+	000230	000230'				.word	$$name			; store sho$es of command ESCAPE text
+	000232	000002 				.word	2			; 2 number of chars to match
+	000234	002362'				.word	sho$es			; the command routine's sho$es
+	000236	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     25	000120				command	sholst	,FILE-TYPE	,2	,sho$fi
+						.list me
+						.save
+						.list me
+	000237					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000237	   106 	   111 	   114 		.asciz	#FILE-TYPE#			; store the command FILE-TYPE
+	000240	000237'				.word	$$name			; store sho$fi of command FILE-TYPE text
+	000242	000002 				.word	2			; 2 number of chars to match
+	000244	001560'				.word	sho$fi			; the command routine's sho$fi
+	000246	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     26	000120				command	sholst	,FLOW-CONTROL	,2	,sho$li	; /62/
+						.list me
+						.save
+						.list me
+	000251					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000251	   106 	   114 	   117 		.asciz	#FLOW-CONTROL#			; store the command FLOW-CONTROL
+	000250	000251'				.word	$$name			; store sho$li of command FLOW-CONTROL text
+	000252	000002 				.word	2			; 2 number of chars to match
+	000254	000000G				.word	sho$li			; the command routine's sho$li
+	000256	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     27	000120				command	sholst	,HANDSHAKE	,2	,sho$ha
+						.list me
+						.save
+						.list me
+	000266					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000266	   110 	   101 	   116 		.asciz	#HANDSHAKE#			; store the command HANDSHAKE
+	000260	000266'				.word	$$name			; store sho$ha of command HANDSHAKE text
+	000262	000002 				.word	2			; 2 number of chars to match
+	000264	004712'				.word	sho$ha			; the command routine's sho$ha
+	000266	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     28	000120				command	sholst	,HOME		,2	,sho$df	; /62/
+						.list me
+						.save
+						.list me
+	000300					.psect	cmdtxt	,ro,d,lcl,rel,con
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-5
+Command dispatch data table
+
+	000300	   110 	   117 	   115 		.asciz	#HOME#			; store the command HOME
+	000270	000300'				.word	$$name			; store sho$df of command HOME text
+	000272	000002 				.word	2			; 2 number of chars to match
+	000274	001110'				.word	sho$df			; the command routine's sho$df
+	000276	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     29	000120				command	sholst	,INCOMPLETE-FILE-DISPOSITION ,1 ,sho$in
+						.list me
+						.save
+						.list me
+	000305					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000305	   111 	   116 	   103 		.asciz	#INCOMPLETE-FILE-DISPOSITION#			; store the command INCOMPLETE-FILE-DISPOSITION
+	000300	000305'				.word	$$name			; store sho$in of command INCOMPLETE-FILE-DISPOSITION text
+	000302	000001 				.word	1			; 1 number of chars to match
+	000304	002314'				.word	sho$in			; the command routine's sho$in
+	000306	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     30	000120				command	sholst	,LD:		,2	,sho$su	; /62/
+						.list me
+						.save
+						.list me
+	000341					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000341	   114 	   104 	   072 		.asciz	#LD:#			; store the command LD:
+	000310	000341'				.word	$$name			; store sho$su of command LD: text
+	000312	000002 				.word	2			; 2 number of chars to match
+	000314	001206'				.word	sho$su			; the command routine's sho$su
+	000316	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     31	000120				command	sholst	,LINE		,2	,sho$li
+						.list me
+						.save
+						.list me
+	000345					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000345	   114 	   111 	   116 		.asciz	#LINE#			; store the command LINE
+	000320	000345'				.word	$$name			; store sho$li of command LINE text
+	000322	000002 				.word	2			; 2 number of chars to match
+	000324	000000G				.word	sho$li			; the command routine's sho$li
+	000326	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     32	000120				command	sholst	,LOCAL-ECHO	,3	,sho$co	; /62/
+						.list me
+						.save
+						.list me
+	000352					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000352	   114 	   117 	   103 		.asciz	#LOCAL-ECHO#			; store the command LOCAL-ECHO
+	000330	000352'				.word	$$name			; store sho$co of command LOCAL-ECHO text
+	000332	000003 				.word	3			; 3 number of chars to match
+	000334	005176'				.word	sho$co			; the command routine's sho$co
+	000336	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     33	000120				command	sholst	,LOGFILE	,3	,sho$de	; /62/
+						.list me
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-6
+Command dispatch data table
+
+						.save
+						.list me
+	000365					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000365	   114 	   117 	   107 		.asciz	#LOGFILE#			; store the command LOGFILE
+	000340	000365'				.word	$$name			; store sho$de of command LOGFILE text
+	000342	000003 				.word	3			; 3 number of chars to match
+	000344	000424'				.word	sho$de			; the command routine's sho$de
+	000346	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     34	000120				command	sholst	,LONG-PACKETS	,3	,sho$pk	; /62/
+						.list me
+						.save
+						.list me
+	000375					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000375	   114 	   117 	   116 		.asciz	#LONG-PACKETS#			; store the command LONG-PACKETS
+	000350	000375'				.word	$$name			; store sho$pk of command LONG-PACKETS text
+	000352	000003 				.word	3			; 3 number of chars to match
+	000354	002446'				.word	sho$pk			; the command routine's sho$pk
+	000356	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     35	000120				command	sholst	,MEMORY		,2	,sho$me
+						.list me
+						.save
+						.list me
+	000412					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000412	   115 	   105 	   115 		.asciz	#MEMORY#			; store the command MEMORY
+	000360	000412'				.word	$$name			; store sho$me of command MEMORY text
+	000362	000002 				.word	2			; 2 number of chars to match
+	000364	006564'				.word	sho$me			; the command routine's sho$me
+	000366	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     36	000120				command	sholst	,MODEM-TYPE	,2	,sho$dp
+						.list me
+						.save
+						.list me
+	000421					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000421	   115 	   117 	   104 		.asciz	#MODEM-TYPE#			; store the command MODEM-TYPE
+	000370	000421'				.word	$$name			; store sho$dp of command MODEM-TYPE text
+	000372	000002 				.word	2			; 2 number of chars to match
+	000374	000416'				.word	sho$dp			; the command routine's sho$dp
+	000376	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     37	000120				command	sholst	,PACKETS	,3	,sho$pk
+						.list me
+						.save
+						.list me
+	000434					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000434	   120 	   101 	   103 		.asciz	#PACKETS#			; store the command PACKETS
+	000400	000434'				.word	$$name			; store sho$pk of command PACKETS text
+	000402	000003 				.word	3			; 3 number of chars to match
+	000404	002446'				.word	sho$pk			; the command routine's sho$pk
+	000406	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-7
+Command dispatch data table
+
+	000120					.restore
+     38	000120				command	sholst	,PARAMETERS	,3	,sho$pa
+						.list me
+						.save
+						.list me
+	000444					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000444	   120 	   101 	   122 		.asciz	#PARAMETERS#			; store the command PARAMETERS
+	000410	000444'				.word	$$name			; store sho$pa of command PARAMETERS text
+	000412	000003 				.word	3			; 3 number of chars to match
+	000414	002422'				.word	sho$pa			; the command routine's sho$pa
+	000416	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     39	000120				command	sholst	,PARITY		,3	,sho$pr
+						.list me
+						.save
+						.list me
+	000457					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000457	   120 	   101 	   122 		.asciz	#PARITY#			; store the command PARITY
+	000420	000457'				.word	$$name			; store sho$pr of command PARITY text
+	000422	000003 				.word	3			; 3 number of chars to match
+	000424	004772'				.word	sho$pr			; the command routine's sho$pr
+	000426	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     40	000120				command	sholst	,PAUSE		,3	,sho$ps
+						.list me
+						.save
+						.list me
+	000466					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000466	   120 	   101 	   125 		.asciz	#PAUSE#			; store the command PAUSE
+	000430	000466'				.word	$$name			; store sho$ps of command PAUSE text
+	000432	000003 				.word	3			; 3 number of chars to match
+	000434	005032'				.word	sho$ps			; the command routine's sho$ps
+	000436	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     41	000120				command	sholst	,PHONE		,2	,sho$ph
+						.list me
+						.save
+						.list me
+	000474					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000474	   120 	   110 	   117 		.asciz	#PHONE#			; store the command PHONE
+	000440	000474'				.word	$$name			; store sho$ph of command PHONE text
+	000442	000002 				.word	2			; 2 number of chars to match
+	000444	006204'				.word	sho$ph			; the command routine's sho$ph
+	000446	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     42	000120				command	sholst	,RANDOM		,2	,sho$de	; /62/
+						.list me
+						.save
+						.list me
+	000502					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000502	   122 	   101 	   116 		.asciz	#RANDOM#			; store the command RANDOM
+	000450	000502'				.word	$$name			; store sho$de of command RANDOM text
+	000452	000002 				.word	2			; 2 number of chars to match
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-8
+Command dispatch data table
+
+	000454	000424'				.word	sho$de			; the command routine's sho$de
+	000456	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     43	000120				command	sholst	,RECEIVE	,3	,sho$pa	; /62/
+						.list me
+						.save
+						.list me
+	000511					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000511	   122 	   105 	   103 		.asciz	#RECEIVE#			; store the command RECEIVE
+	000460	000511'				.word	$$name			; store sho$pa of command RECEIVE text
+	000462	000003 				.word	3			; 3 number of chars to match
+	000464	002422'				.word	sho$pa			; the command routine's sho$pa
+	000466	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     44	000120				command	sholst	,REPEAT-QUOTING	,3	,sho$rp
+						.list me
+						.save
+						.list me
+	000521					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000521	   122 	   105 	   120 		.asciz	#REPEAT-QUOTING#			; store the command REPEAT-QUOTING
+	000470	000521'				.word	$$name			; store sho$rp of command REPEAT-QUOTING text
+	000472	000003 				.word	3			; 3 number of chars to match
+	000474	007004'				.word	sho$rp			; the command routine's sho$rp
+	000476	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     45	000120				command	sholst	,RETRY		,3	,sho$rt
+						.list me
+						.save
+						.list me
+	000540					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000540	   122 	   105 	   124 		.asciz	#RETRY#			; store the command RETRY
+	000500	000540'				.word	$$name			; store sho$rt of command RETRY text
+	000502	000003 				.word	3			; 3 number of chars to match
+	000504	003274'				.word	sho$rt			; the command routine's sho$rt
+	000506	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     46	000120				command	sholst	,SEED		,3	,sho$de	; /62/
+						.list me
+						.save
+						.list me
+	000546					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000546	   123 	   105 	   105 		.asciz	#SEED#			; store the command SEED
+	000510	000546'				.word	$$name			; store sho$de of command SEED text
+	000512	000003 				.word	3			; 3 number of chars to match
+	000514	000424'				.word	sho$de			; the command routine's sho$de
+	000516	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     47	000120				command	sholst	,SEND		,3	,sho$pa	; /62/
+						.list me
+						.save
+						.list me
+	000553					.psect	cmdtxt	,ro,d,lcl,rel,con
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-9
+Command dispatch data table
+
+	000553	   123 	   105 	   116 		.asciz	#SEND#			; store the command SEND
+	000520	000553'				.word	$$name			; store sho$pa of command SEND text
+	000522	000003 				.word	3			; 3 number of chars to match
+	000524	002422'				.word	sho$pa			; the command routine's sho$pa
+	000526	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     48	000120				command	sholst	,SERVER		,3	,sho$sv
+						.list me
+						.save
+						.list me
+	000560					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000560	   123 	   105 	   122 		.asciz	#SERVER#			; store the command SERVER
+	000530	000560'				.word	$$name			; store sho$sv of command SERVER text
+	000532	000003 				.word	3			; 3 number of chars to match
+	000534	006752'				.word	sho$sv			; the command routine's sho$sv
+	000536	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     49	000120				command	sholst	,SL		,2	,sho$sl
+						.list me
+						.save
+						.list me
+	000567					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000567	   123 	   114 	   000 		.asciz	#SL#			; store the command SL
+	000540	000567'				.word	$$name			; store sho$sl of command SL text
+	000542	000002 				.word	2			; 2 number of chars to match
+	000544	006460'				.word	sho$sl			; the command routine's sho$sl
+	000546	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     50	000120				command	sholst	,SPEED		,2	,sho$li	; /62/
+						.list me
+						.save
+						.list me
+	000572					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000572	   123 	   120 	   105 		.asciz	#SPEED#			; store the command SPEED
+	000550	000572'				.word	$$name			; store sho$li of command SPEED text
+	000552	000002 				.word	2			; 2 number of chars to match
+	000554	000000G				.word	sho$li			; the command routine's sho$li
+	000556	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     51	000120				command	sholst	,START-OF-PACKET,2	,sho$so
+						.list me
+						.save
+						.list me
+	000600					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000600	   123 	   124 	   101 		.asciz	#START-OF-PACKET#			; store the command START-OF-PACKET
+	000560	000600'				.word	$$name			; store sho$so of command START-OF-PACKET text
+	000562	000002 				.word	2			; 2 number of chars to match
+	000564	005754'				.word	sho$so			; the command routine's sho$so
+	000566	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     52	000120				command	sholst	,SUBMOUNTS	,2	,sho$su
+						.list me
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-10
+Command dispatch data table
+
+						.save
+						.list me
+	000620					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000620	   123 	   125 	   102 		.asciz	#SUBMOUNTS#			; store the command SUBMOUNTS
+	000570	000620'				.word	$$name			; store sho$su of command SUBMOUNTS text
+	000572	000002 				.word	2			; 2 number of chars to match
+	000574	001206'				.word	sho$su			; the command routine's sho$su
+	000576	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     53	000120				command	sholst	,TERMINAL	,1	,sho$tt
+						.list me
+						.save
+						.list me
+	000632					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000632	   124 	   105 	   122 		.asciz	#TERMINAL#			; store the command TERMINAL
+	000600	000632'				.word	$$name			; store sho$tt of command TERMINAL text
+	000602	000001 				.word	1			; 1 number of chars to match
+	000604	005076'				.word	sho$tt			; the command routine's sho$tt
+	000606	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     54	000120				command	sholst	,TIME		,2	,sho$ti
+						.list me
+						.save
+						.list me
+	000643					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000643	   124 	   111 	   115 		.asciz	#TIME#			; store the command TIME
+	000610	000643'				.word	$$name			; store sho$ti of command TIME text
+	000612	000002 				.word	2			; 2 number of chars to match
+	000614	001000'				.word	sho$ti			; the command routine's sho$ti
+	000616	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     55	000120				command	sholst	,TIME-OUTS	,5	,sho$to
+						.list me
+						.save
+						.list me
+	000650					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000650	   124 	   111 	   115 		.asciz	#TIME-OUTS#			; store the command TIME-OUTS
+	000620	000650'				.word	$$name			; store sho$to of command TIME-OUTS text
+	000622	000005 				.word	5			; 5 number of chars to match
+	000624	003126'				.word	sho$to			; the command routine's sho$to
+	000626	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     56	000120				command	sholst	,TT:		,2	,sho$tt
+						.list me
+						.save
+						.list me
+	000662					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000662	   124 	   124 	   072 		.asciz	#TT:#			; store the command TT:
+	000630	000662'				.word	$$name			; store sho$tt of command TT: text
+	000632	000002 				.word	2			; 2 number of chars to match
+	000634	005076'				.word	sho$tt			; the command routine's sho$tt
+	000636	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 12-11
+Command dispatch data table
+
+	000120					.restore
+     57	000120				command	sholst	,UPDATE		,1	,sho$up
+						.list me
+						.save
+						.list me
+	000666					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000666	   125 	   120 	   104 		.asciz	#UPDATE#			; store the command UPDATE
+	000640	000666'				.word	$$name			; store sho$up of command UPDATE text
+	000642	000001 				.word	1			; 1 number of chars to match
+	000644	006730'				.word	sho$up			; the command routine's sho$up
+	000646	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     58	000120				command	sholst	,VERSION	,2	,sho$ve
+						.list me
+						.save
+						.list me
+	000675					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000675	   126 	   105 	   122 		.asciz	#VERSION#			; store the command VERSION
+	000650	000675'				.word	$$name			; store sho$ve of command VERSION text
+	000652	000002 				.word	2			; 2 number of chars to match
+	000654	000000G				.word	sho$ve			; the command routine's sho$ve
+	000656	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     59	000120				command	sholst	,VLSWCH		,2	,sho$vl
+						.list me
+						.save
+						.list me
+	000705					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000705	   126 	   114 	   123 		.asciz	#VLSWCH#			; store the command VLSWCH
+	000660	000705'				.word	$$name			; store sho$vl of command VLSWCH text
+	000662	000002 				.word	2			; 2 number of chars to match
+	000664	006362'				.word	sho$vl			; the command routine's sho$vl
+	000666	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000120					.restore
+     60	000120				command	sholst
+						.list me
+						.save
+						.list me
+	000670					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of sholst
+	000670	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000714					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a sholst
+						.list me
+	000120					.restore
+     61
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 13
+Command dispatch data table
+
+      1
+      2						.sbttl	SHOW ALL		; /63/ split to insert SHO MODEM
+      3
+      4	000120	004767 	000000G		sho$a0::call	sho$ve			; version
+      5	000124	004767 	006434 			call	sho$me			; /63/ free memory for fetches
+      6	000130	004767 	000000G			call	sho$li			; line
+      7	000134					.newline			; /63/
+	000134	004767 	000000G			call	l$pcrlf
+      8	000140	000207 				return
+      9
+     10	000142	005767 	000000G		sho$a1::tst	tsxsav			; /63/ running under TSX?
+     11	000146	001412 				beq	10$			; /63/ no, avoid an error message..
+     12	000150	016746 	000000G			mov	tsxcl	,-(sp)		; /63/
+     13	000154	005067 	000000G			clr	tsxcl			; /63/ disable sho$cl jump to sho$line
+     14	000160	004767 	005400 			call	sho$cl			; /63/ saved CL parameter strings
+     15	000164	012667 	000000G			mov	(sp)+	,tsxcl		; /63/
+     16	000170					.newline			; /63/
+	000170	004767 	000000G			call	l$pcrlf
+     17	000174	004767 	004676 		10$:	call	sho$tt			; /63/ terminal, console
+     18	000200					.newline			; /63/
+	000200	004767 	000000G			call	l$pcrlf
+     19	000204	004767 	005774 			call	sho$ph			; /63/ phone numbers
+     20	000210					.newline			; /63/
+	000210	004767 	000000G			call	l$pcrlf
+     21	000214	004767 	000204 			call	sho$de			; debugging
+     22	000220					.newline			; /63/
+	000220	004767 	000000G			call	l$pcrlf
+     23	000224	004767 	005202 			call	sho$at			; attributes
+     24	000230					.newline			; /63/
+	000230	004767 	000000G			call	l$pcrlf
+     25	000234	004767 	005650 			call	sho$bt			; binary-types
+     26	000240					.newline			; /63/
+	000240	004767 	000000G			call	l$pcrlf
+     27	000244	004767 	006602 			call	sho$ct			; /63/ control prefixing
+     28	000250					.newline			; /63/
+	000250	004767 	000000G			call	l$pcrlf
+     29	000254	004767 	006524 			call	sho$rp			; /63/ repeated char compression
+     30	000260					.newline			; /63/
+	000260	004767 	000000G			call	l$pcrlf
+     31	000264	004767 	001270 			call	sho$fi			; file
+     32	000270					.newline			; /63/
+	000270	004767 	000000G			call	l$pcrlf
+     33	000274	004767 	002014 			call	sho$in			; incomplete-file-disposition
+     34	000300					.newline			; /63/
+	000300	004767 	000000G			call	l$pcrlf
+     35	000304	004767 	001744 			call	sho$eo			; /63/ action on end of command file
+     36	000310					.newline			; /63/
+	000310	004767 	000000G			call	l$pcrlf
+     37	000314	004767 	004372 			call	sho$ha			; /63/ handshaking
+     38	000320					.newline			; /63/
+	000320	004767 	000000G			call	l$pcrlf
+     39	000324	004767 	001670 			call	sho$bl			; block-check-type
+     40	000330					.newline			; /63/
+	000330	004767 	000000G			call	l$pcrlf
+     41	000334	004767 	002062 			call	sho$pa			; parameters
+     42	000340					.newline			; /63/
+	000340	004767 	000000G			call	l$pcrlf
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 13-1
+SHOW ALL		; /63/ split to insert SHO MODEM
+
+     43	000344	004767 	006360 			call	sho$up			; /63/ packets between display updates
+     44	000350					.newline			; /63/
+	000350	004767 	000000G			call	l$pcrlf
+     45	000354	004767 	003050 			call	c$stat			; /63/ transfer stats
+     46	000360					.newline			; /63/
+	000360	004767 	000000G			call	l$pcrlf
+     47	000364	004767 	006362 			call	sho$sv			; /63/ server time-out
+     48	000370					.newline			; /63/
+	000370	004767 	000000G			call	l$pcrlf
+     49	000374	004767 	000364 			call	sho$dy			; /63/ daytime
+     50	000400					.newline			; /63/
+	000400	004767 	000000G			call	l$pcrlf
+     51	000404	004767 	000456 			call	c$pwd			; /63/ default disk, logicals
+     52	000410					.newline			; /63/
+	000410	004767 	000000G			call	l$pcrlf
+     53	000414	000207 				return
+     54
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 14
+SHOW ALL		; /63/ split to insert SHO MODEM
+
+      1
+      2						.sbttl	SHOW DIAL
+      3
+      4	000416	005726 			sho$dp:	tst	(sp)+			; dump the return address then call
+      5	000420	000167 	000000G			jmp	xxsdia			; this to load an adjacent overlay..
+      6
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 15
+SHOW DIAL
+
+      1
+      2						.sbttl	SHOW DEBUG		; /62/ major revision
+      3
+      4	000424	005000 			sho$de:	clr	r0			; index := 0
+      5	000426	005760 	000252'		10$:	tst	deblst(r0)		; end of the list yet?
+      6	000432	001425 				beq	40$			; yes, go check file name
+      7	000434					wrtall	debhdr(r0)		; print the header
+	000434	016046 	000266'			mov	debhdr(r0)	,-(sp)		; pass the address
+	000440	004767 	000000G			call	wrtall			; do it
+      8	000444	036067 	000252'	000000G		bit	deblst(r0),trace	; see if a bit is turned on
+      9	000452	001405 				beq	20$			; no
+     10	000454					wrtall	#sh.006			; "ENABLED"  ya, say so then
+	000454	012746 	001072'			mov	#sh.006	,-(sp)		; pass the address
+	000460	004767 	000000G			call	wrtall			; do it
+     11	000464	000404 				br	30$			; next please
+     12	000466				20$:	wrtall	#sh.008			; " disabled"  it's off
+	000466	012746 	001103'			mov	#sh.008	,-(sp)		; pass the address
+	000472	004767 	000000G			call	wrtall			; do it
+     13	000476				30$:	.newline
+	000476	004767 	000000G			call	l$pcrlf
+     14	000502	005720 				tst	(r0)+			; bump to next entry please
+     15	000504	000750 				br	10$			; go do it
+     16
+     17	000506				40$:	wrtall	#sh.003			; "RANDOM error insertion is:"
+	000506	012746 	001023'			mov	#sh.003	,-(sp)		; pass the address
+	000512	004767 	000000G			call	wrtall			; do it
+     18	000516	005767 	000000G			tst	ranerr			; doing random errors?
+     19	000522	001005 				bne	50$			; ya
+     20	000524					wrtall	#sh.008			; no  " disabled"
+	000524	012746 	001103'			mov	#sh.008	,-(sp)		; pass the address
+	000530	004767 	000000G			call	wrtall			; do it
+     21	000534	000404 				br	60$
+     22	000536				50$:	wrtall	#sh.006			; ya "ENABLED"
+	000536	012746 	001072'			mov	#sh.006	,-(sp)		; pass the address
+	000542	004767 	000000G			call	wrtall			; do it
+     23	000546				60$:	wrtall	#sh.004			; "  SEED = "
+	000546	012746 	001054'			mov	#sh.004	,-(sp)		; pass the address
+	000552	004767 	000000G			call	wrtall			; do it
+     24	000556	016700 	000000G			mov	seed	,r0		; get a copy of the seed
+     25	000562	004767 	000000G			call	L10266			; display it
+     26	000566					wrtall	#sh.005			; "."<cr><lf>
+	000566	012746 	001066'			mov	#sh.005	,-(sp)		; pass the address
+	000572	004767 	000000G			call	wrtall			; do it
+     27	000576	032767 	100000 	000000G		bit	#log$op	,trace		; is a file open?
+     28	000604	001434 				beq	70$			; no
+     29	000606					wrtall	#sh.009			; "Logfile is "
+	000606	012746 	001115'			mov	#sh.009	,-(sp)		; pass the address
+	000612	004767 	000000G			call	wrtall			; do it
+     30	000616					wrtall	#logfil			; include file name
+	000616	012746 	000000G			mov	#logfil	,-(sp)		; pass the address
+	000622	004767 	000000G			call	wrtall			; do it
+     31	000626					wrtall	#sh.010			; ", cur/max blk: "
+	000626	012746 	001131'			mov	#sh.010	,-(sp)		; pass the address
+	000632	004767 	000000G			call	wrtall			; do it
+     32	000636	012701 	000000G			mov	#lun.lo	,r1		; logfile lun
+     33	000642	006301 				asl	r1			; word indexing
+     34	000644	016100 	000000G			mov	blknum(r1),r0		; recover current block number
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 15-1
+SHOW DEBUG		; /62/ major revision
+
+     35	000650	004767 	000000G			call	L10266			; dump it to TT
+     36	000654					wrtall	#sh.011			; "/"
+	000654	012746 	001151'			mov	#sh.011	,-(sp)		; pass the address
+	000660	004767 	000000G			call	wrtall			; do it
+     37	000664	016100 	000000G			mov	sizof(r1),r0		; recover file size
+     38	000670	004767 	000000G			call	L10266			; dump that to TT too
+     39	000674	000404 				br	80$
+     40	000676				70$:	wrtall	#sh.012			; "No LOGFILE is open"
+	000676	012746 	001153'			mov	#sh.012	,-(sp)		; pass the address
+	000702	004767 	000000G			call	wrtall			; do it
+     41	000706				80$:	.newline
+	000706	004767 	000000G			call	l$pcrlf
+     42	000712	000207 				return
+     43
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 16
+SHOW DEBUG		; /62/ major revision
+
+      1
+      2						.sbttl	SHOW DATE, DAYTIME, DEFAULT, HOME, TIME
+      3						.enabl	lsb			; /62/
+      4
+      5	000714	004767 	000006 		sho$da::call	sho.da			; /63/
+      6	000720					.newline
+	000720	004767 	000000G			call	l$pcrlf
+      7	000724	000467 				br	20$			; /62/
+      8
+      9	000726				sho.da:	calls	ascdat	,<#errtxt,#-1>	; /62/ get date into a buffer
+	000726	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000730	012746 	177777 			        mov	#-1	,-(sp)	; push it
+	000734	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	000740	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000742	004767 	000000G			  jsr	pc	,ascdat		; and go to the routine
+	000746	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000750	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     10	000752					wrtall	#errtxt			; display it
+	000752	012746 	000000G			mov	#errtxt	,-(sp)		; pass the address
+	000756	004767 	000000G			call	wrtall			; do it
+     11	000762	000207 				return
+     12
+     13	000764	004767 	177736 		sho$dy::call	sho.da			; /63/ both date and time..
+     14	000770					wrtall	#sh.101			; /63/ "  "
+	000770	012746 	003471'			mov	#sh.101	,-(sp)		; pass the address
+	000774	004767 	000000G			call	wrtall			; do it
+     15	001000				sho$ti::calls	asctim	,<#errtxt,#0>	; get time of day into a buffer
+	001000	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001002	012746 	000000 			        mov	#0	,-(sp)	; push it
+	001006	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	001012	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001014	004767 	000000G			  jsr	pc	,asctim		; and go to the routine
+	001020	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001022	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     16	001024					wrtall	#errtxt			; display it
+	001024	012746 	000000G			mov	#errtxt	,-(sp)		; pass the address
+	001030	004767 	000000G			call	wrtall			; do it
+     17	001034					wrtall	#raslug			; /62/ "  ("
+	001034	012746 	004663'			mov	#raslug	,-(sp)		; pass the address
+	001040	004767 	000000G			call	wrtall			; do it
+     18	001044	016700 	000000G			mov	clkflg	,r0		; /62/ pass line time clock rate
+     19	001050	004767 	000000G			call	L10266			; /62/ dump it to terminal
+     20	001054					wrtall	#ratag			; /62/ "Hz)"<cr><lf>
+	001054	012746 	004667'			mov	#ratag	,-(sp)		; pass the address
+	001060	004767 	000000G			call	wrtall			; do it
+     21	001064	000407 				br	20$			; /62/
+     22
+     23	001066	005767 	000000G		c$pwd::	tst	tsxsav			; /63/ running under TSX?
+     24	001072	001402 				beq	10$			; /62/ no, can't do this under RT-11
+     25	001074	004767 	000106 			call	sho$su			; /62/ show submounts
+     26	001100	004767 	000004 		10$:	call	sho$df			; /63/ display default disk
+     27	001104	005000 			20$:	clr	r0			; /62/ for when not called by SHOW
+     28	001106	000207 				return
+     29
+     30	001110	004767 	000002 		sho$df:	call	sho$xx			; /BBS/ allow separate access
+     31	001114	000421 				br	sho$yy			; /62/ to each function alone
+     32
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 16-1
+SHOW DATE, DAYTIME, DEFAULT, HOME, TIME
+
+     33	001116				sho$xx:	wrtall	#hoslug			; /BBS/ print prefix
+	001116	012746 	004606'			mov	#hoslug	,-(sp)		; pass the address
+	001122	004767 	000000G			call	wrtall			; do it
+     34	001126					wrtall	#dkname			; then show HOME dir
+	001126	012746 	000000G			mov	#dkname	,-(sp)		; pass the address
+	001132	004767 	000000G			call	wrtall			; do it
+     35	001136					.newline
+	001136	004767 	000000G			call	l$pcrlf
+     36	001142	000760 				br	20$			; /62/
+     37
+     38	001144				c$home::strcpy	#defdir	,#dkname	; /62/ write home device into default
+	001144	012746 	000000G			mov	#dkname	,-(sp)
+	001150	012746 	000000G			mov	#defdir	,-(sp)
+	001154	004767 	000000G			jsr	pc	,strcpy
+     39	001160				sho$yy::wrtall	#dkslug			; /BBS/ print prefix
+	001160	012746 	004575'			mov	#dkslug	,-(sp)		; pass the address
+	001164	004767 	000000G			call	wrtall			; do it
+     40	001170					wrtall	#defdir			; then show DK
+	001170	012746 	000000G			mov	#defdir	,-(sp)		; pass the address
+	001174	004767 	000000G			call	wrtall			; do it
+     41	001200					.newline
+	001200	004767 	000000G			call	l$pcrlf
+     42	001204	000737 				br	20$			; /62/
+     43
+     44						.dsabl	lsb
+     45
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 17
+SHOW DATE, DAYTIME, DEFAULT, HOME, TIME
+
+      1
+      2						.sbttl	SHOW SUBMOUNTS		; /BBS/ all new routine..
+      3
+      4		000002 				F.NAM1	=  2		; offset to first word of file name
+      5		000004 				F.NAM2	=  4		; second word of file name
+      6		000006 				F.TYPE	=  6		; file type
+      7		000010 				F.FLAG	= 10		; file flags
+      8		000002 					NOTHERE	=  2	; not there bit
+      9		000001 					READONLY=  1	; read only bit
+     10
+     11	001206	005767 	000000G		sho$su:	tst	tsxsav			; running under TSX?
+     12	001212	001003 				bne	10$			; ya
+     13	001214	012700 	000000G			mov	#er$tsx	,r0		; no, can't do this
+     14	001220	000406 				br	20$
+     15	001222	026727 	000000G	001154 	10$:	cmp	tsxver	,#620.		; does the right emt exist here?
+     16	001230	103006 				bhis	30$			; ya
+     17	001232	012700 	000000G			mov	#er$v62	,r0		; no
+     18	001236				20$:	direrr	r0			; say why it can't happen..
+	001236	010046 				mov	r0	,-(sp)
+	001240	004767 	000000G			call	direr$
+     19	001244	000207 				return
+     20
+     21	001246	005004 			30$:	clr	r4			; init # of units counter
+     22	001250	005005 				clr	r5			; init anything there counter
+     23	001252	110467 	000002'		40$:	movb	r4	,ld$num		; load unit # into stats emt
+     24	001256	012700 	000000'			mov	#ld$stat,r0		; load emt arg pointer
+     25	001262	104375 				emt	375			; get status of this LD unit
+     26	001264	005767 	000006'			tst	ld$buf			; anybody home??
+     27	001270	001520 				beq	90$			; next
+     28	001272	010400 				mov	r4	,r0		; copy unit number to
+     29	001274	062700 	000060 			add	#'0	,r0		; convert to ascii character
+     30	001300	110067 	000045'			movb	r0	,<ld$data+2>	; stick into display buffer
+     31
+     32					;	input:	r2	= buffer for the result
+     33					;		r3	= current directory entry pointer
+     34
+     35	001304	012702 	000053'			mov	#ld$name,r2		; pointer to output buffer
+     36	001310	012703 	000006'			mov	#ld$buf	,r3		; point to .rad50 LD file name
+     37	001314					calls	rdtoa	,<r2,(r3)>	; convert the device name please
+	001314	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001316	011346 				        mov	(r3)	,-(sp)	; push it
+	001320	010246 				        mov	r2	,-(sp)	; push it
+	001322	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001324	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	001330	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001332	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     38	001334	062702 	000003 			add	#3	,r2		; skip past it
+     39	001340	112722 	000072 			movb	#':	,(r2)+		; and insert a colon
+     40	001344					calls	rdtoa	,<r2,f.nam1(r3)> ; convert first 3 file name to ascii
+	001344	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001346	016346 	000002 			        mov	f.nam1(r3)	,-(sp)	; push it
+	001352	010246 				        mov	r2	,-(sp)	; push it
+	001354	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001356	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	001362	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001364	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     41	001366	062702 	000003 			add	#3	,r2		; and skip over those three characters
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 17-1
+SHOW SUBMOUNTS		; /BBS/ all new routine..
+
+     42	001372					calls	rdtoa	,<r2,f.nam2(r3)> ; now get the rest of the file name
+	001372	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001374	016346 	000004 			        mov	f.nam2(r3)	,-(sp)	; push it
+	001400	010246 				        mov	r2	,-(sp)	; push it
+	001402	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001404	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	001410	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001412	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     43	001414	062702 	000003 			add	#3	,r2		; point to place a dot into the name
+     44	001420	112722 	000056 			movb	#'.	,(r2)+		; a dot
+     45	001424					calls	rdtoa	,<r2,f.type(r3)> ; get the file type at last
+	001424	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001426	016346 	000006 			        mov	f.type(r3)	,-(sp)	; push it
+	001432	010246 				        mov	r2	,-(sp)	; push it
+	001434	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001436	004767 	000000G			  jsr	pc	,rdtoa		; and go to the routine
+	001442	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001444	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     46	001446	062702 	000007 			add	#7	,r2		; bump to the "O" or "W" byte
+     47	001452	032763 	000001 	000010 		bit	#readonly,f.flag(r3)	; read only?
+     48	001460	001003 				bne	50$			; ya..
+     49	001462	112722 	000127 			movb	#'W	,(r2)+		; no, say it's "R/W"
+     50	001466	000402 				br	60$
+     51	001470	112722 	000117 		50$:	movb	#'O	,(r2)+		; say it's "R/O"
+     52	001474	032763 	000002 	000010 	60$:	bit	#nothere,f.flag(r3)	; able to locate file?
+     53	001502	001002 				bne	70$			; nope..
+     54	001504	105012 				clrb	(r2)			; ya, so off not avail message
+     55	001506	000402 				br	80$
+     56	001510	112712 	000040 		70$:	movb	#space	,(r2)		; put space where null wuz..
+     57	001514				80$:	wrtall	#ld$data		; display entry for this LD unit
+	001514	012746 	000043'			mov	#ld$data	,-(sp)		; pass the address
+	001520	004767 	000000G			call	wrtall			; do it
+     58	001524					.newline
+	001524	004767 	000000G			call	l$pcrlf
+     59	001530	005205 				inc	r5			; flag some LD unit was found
+     60	001532	005204 			90$:	inc	r4			; bump LD unit number
+     61	001534	020427 	000007 			cmp	r4	,#7		; done all 8. yet?
+     62	001540	003644 				ble	40$			; no
+     63	001542	005705 				tst	r5			; ya, was anything found?
+     64	001544	001004 				bne	100$			; ya
+     65	001546					wrtall	#sh.134			; /63/ "No logical disks are mounted"
+	001546	012746 	004536'			mov	#sh.134	,-(sp)		; pass the address
+	001552	004767 	000000G			call	wrtall			; do it
+     66	001556	000207 			100$:	return
+     67
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 18
+SHOW SUBMOUNTS		; /BBS/ all new routine..
+
+      1
+      2						.sbttl	SHOW FILE-TYPE
+      3
+      4	001560				sho$fi:	wrtall	#sh.014			; "FILE-TYPE set to"
+	001560	012746 	001236'			mov	#sh.014	,-(sp)		; pass the address
+	001564	004767 	000000G			call	wrtall			; do it
+      5	001570	005767 	000000G			tst	doauto			; is auto mode enabled?
+      6	001574	001403 				beq	10$			; no
+      7	001576	012700 	001260'			mov	#sh.015	,r0		; ya, "Auto ASCII/Binary"
+      8	001602	000405 				br	20$			; go display it
+      9	001604	016700 	000000G		10$:	mov	$image	,r0		; recover current file-type
+     10	001610	006300 				asl	r0			; word indexing
+     11	001612	016000 	000476'			mov	fillst(r0),r0		; where it is..
+     12	001616				20$:	wrtall	r0			; dump file-type to TT
+	001616	010046 				mov	r0	,-(sp)		; pass the address
+	001620	004767 	000000G			call	wrtall			; do it
+     13	001624					.newline
+	001624	004767 	000000G			call	l$pcrlf
+     14	001630					wrtall	#sh.029			; /63/ "WILDCARDS are set "
+	001630	012746 	001615'			mov	#sh.029	,-(sp)		; pass the address
+	001634	004767 	000000G			call	wrtall			; do it
+     15	001640	005767 	000000G			tst	dowild			; /63/
+     16	001644	001405 				beq	30$			; /63/
+     17	001646					wrtall	#sh.030			; /63/ "Implicit"
+	001646	012746 	001640'			mov	#sh.030	,-(sp)		; pass the address
+	001652	004767 	000000G			call	wrtall			; do it
+     18	001656	000404 				br	40$			; /63/
+     19	001660				30$:	wrtall	#sh.031			; /63/ "EXPLICIT"
+	001660	012746 	001651'			mov	#sh.031	,-(sp)		; pass the address
+	001664	004767 	000000G			call	wrtall			; do it
+     20	001670				40$:	.newline			; /63/
+	001670	004767 	000000G			call	l$pcrlf
+     21	001674					wrtall	#sh.016			; "Existing file protection: "
+	001674	012746 	001302'			mov	#sh.016	,-(sp)		; pass the address
+	001700	004767 	000000G			call	wrtall			; do it
+     22	001704	005767 	000000G			tst	filprot			; is it on?
+     23	001710	001403 				beq	50$			; no
+     24	001712	012700 	001072'			mov	#sh.006	,r0		; "ENABLED"
+     25	001716	000402 				br	60$
+     26	001720	012700 	001103'		50$:	mov	#sh.008	,r0		; " disabled"
+     27	001724				60$:	wrtall	r0			; say which
+	001724	010046 				mov	r0	,-(sp)		; pass the address
+	001726	004767 	000000G			call	wrtall			; do it
+     28	001732					.newline
+	001732	004767 	000000G			call	l$pcrlf
+     29	001736					wrtall	#sh.017			; "File naming conversion: "
+	001736	012746 	001334'			mov	#sh.017	,-(sp)		; pass the address
+	001742	004767 	000000G			call	wrtall			; do it
+     30	001746	005767 	000000G			tst	rawfil			; is it on?
+     31	001752	001403 				beq	70$			; no
+     32	001754	012700 	001366'			mov	#sh.018	,r0		; " DISABLED"
+     33	001760	000402 				br	80$
+     34	001762	012700 	001400'		70$:	mov	#sh.020	,r0		; " enabled"
+     35	001766				80$:	wrtall	r0			; say which
+	001766	010046 				mov	r0	,-(sp)		; pass the address
+	001770	004767 	000000G			call	wrtall			; do it
+     36	001774					.newline
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 18-1
+SHOW FILE-TYPE
+
+	001774	004767 	000000G			call	l$pcrlf
+     37	002000					wrtall	#sh.022			; "Lower case file naming: "
+	002000	012746 	001411'			mov	#sh.022	,-(sp)		; pass the address
+	002004	004767 	000000G			call	wrtall			; do it
+     38	002010	005767 	000000G			tst	locase			; is it on?
+     39	002014	001403 				beq	90$			; no
+     40	002016	012700 	001072'			mov	#sh.006	,r0		; "ENABLED"
+     41	002022	000402 				br	100$
+     42	002024	012700 	001103'		90$:	mov	#sh.008	,r0		; " disabled"
+     43	002030				100$:	wrtall	r0			; say which
+	002030	010046 				mov	r0	,-(sp)		; pass the address
+	002032	004767 	000000G			call	wrtall			; do it
+     44	002036					.newline
+	002036	004767 	000000G			call	l$pcrlf
+     45	002042					wrtall	#sh.023			; "Volume verification is: "
+	002042	012746 	001443'			mov	#sh.023	,-(sp)		; pass the address
+	002046	004767 	000000G			call	wrtall			; do it
+     46	002052	005767 	000000G			tst	rtvol			; is it on?
+     47	002056	001403 				beq	110$			; no
+     48	002060	012700 	001400'			mov	#sh.020	,r0		; " enabled"
+     49	002064	000402 				br	120$
+     50	002066	012700 	001366'		110$:	mov	#sh.018	,r0		; " DISABLED"
+     51	002072				120$:	wrtall	r0			; say which
+	002072	010046 				mov	r0	,-(sp)		; pass the address
+	002074	004767 	000000G			call	wrtall			; do it
+     52	002100					.newline
+	002100	004767 	000000G			call	l$pcrlf
+     53	002104					wrtall	#sh.024			; /62/ "Local CSI comma parsing:  "
+	002104	012746 	001475'			mov	#sh.024	,-(sp)		; pass the address
+	002110	004767 	000000G			call	wrtall			; do it
+     54	002114	005767 	000000G			tst	csi.fake		; /62/ which is it?
+     55	002120	001403 				beq	130$			; /62/
+     56	002122	012700 	001535'			mov	#sh.026	,r0		; /62/ "EMULATED"
+     57	002126	000402 				br	140$			; /62/
+     58	002130	012700 	001530'		130$:	mov	#sh.025	,r0		; /62/ "real"
+     59	002134				140$:	wrtall	r0			; /62/ say which
+	002134	010046 				mov	r0	,-(sp)		; pass the address
+	002136	004767 	000000G			call	wrtall			; do it
+     60	002142					.newline
+	002142	004767 	000000G			call	l$pcrlf
+     61	002146					wrtall	#sh.027			; "File create-size blocks: "
+	002146	012746 	001546'			mov	#sh.027	,-(sp)		; pass the address
+	002152	004767 	000000G			call	wrtall			; do it
+     62	002156	016700 	000000G			mov	en$siz	,r0		; copy of size
+     63	002162	004767 	000000G			call	L10266			; write integer as ascii on terminal
+     64	002166					.newline
+	002166	004767 	000000G			call	l$pcrlf
+     65	002172					wrtall	#sh.028			; /62/ "Init file: "
+	002172	012746 	001601'			mov	#sh.028	,-(sp)		; pass the address
+	002176	004767 	000000G			call	wrtall			; do it
+     66	002202					wrtall	#ininam			; /62/ and its name
+	002202	012746 	000000G			mov	#ininam	,-(sp)		; pass the address
+	002206	004767 	000000G			call	wrtall			; do it
+     67	002212					.newline			; /62/
+	002212	004767 	000000G			call	l$pcrlf
+     68	002216	000207 				return
+     69
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 19
+SHOW FILE-TYPE
+
+      1
+      2						.sbttl	 SHOW BLOCK, EOF, INCOMPLETE-FILE-DISPOSITION	; /63/
+      3						.enabl	lsb						; /63/
+      4
+      5	002220				sho$bl:	wrtall	#sh.001			; /62/ "Block-check-type: "
+	002220	012746 	000742'			mov	#sh.001	,-(sp)		; pass the address
+	002224	004767 	000000G			call	wrtall			; do it
+      6	002230	116700 	000000G			movb	setchkt	,r0		; /62/ get the checksum type please
+      7	002234	162700 	000061 			sub	#'1	,r0		; convert to an index for printing
+      8	002240	006300 				asl	r0			; word indexing
+      9	002242					wrtall	blolst(r0)		; display it
+	002242	016046 	000162'			mov	blolst(r0)	,-(sp)		; pass the address
+	002246	004767 	000000G			call	wrtall			; do it
+     10	002252	000440 				br	30$			; /63/
+     11
+     12	002254				sho$eof:wrtall	#sh.032			; /63/ "Take file EOF action: "
+	002254	012746 	001662'			mov	#sh.032	,-(sp)		; pass the address
+	002260	004767 	000000G			call	wrtall			; do it
+     13	002264	005767 	000000G			tst	exieof			; is it on?
+     14	002270	001004 				bne	10$			; ya
+     15	002272					wrtall	#sh.033			; /63/ "NO"
+	002272	012746 	001711'			mov	#sh.033	,-(sp)		; pass the address
+	002276	004767 	000000G			call	wrtall			; do it
+     16	002302				10$:	wrtall	#sh.034			; /63/ "EXIT"
+	002302	012746 	001714'			mov	#sh.034	,-(sp)		; pass the address
+	002306	004767 	000000G			call	wrtall			; do it
+     17	002312	000420 				br	30$			; /63/
+     18
+     19	002314				sho$in:	wrtall	#sh.002			; /63/ "Incomplete-file-disposition: "
+	002314	012746 	000765'			mov	#sh.002	,-(sp)		; pass the address
+	002320	004767 	000000G			call	wrtall			; do it
+     20	002324	005767 	000000G			tst	incfile			; is it on?
+     21	002330	001005 				bne	20$			; no
+     22	002332					wrtall	#sh.035			; /63/ "KEEP"
+	002332	012746 	001721'			mov	#sh.035	,-(sp)		; pass the address
+	002336	004767 	000000G			call	wrtall			; do it
+     23	002342	000404 				br	30$
+     24	002344				20$:	wrtall	#sh.036			; /63/ "discard"
+	002344	012746 	001726'			mov	#sh.036	,-(sp)		; pass the address
+	002350	004767 	000000G			call	wrtall			; do it
+     25	002354				30$:	.newline
+	002354	004767 	000000G			call	l$pcrlf
+     26	002360	000207 				return
+     27
+     28						.dsabl	lsb
+     29
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 20
+SHOW BLOCK, EOF, INCOMPLETE-FILE-DISPOSITION	; /63/
+
+      1
+      2						.sbttl	SHOW ESCAPE		; /BBS/ modified..
+      3
+      4	0022400	004767 	000000G			call	unfmts			; convert to "\000" notation first
+      8	002404					wrtall	r0			; display that
+	002404	010046 				mov	r0	,-(sp)		; pass the address
+	002406	004767 	000000G			call	wrtall			; do it
+      9	002412	004767 	000760 			call	tag.it			; then do the "^\" notation
+     10	002416	005726 				tst	(sp)+			; pop the tiny buffer
+     11	002420	000207 				return
+     12
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 21
+SHOW ESCAPE		; /BBS/ modified..
+
+      1
+      2						.sbttl	SHOW PARAMETERS
+      3
+      4	002422	004767 	000020 		sho$pa:	call	sho$pk			; packets
+      5	002426	004767 	002210 			call	sho$dl			; delay
+      6	002432	004767 	002374 			call	sho$ps			; pause
+      7	002436	004767 	000464 			call	sho$to			; time-out
+      8	002442	000167 	000626 			jmp	sho$rt			; /62/ retries
+      9
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 22
+SHOW PARAMETERS
+
+      1
+      2						.sbttl	SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
+      3						.enabl	lsb				; /63/
+      4
+      5	002446	004767 	003302 		sho$pk:	call	sho$so			; show SOH first
+      6	002452					wrtall	#sh.037			; /63/ "RECEIVE "
+	002452	012746 	001736'			mov	#sh.037	,-(sp)		; pass the address
+	002456	004767 	000000G			call	wrtall			; do it
+      7	002462					wrtall	#sh.038			; /63/ " conpar+p.eol   EOL  "
+	002462	012746 	001747'			mov	#sh.038	,-(sp)		; pass the address
+	002466	004767 	000000G			call	wrtall			; do it
+      8	002472	005046 				clr	-(sp)			; a one word buffer
+      9	002474	156716 	000004G			bisb	conpar+p.eol,@sp	; copy receive EOL char
+     10	002500	010600 				mov	sp	,r0		; point to buffer
+     11	002502	004767 	000000G			call	unfmts			; convert to "\000" notation
+     12	002506					wrtall	r0			; display that
+	002506	010046 				mov	r0	,-(sp)		; pass the address
+	002510	004767 	000000G			call	wrtall			; do it
+     13	002514	004767 	000656 			call	tag.it			; then tag with "^M" notation
+     14	002520	005016 				clr	(sp)			; init the tiny buffer again
+     15	002522	156716 	000004G			bisb	senpar+p.eol,@sp	; /62/ copy send EOL char
+     16	002526					wrtall	#sh.039			; /63/ " SEND "
+	002526	012746 	001775'			mov	#sh.039	,-(sp)		; pass the address
+	002532	004767 	000000G			call	wrtall			; do it
+     17	002536					wrtall	#sh.040			; /63/ "   senpar+p.eol   EOL  "
+	002536	012746 	002004'			mov	#sh.040	,-(sp)		; pass the address
+	002542	004767 	000000G			call	wrtall			; do it
+     18	002546	010600 				mov	sp	,r0		; point to buffer
+     19	002550	004767 	000000G			call	unfmts			; convert to "\000" notation
+     20	002554					wrtall	r0			; display it
+	002554	010046 				mov	r0	,-(sp)		; pass the address
+	002556	004767 	000000G			call	wrtall			; do it
+     21	002562	004767 	000610 			call	tag.it			; then tag with "^M" notation
+     22	002566	005726 				tst	(sp)+			; pop tiny buffer
+     23	002570					wrtall	#sh.037			; /63/ "RECEIVE "
+	002570	012746 	001736'			mov	#sh.037	,-(sp)		; pass the address
+	002574	004767 	000000G			call	wrtall			; do it
+     24	002600					wrtall	#sh.042			; /63/ "nominal packet  LEN"
+	002600	012746 	002036'			mov	#sh.042	,-(sp)		; pass the address
+	002604	004767 	000000G			call	wrtall			; do it
+     25	002610	116700 	000000G			movb	conpar+p.spsiz,r0	; /62/ recover packet length
+     26	002614					decout	r0			; display it
+	002614	010546 				mov	r5	,-(sp)
+	002616	010046 				mov	r0	,-(sp)		; /62/ l$wrdec pops this buffer
+	002620	010605 				mov	sp	,r5
+	002622	004767 	000000G			call	l$wrdec
+	002626	012605 				mov	(sp)+	,r5
+     27	002630					.newline
+	002630	004767 	000000G			call	l$pcrlf
+     28	002634					wrtall	#sh.039			; /63/ " SEND "
+	002634	012746 	001775'			mov	#sh.039	,-(sp)		; pass the address
+	002640	004767 	000000G			call	wrtall			; do it
+     29	002644					wrtall	#sh.041			; /63/ "  nominal packet  LEN"
+	002644	012746 	002034'			mov	#sh.041	,-(sp)		; pass the address
+	002650	004767 	000000G			call	wrtall			; do it
+     30	002654	116700 	000000G			movb	senpar+p.spsiz,r0	; /62/ recover packet length
+     31	002660					decout	r0			; display it
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 22-1
+SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
+
+	002660	010546 				mov	r5	,-(sp)
+	002662	010046 				mov	r0	,-(sp)		; /62/ l$wrdec pops this buffer
+	002664	010605 				mov	sp	,r5
+	002666	004767 	000000G			call	l$wrdec
+	002672	012605 				mov	(sp)+	,r5
+     32	002674					.newline
+	002674	004767 	000000G			call	l$pcrlf
+     33	002700					wrtall	#sh.039			; /63/ " SEND "
+	002700	012746 	001775'			mov	#sh.039	,-(sp)		; pass the address
+	002704	004767 	000000G			call	wrtall			; do it
+     34	002710					wrtall	#sh.043			; /63/ "set packet limit  LEN"
+	002710	012746 	002062'			mov	#sh.043	,-(sp)		; pass the address
+	002714	004767 	000000G			call	wrtall			; do it
+     35	002720					decout	senlen			; /62/ display SET SEND PACKET length
+	002720	010546 				mov	r5	,-(sp)
+	002722	016746 	000000G			mov	senlen	,-(sp)		; /62/ l$wrdec pops this buffer
+	002726	010605 				mov	sp	,r5
+	002730	004767 	000000G			call	l$wrdec
+	002734	012605 				mov	(sp)+	,r5
+     36	002736					.newline
+	002736	004767 	000000G			call	l$pcrlf
+     37	002742					wrtall	#sh.044			; /63/ "LONG-PACKETS"
+	002742	012746 	002110'			mov	#sh.044	,-(sp)		; pass the address
+	002746	004767 	000000G			call	wrtall			; do it
+     38	002752					wrtall	#sh.045			; /63/ "set locally to"
+	002752	012746 	002126'			mov	#sh.045	,-(sp)		; pass the address
+	002756	004767 	000000G			call	wrtall			; do it
+     39	002762	005767 	000000G			tst	dolong			; are long-packets enabled?
+     40	002766	001005 				bne	10$			; ya
+     41	002770					wrtall	#sh.046			; /63/ "   OFF"
+	002770	012746 	002145'			mov	#sh.046	,-(sp)		; pass the address
+	002774	004767 	000000G			call	wrtall			; do it
+     42	003000	000407 				br	20$
+     43	003002				10$:	decout	reclng			; display locally set long-packet len
+	003002	010546 				mov	r5	,-(sp)
+	003004	016746 	000000G			mov	reclng	,-(sp)		; /62/ l$wrdec pops this buffer
+	003010	010605 				mov	sp	,r5
+	003012	004767 	000000G			call	l$wrdec
+	003016	012605 				mov	(sp)+	,r5
+     44	003020				20$:	.newline
+	003020	004767 	000000G			call	l$pcrlf
+     45	003024					wrtall	#sh.044			; /63/ "LONG-PACKETS"
+	003024	012746 	002110'			mov	#sh.044	,-(sp)		; pass the address
+	003030	004767 	000000G			call	wrtall			; do it
+     46	003034					wrtall	#sh.048			; /63/ "_received_ LEN"
+	003034	012746 	002154'			mov	#sh.048	,-(sp)		; pass the address
+	003040	004767 	000000G			call	wrtall			; do it
+     47	003044					decout	senlng			; received (from other Kermit) length
+	003044	010546 				mov	r5	,-(sp)
+	003046	016746 	000000G			mov	senlng	,-(sp)		; /62/ l$wrdec pops this buffer
+	003052	010605 				mov	sp	,r5
+	003054	004767 	000000G			call	l$wrdec
+	003060	012605 				mov	(sp)+	,r5
+     48	003062					.newline
+	003062	004767 	000000G			call	l$pcrlf
+     49	003066					wrtall	#sh.044			; /63/ "LONG-PACKETS"
+	003066	012746 	002110'			mov	#sh.044	,-(sp)		; pass the address
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 22-2
+SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
+
+	003072	004767 	000000G			call	wrtall			; do it
+     50	003076					wrtall	#sh.049			; /63/ "max avail buff"
+	003076	012746 	002173'			mov	#sh.049	,-(sp)		; pass the address
+	003102	004767 	000000G			call	wrtall			; do it
+     51	003106					decout	#maxlng			; the maximum possible packet length
+	003106	010546 				mov	r5	,-(sp)
+	003110	012746 	003600 			mov	#maxlng	,-(sp)		; /62/ l$wrdec pops this buffer
+	003114	010605 				mov	sp	,r5
+	003116	004767 	000000G			call	l$wrdec
+	003122	012605 				mov	(sp)+	,r5
+     52	003124	000536 				br	30$			; /63/
+     53
+     54	003126				sho$to:	wrtall	#sh.050			; /63/ "TIME-OUT "
+	003126	012746 	002212'			mov	#sh.050	,-(sp)		; pass the address
+	003132	004767 	000000G			call	wrtall			; do it
+     55	003136					wrtall	#sh.051			; /63/ " REC  seconds wait"
+	003136	012746 	002224'			mov	#sh.051	,-(sp)		; pass the address
+	003142	004767 	000000G			call	wrtall			; do it
+     56	003146					decout	rectim			; SET value
+	003146	010546 				mov	r5	,-(sp)
+	003150	016746 	000000G			mov	rectim	,-(sp)		; /62/ l$wrdec pops this buffer
+	003154	010605 				mov	sp	,r5
+	003156	004767 	000000G			call	l$wrdec
+	003162	012605 				mov	(sp)+	,r5
+     57	003164					.newline
+	003164	004767 	000000G			call	l$pcrlf
+     58	003170					wrtall	#sh.050			; /63/ "TIME-OUT "
+	003170	012746 	002212'			mov	#sh.050	,-(sp)		; pass the address
+	003174	004767 	000000G			call	wrtall			; do it
+     59	003200					wrtall	#sh.052			; /63/ " SEND seconds wait"
+	003200	012746 	002247'			mov	#sh.052	,-(sp)		; pass the address
+	003204	004767 	000000G			call	wrtall			; do it
+     60	003210					decout	sentim			; SET value
+	003210	010546 				mov	r5	,-(sp)
+	003212	016746 	000000G			mov	sentim	,-(sp)		; /62/ l$wrdec pops this buffer
+	003216	010605 				mov	sp	,r5
+	003220	004767 	000000G			call	l$wrdec
+	003224	012605 				mov	(sp)+	,r5
+     61	003226					.newline
+	003226	004767 	000000G			call	l$pcrlf
+     62	003232					wrtall	#sh.050			; /63/ "TIME-OUT "
+	003232	012746 	002212'			mov	#sh.050	,-(sp)		; pass the address
+	003236	004767 	000000G			call	wrtall			; do it
+     63	003242					wrtall	#sh.053			; /63/ "_received_ seconds"
+	003242	012746 	002272'			mov	#sh.053	,-(sp)		; pass the address
+	003246	004767 	000000G			call	wrtall			; do it
+     64	003252	116700 	000001G			movb	conpar+p.time,r0	; RECEIVED (from other Kermit)
+     65	003256					decout	r0			; value
+	003256	010546 				mov	r5	,-(sp)
+	003260	010046 				mov	r0	,-(sp)		; /62/ l$wrdec pops this buffer
+	003262	010605 				mov	sp	,r5
+	003264	004767 	000000G			call	l$wrdec
+	003270	012605 				mov	(sp)+	,r5
+     66	003272	000453 				br	30$			; /63/
+     67
+     68	003274				sho$rt:	wrtall	#sh.054			; /63/ "RETRY "
+	003274	012746 	002315'			mov	#sh.054	,-(sp)		; pass the address
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 22-3
+SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
+
+	003300	004767 	000000G			call	wrtall			; do it
+     69	003304					wrtall	#sh.055			; /63/ "initial-connect limit"
+	003304	012746 	002324'			mov	#sh.055	,-(sp)		; pass the address
+	003310	004767 	000000G			call	wrtall			; do it
+     70	003314					decout	initry
+	003314	010546 				mov	r5	,-(sp)
+	003316	016746 	000000G			mov	initry	,-(sp)		; /62/ l$wrdec pops this buffer
+	003322	010605 				mov	sp	,r5
+	003324	004767 	000000G			call	l$wrdec
+	003330	012605 				mov	(sp)+	,r5
+     71	003332					.newline
+	003332	004767 	000000G			call	l$pcrlf
+     72	003336					wrtall	#sh.054			; /63/ "RETRY "
+	003336	012746 	002315'			mov	#sh.054	,-(sp)		; pass the address
+	003342	004767 	000000G			call	wrtall			; do it
+     73	003346					wrtall	#sh.056			; /63/ "max for other packets"
+	003346	012746 	002352'			mov	#sh.056	,-(sp)		; pass the address
+	003352	004767 	000000G			call	wrtall			; do it
+     74	003356					decout	maxtry
+	003356	010546 				mov	r5	,-(sp)
+	003360	016746 	000000G			mov	maxtry	,-(sp)		; /62/ l$wrdec pops this buffer
+	003364	010605 				mov	sp	,r5
+	003366	004767 	000000G			call	l$wrdec
+	003372	012605 				mov	(sp)+	,r5
+     75	003374	000412 				br	30$			; /63/
+     76
+     77	003376				tag.it:	wrtall	#sh.057			; /63/ "  ^"  /BBS/ added..
+	003376	012746 	002400'			mov	#sh.057	,-(sp)		; pass the address
+	003402	004767 	000000G			call	wrtall			; do it
+     78	003406	016600 	000002 			mov	2(sp)	,r0		; display a control char
+     79	003412	116000 	004617'			movb	lis.ct(r0),r0		; in "^n" notation
+     80	003416	004767 	000000G			call	writ1char
+     81	003422				30$:	.newline
+	003422	004767 	000000G			call	l$pcrlf
+     82	003426	000207 				return
+     83
+     84						.dsabl	lsb
+     85
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 23
+SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
+
+      1
+      2						.sbttl	STATUS
+      3
+      4	003430	162706 	000120 		c$stat::sub	#120	,sp		; /43/ allocate a buffer please
+      5	003434					wrtall	#sh.059			; /63/ a header
+	003434	012746 	002404'			mov	#sh.059	,-(sp)		; pass the address
+	003440	004767 	000000G			call	wrtall			; do it
+      6	003444	005003 				clr	r3			; /43/ current item to Dump
+      7	003446	012704 	000033 			mov	#27.	,r4		; /43/ number items to dump
+      8	003452	010605 				mov	sp	,r5		; /BBS/ init buffer pointer
+      9	003454	000423 				br	20$			; /BBS/ do totals, even zeros..
+     10
+     11	003456	010605 			10$:	mov	sp	,r5		; /43/ restore buffer pointer
+     12	003460	005763 	000002G			tst	pcnt.r+2(r3)		; /43/ anything there to dump?
+     13	003464	001017 				bne	20$			; /43/ yes
+     14	003466	005763 	000002G			tst	pcnt.s+2(r3)		; /43/ no, what about sent packets?
+     15	003472	001014 				bne	20$			; /BBS/ ya
+     16	003474	016701 	000000G			mov	totp.s	,r1		; /BBS/ check "prev" totals too
+     17	003500	060301 				add	r3	,r1		; point to this type's sent total
+     18	003502	005761 	000002 			tst	2(r1)			; anything in low word?
+     19	003506	001006 				bne	20$			; ya, there's something to do
+     20	003510	016701 	000000G			mov	totp.r	,r1		; top of the received data table
+     21	003514	060301 				add	r3	,r1		; point to this type's rec'd total
+     22	003516	005761 	000002 			tst	2(r1)			; anything in low word?
+     23	003522	001457 				beq	60$			; no, skip the empty individual types
+     24	003524	010501 			20$:	mov	r5	,r1		; /43/ fill the buffer with spaces
+     25	003526	012702 	000110 			mov	#110	,r2		; /43/ count for the fill
+     26	003532	112721 	000040 		30$:	movb	#space	,(r1)+		; /43/ stuff a space
+     27	003536	077203 				sob	r2	,30$		; /43/ and go back for more
+     28	003540	010301 				mov	r3	,r1		; /43/ current type
+     29	003542	001406 				beq	40$			; /43/ empty type means total packets
+     30	003544	006201 				asr	r1			; /43/ divide by two
+     31	003546	006201 				asr	r1			; /43/ again
+     32	003550	062701 	000100 			add	#100	,r1		; /43/ get the letter type now
+     33	003554	110125 				movb	r1	,(r5)+		; /43/ insert into the buffer
+     34	003556	000406 				br	50$			; /43/ insert data now
+     35	003560	012701 	002610'		40$:	mov	#sh.061	,r1		; /63/ the word "ALL" for totals
+     36	003564	112125 				movb	(r1)+	,(r5)+		; /63/ bump r5 ala above and
+     37	003566	112115 				movb	(r1)+	,(r5)		; /63/ copy without leaving
+     38	003570	111165 	000001 			movb	(r1)	,1(r5)		; /63/ a null terminator here
+     39	003574	062705 	000005 		50$:	add	#5	,r5		; /43/ skip over a couple spaces
+     40	003600	012701 	000000G			mov	#pcnt.s	,r1		; /43/ sent packet count
+     41	003604	004767 	000334 			call	150$			; /43/ convert double quantity
+     42	003610	012701 	000000G			mov	#pcnt.r	,r1		; /43/ received packet count
+     43	003614	004767 	000324 			call	150$			; /43/ convert double quantity
+     44	003620	016701 	000000G			mov	totp.s	,r1		; /43/ total sent packet count
+     45	003624	004767 	000314 			call	150$			; /43/ convert double quantity
+     46	003630	016701 	000000G			mov	totp.r	,r1		; /43/ total received packet count
+     47	003634	004767 	000304 			call	150$			; /43/ convert double quantity
+     48	003640	112720 	000015 			movb	#cr	,(r0)+		; /43/ insert carriage control
+     49	003644	112720 	000012 			movb	#lf	,(r0)+		; /43/
+     50	003650	105010 				clrb	@r0			; /43/ all done, .asciz
+     51	003652	010600 				mov	sp	,r0		; /43/ now dump it
+     52	003654					wrtall	r0			; /43/ simple
+	003654	010046 				mov	r0	,-(sp)		; pass the address
+	003656	004767 	000000G			call	wrtall			; do it
+     53	003662	062703 	000004 		60$:	add	#4	,r3		; /43/ move up to next entry
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 23-1
+STATUS
+
+     54	003666	005304 				dec	r4			; /BBS/ wuz sob r4 ,10$ (too big now)
+     55	003670	001402 				beq	70$
+     56	003672	000167 	177560 			jmp	10$
+     57
+     58	003676	005067 	000020'		70$:	clr	txflag			; /62/ init transfer direction flag
+     59	003702					wrtall	#sh.060			; /63/ a header, dump character counts
+	003702	012746 	002554'			mov	#sh.060	,-(sp)		; pass the address
+	003706	004767 	000000G			call	wrtall			; do it
+     60	003712	010604 				mov	sp	,r4		; /43/ buffer address
+     61	003714					wrtall	#sh.062			; /63/ "Bytes "
+	003714	012746 	002614'			mov	#sh.062	,-(sp)		; pass the address
+	003720	004767 	000000G			call	wrtall			; do it
+     62	003724	005767 	000000G			tst	charout			; /BBS/ anything sent?
+     63	003730	001003 				bne	80$			; /BBS/	ya
+     64	003732	005767 	000002G			tst	charout+2		; /BBS/	check low word
+     65	003736	001411 				beq	90$			; /BBS/ nope..
+     66	003740				80$:	wrtall	#sh.063			; /63/ "sent:    "
+	003740	012746 	002623'			mov	#sh.063	,-(sp)		; pass the address
+	003744	004767 	000000G			call	wrtall			; do it
+     67	003750	012701 	000000G			mov	#charout,r1		; /43/ data characters in
+     68	003754	010667 	000020'			mov	sp	,txflag		; /BBS/ flag for "Chars per read: "
+     69	003760	000406 				br	100$			; /BBS/ print it
+     70	003762				90$:	wrtall	#sh.064			; /63/ "received:"
+	003762	012746 	002635'			mov	#sh.064	,-(sp)		; pass the address
+	003766	004767 	000000G			call	wrtall			; do it
+     71	003772	012701 	000000G			mov	#charin	,r1		; /43/ point to it
+     72	003776	004767 	000064 		100$:	call	130$			; /43/ and dump
+     73	004002					wrtall	#sh.065			; /63/ "For data bytes:"
+	004002	012746 	002647'			mov	#sh.065	,-(sp)		; pass the address
+	004006	004767 	000000G			call	wrtall			; do it
+     74	004012	005767 	000020'			tst	txflag			; sending this time?
+     75	004016	001003 				bne	110$
+     76	004020	012701 	000000G			mov	#filein	,r1		; no, use in char count
+     77	004024	000402 				br	120$
+     78	004026	012701 	000000G		110$:	mov	#fileout,r1		; ya, use out char count
+     79	004032	004767 	000030 		120$:	call	130$			; display whichever..
+     80	004036					wrtall	#sh.066			; /63/ "Time to transfer: "
+	004036	012746 	002667'			mov	#sh.066	,-(sp)		; pass the address
+	004042	004767 	000000G			call	wrtall			; do it
+     81	004046	004767 	000112 			call	xtime			; /BBS/ format the transfer time
+     82	004052	004767 	000340 			call	brate			; /43/ data rates also
+     83	004056	062706 	000120 			add	#120	,sp		; /43/ pop local buffer
+     84	004062	005000 				clr	r0			; /62/ return no error
+     85	004064	000207 				return
+     86
+     87	004066	005002 			130$:	clr	r2			; /43/ convert for character counts
+     88	004070	010400 				mov	r4	,r0		; /43/ buffer address
+     89	004072	004767 	000000G			call	$cddmg			; /43/ convert 32-bit integer
+     90	004076	112720 	000015 			movb	#cr	,(r0)+		; /BBS/ then tag number
+     91	004102	112720 	000012 			movb	#lf	,(r0)+		; /BBS/ with a CR/LF
+     92	004106	105010 				clrb	@r0			; /43/ .asciz
+     93	004110	160400 				sub	r4	,r0		; /BBS/ get length
+     94	004112	162700 	000015 			sub	#15	,r0		; /BBS/ how much to pad?
+     95	004116	005400 				neg	r0			; /BBS/ need pos number
+     96	004120	010002 				mov	r0	,r2		; /BBS/ copy # of pad chars
+     97	004122	012700 	000040 			mov	#space	,r0		; /BBS/ a space
+     98	004126	004767 	000000G		140$:	call	writ1ch			; /BBS/ dump it to the screen
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 23-2
+STATUS
+
+     99	004132	077203 				sob	r2	,140$		; /BBS/ pad as needed
+    100	004134					wrtall	r4			; /43/ dump and exit
+	004134	010446 				mov	r4	,-(sp)		; pass the address
+	004136	004767 	000000G			call	wrtall			; do it
+    101	004142	000207 				return
+    102
+    103	004144	060301 			150$:	add	r3	,r1		; /43/ get address to convert
+    104	004146	005002 				clr	r2			; /43/ ensure no leading zeroes
+    105	004150	010500 				mov	r5	,r0		; /43/ set buffer address
+    106	004152	004767 	000000G			call	$cddmg			; /43/ convert
+    107	004156	062705 	000014 			add	#14	,r5		; /43/ position for next time
+    108	004162	000207 				return
+    109
+    110	004164	012700 	000030'		xtime:	mov	#conn	,r0		; /BBS/ display xfr time as HH:MM:SS
+    111	004170	112720 	000040 			movb	#space	,(r0)+		; write spaces
+    112	004174	112720 	000040 			movb	#space	,(r0)+		; to clear possible
+    113	004200	112710 	000040 			movb	#space	,(r0)		; leftover hours & colon
+    114	004204	016700 	000004G			mov	times+4	,r0		; hi word, incremental time from stats
+    115	004210	016701 	000006G			mov	times+6	,r1		; lo word, ditto..
+    116	004214	071027 	000074 			div	#60.	,r0		;; good for up to 18.2 hours duration
+    117	004220	010167 	000026'			mov	r1	,C4		; save secs
+    118	004224	010001 				mov	r0	,r1		; prep for
+    119	004226	005000 				clr	r0			; next divide
+    120	004230	071027 	000074 			div	#60.	,r0		; get hours and mins
+    121	004234	010167 	000024'			mov	r1	,C3		; save mins
+    122	004240	010067 	000022'			mov	r0	,C2		; save copy of hours
+    123	004244	001417 				beq	160$			; skip if no hours
+    124
+    125	004246	010001 				mov	r0	,r1		; where hrs need to be for dec2
+    126	004250	012702 	000030'			mov	#conn	,r2		; where dec2 will write hours
+    127	004254	004767 	000112 			call	dec2			; convert hours to ascii
+    128	004260	112767 	000072 	000032'		movb	#':	,conn+2		; colon after hours
+    129	004266	122767 	000060 	000030'		cmpb	#'0	,conn		; iz hours "tens" digit a zero?
+    130	004274	001003 				bne	160$			; no
+    131	004276	112767 	000040 	000030'		movb	#space	,conn		; blank leading zero
+    132
+    133	004304	016701 	000024'		160$:	mov	C3	,r1		; do mins
+    134	004310	012702 	000033'			mov	#conn+3	,r2		; put 'em here
+    135	004314	004767 	000052 			call	dec2			; convert mins to ascii
+    136	004320	005767 	000022'			tst	C2			; do hours exist?
+    137	004324	001007 				bne	170$			; ya, so leave leading zero in mins
+    138	004326	122767 	000060 	000033'		cmpb	#'0	,conn+3		; iz mins "tens" digit a zero?
+    139	004334	001003 				bne	170$			; nope..
+    140	004336	112767 	000040 	000033'		movb	#space	,conn+3		; ya, blank leading zero
+    141
+    142	004344	016701 	000026'		170$:	mov	C4	,r1		; recover secs
+    143	004350	012702 	000036'			mov	#conn+6	,r2		; to here
+    144	004354	004767 	000012 			call	dec2			; convert to ascii
+    145	004360					wrtall	#conn			; done, dump buff to screen
+	004360	012746 	000030'			mov	#conn	,-(sp)		; pass the address
+	004364	004767 	000000G			call	wrtall			; do it
+    146	004370	000207 				return
+    147
+    148	004372	005000 			dec2:	clr	r0			; integer in r1 -> two digit ascii
+    149	004374	071027 	000012 			div	#10.	,r0		; get values of digits
+    150	004400	062700 	000060 			add	#'0	,r0		; convert ones to ascii
+    151	004404	110022 				movb	r0	,(r2)+		; put ascii number in buffer
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 23-3
+STATUS
+
+    152	004406	062701 	000060 			add	#'0	,r1		; get tens digit
+    153	004412	110112 				movb	r1	,(r2)		; two digits only
+    154	004414	000207 				return
+    155
+    156	004416	016701 	000002G		brate:	mov	charout+2,r1		; /43/ compute effective baud rate
+    157	004422	016700 	000000G			mov	charout+0,r0		; /43/ for the last transaction
+    158	004426	066701 	000002G			add	charin+2,r1		; /43/ don't care which way it was
+    159	004432	005500 				adc	r0			; /43/ overflow?
+    160	004434	066700 	000000G			add	charin	,r0		; /43/ done
+    161	004440	071067 	000006G			div	times+6	,r0		; /43/ at last (forget the 16 high)
+    162	004444	003475 				ble	180$			; /BBS/ nothing to display
+    163	004446					wrtall	#sh.067			; /63/ Physical data rate: "
+	004446	012746 	002712'			mov	#sh.067	,-(sp)		; pass the address
+	004452	004767 	000000G			call	wrtall			; do it
+    164	004456					decout	r0			; /43/ dump the data
+	004456	010546 				mov	r5	,-(sp)
+	004460	010046 				mov	r0	,-(sp)		; /62/ l$wrdec pops this buffer
+	004462	010605 				mov	sp	,r5
+	004464	004767 	000000G			call	l$wrdec
+	004470	012605 				mov	(sp)+	,r5
+    165	004472					wrtall	#sh.068			; /63/ " chars/second"
+	004472	012746 	002737'			mov	#sh.068	,-(sp)		; pass the address
+	004476	004767 	000000G			call	wrtall			; do it
+    166	004502	016701 	000002G			mov	fileout+2,r1		; /43/ compute effective baud rate
+    167	004506	016700 	000000G			mov	fileout+0,r0		; /43/ for the last transaction
+    168	004512	066701 	000002G			add	filein+2,r1		; /43/ don't care which way it was
+    169	004516	005500 				adc	r0			; /43/ overflow?
+    170	004520	066700 	000000G			add	filein	,r0		; /43/ done
+    171	004524	071067 	000006G			div	times+6,r0		; /43/ at last (forget the 16 high)
+    172	004530					wrtall	#sh.069			; /63/ "File transfer rate: "
+	004530	012746 	002757'			mov	#sh.069	,-(sp)		; pass the address
+	004534	004767 	000000G			call	wrtall			; do it
+    173	004540					decout	r0			; /43/ dump the data
+	004540	010546 				mov	r5	,-(sp)
+	004542	010046 				mov	r0	,-(sp)		; /62/ l$wrdec pops this buffer
+	004544	010605 				mov	sp	,r5
+	004546	004767 	000000G			call	l$wrdec
+	004552	012605 				mov	(sp)+	,r5
+    174	004554					wrtall	#sh.068			; /63/ " chars/second"
+	004554	012746 	002737'			mov	#sh.068	,-(sp)		; pass the address
+	004560	004767 	000000G			call	wrtall			; do it
+    175	004564	005767 	000020'			tst	txflag			; /BBS/ reading this time?
+    176	004570	001423 				beq	180$			; /BBS/ nope
+    177	004572	016701 	000002G			mov	rdrate+2,r1		; /56/ ya, low word of chars read
+    178	004576	016700 	000000G			mov	rdrate+0,r0		; /56/ high word of chars read
+    179	004602	071067 	000004G			div	rdrate+4,r0		; /56/ divided by number of reads done
+    180	004606	003414 				ble	180$			; /BBS/ nothing to display
+    181	004610					wrtall	#sh.070			; /63/ "Chars per read:     "
+	004610	012746 	003004'			mov	#sh.070	,-(sp)		; pass the address
+	004614	004767 	000000G			call	wrtall			; do it
+    182	004620					decout	r0			; /56/ write number to TT
+	004620	010546 				mov	r5	,-(sp)
+	004622	010046 				mov	r0	,-(sp)		; /62/ l$wrdec pops this buffer
+	004624	010605 				mov	sp	,r5
+	004626	004767 	000000G			call	l$wrdec
+	004632	012605 				mov	(sp)+	,r5
+    183	004634					.newline			; /56/
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 23-4
+STATUS
+
+	004634	004767 	000000G			call	l$pcrlf
+    184	004640	000207 			180$:	return
+    185
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 24
+STATUS
+
+      1
+      2						.sbttl	SHOW DELAY, HANDSHAKE, PAUSE, PARITY
+      3						.enabl	lsb			; /63/
+      4
+      5	004642				sho$dl:	wrtall	#sh.071			; /63/ "DELAY"
+	004642	012746 	003031'			mov	#sh.071	,-(sp)		; pass the address
+	004646	004767 	000000G			call	wrtall			; do it
+      6	004652					wrtall	#sh.073			; /63/ " secs before send-"
+	004652	012746 	003044'			mov	#sh.073	,-(sp)		; pass the address
+	004656	004767 	000000G			call	wrtall			; do it
+      7	004662					wrtall	#sh.075			; /63/ "init"
+	004662	012746 	003074'			mov	#sh.075	,-(sp)		; pass the address
+	004666	004767 	000000G			call	wrtall			; do it
+      8	004672					decout	sendly			; write decimal value to TT
+	004672	010546 				mov	r5	,-(sp)
+	004674	016746 	000000G			mov	sendly	,-(sp)		; /62/ l$wrdec pops this buffer
+	004700	010605 				mov	sp	,r5
+	004702	004767 	000000G			call	l$wrdec
+	004706	012605 				mov	(sp)+	,r5
+      9	004710	000467 				br	30$			; /63/
+     10
+     11	004712	116700 	000000G		sho$ha:	movb	handch	,r0		; recover handshake character
+     12	004716	001005 				bne	10$			; got it
+     13	004720					wrtall	#sh.076			; /63/ "No handshaking in use"
+	004720	012746 	003101'			mov	#sh.076	,-(sp)		; pass the address
+	004724	004767 	000000G			call	wrtall			; do it
+     14	004730	000457 				br	30$			; /63/
+     15	004732				10$:	wrtall	#sh.077			; /63/ "Handshake set to "
+	004732	012746 	003127'			mov	#sh.077	,-(sp)		; pass the address
+	004736	004767 	000000G			call	wrtall			; do it
+     16	004742	020027 	000040 			cmp	r0	,#space		; /62/ is it some control char?
+     17	004746	002006 				bge	20$			; /62/ no
+     18	004750					wrtall	#sh.058			; /63/ " ^"
+	004750	012746 	002401'			mov	#sh.058	,-(sp)		; pass the address
+	004754	004767 	000000G			call	wrtall			; do it
+     19	004760	116000 	004617'			movb	lis.ct(r0),r0		; /62/ make it displayable
+     20	004764	004767 	000000G		20$:	call	writ1char		; dump the handshake char now
+     21	004770	000437 				br	30$			; /63/
+     22
+     23	004772				sho$pr:	wrtall	#sh.078			; /63/ "S/W Parity"
+	004772	012746 	003151'			mov	#sh.078	,-(sp)		; pass the address
+	004776	004767 	000000G			call	wrtall			; do it
+     24	005002					wrtall	#sh.079			; /63/ " is set "
+	005002	012746 	003164'			mov	#sh.079	,-(sp)		; pass the address
+	005006	004767 	000000G			call	wrtall			; do it
+     25	005012	016700 	000000G			mov	parity	,r0		; recover parity
+     26	005016	006300 				asl	r0			; word indexing for list below
+     27	005020					wrtall	parlst(r0)		; display what it is
+	005020	016046 	000636'			mov	parlst(r0)	,-(sp)		; pass the address
+	005024	004767 	000000G			call	wrtall			; do it
+     28	005030	000417 				br	30$			; /63/
+     29
+     30	005032				sho$ps:	wrtall	#sh.072			; /63/ "PAUSE secs before send-"
+	005032	012746 	003037'			mov	#sh.072	,-(sp)		; pass the address
+	005036	004767 	000000G			call	wrtall			; do it
+     31	005042					wrtall	#sh.074			; /63/ "pack"
+	005042	012746 	003067'			mov	#sh.074	,-(sp)		; pass the address
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 24-1
+SHOW DELAY, HANDSHAKE, PAUSE, PARITY
+
+	005046	004767 	000000G			call	wrtall			; do it
+     32	005052					decout	pauset			; write decimal value to TT
+	005052	010546 				mov	r5	,-(sp)
+	005054	016746 	000000G			mov	pauset	,-(sp)		; /62/ l$wrdec pops this buffer
+	005060	010605 				mov	sp	,r5
+	005062	004767 	000000G			call	l$wrdec
+	005066	012605 				mov	(sp)+	,r5
+     33	005070				30$:	.newline
+	005070	004767 	000000G			call	l$pcrlf
+     34	005074	000207 				return
+     35
+     36						.dsabl	lsb
+     37
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 25
+SHOW DELAY, HANDSHAKE, PAUSE, PARITY
+
+      1
+      2						.sbttl	SHOW TERMINAL, CONSOLE
+      3
+      4	005076	016700 	000000G		sho$tt:	mov	vttype	,r0		; recover terminal type
+      5	005102					wrtall	#sh.080			; /63/ "Terminal"
+	005102	012746 	003175'			mov	#sh.080	,-(sp)		; pass the address
+	005106	004767 	000000G			call	wrtall			; do it
+      6	005112					wrtall	#sh.079			; /63/ " is set "
+	005112	012746 	003164'			mov	#sh.079	,-(sp)		; pass the address
+	005116	004767 	000000G			call	wrtall			; do it
+      7	005122	006300 				asl	r0			; word indexing
+      8	005124					wrtall	ttlst(r0)		; display it
+	005124	016046 	000702'			mov	ttlst(r0)	,-(sp)		; pass the address
+	005130	004767 	000000G			call	wrtall			; do it
+      9	005134					wrtall	#sh.081			; /63/ ", "
+	005134	012746 	003206'			mov	#sh.081	,-(sp)		; pass the address
+	005140	004767 	000000G			call	wrtall			; do it
+     10	005144	005767 	000000G			tst	infomsg			; check SET TT [NO]QUIET status
+     11	005150	001404 				beq	10$			; it's QUIET
+     12	005152					wrtall	#sh.033			; /63/ "NO"
+	005152	012746 	001711'			mov	#sh.033	,-(sp)		; pass the address
+	005156	004767 	000000G			call	wrtall			; do it
+     13	005162				10$:	wrtall	#sh.082			; /63/ "QUIET, "
+	005162	012746 	003211'			mov	#sh.082	,-(sp)		; pass the address
+	005166	004767 	000000G			call	wrtall			; do it
+     14	005172	004767 	001262 			call	sho$sl			; show SL editor status
+     15	005176					.br	sho$con
+     16
+     17	005176				sho$co:	wrtall	#sh.083			; /63/ "Console"
+	005176	012746 	003221'			mov	#sh.083	,-(sp)		; pass the address
+	005202	004767 	000000G			call	wrtall			; do it
+     18	005206					wrtall	#sh.079			; /63/ " is set "
+	005206	012746 	003164'			mov	#sh.079	,-(sp)		; pass the address
+	005212	004767 	000000G			call	wrtall			; do it
+     19	005216	005767 	000000G			tst	con8bit			; is 8-bit mode enabled?
+     20	005222	001005 				bne	20$
+     21	005224					wrtall	#sh.084			; /63/ "7"
+	005224	012746 	003231'			mov	#sh.084	,-(sp)		; pass the address
+	005230	004767 	000000G			call	wrtall			; do it
+     22	005234	000404 				br	30$
+     23	005236				20$:	wrtall	#sh.085			; /63/ "8"
+	005236	012746 	003233'			mov	#sh.085	,-(sp)		; pass the address
+	005242	004767 	000000G			call	wrtall			; do it
+     24	005246				30$:	wrtall	#sh.086			; /63/ "-bit, "
+	005246	012746 	003235'			mov	#sh.086	,-(sp)		; pass the address
+	005252	004767 	000000G			call	wrtall			; do it
+     25	005256	005767 	000000G			tst	duplex			; what is DUPLEX doing?
+     26	005262	001005 				bne	40$			; it's HALF
+     27	005264					wrtall	#sh.087			; /63/ "Full"
+	005264	012746 	003244'			mov	#sh.087	,-(sp)		; pass the address
+	005270	004767 	000000G			call	wrtall			; do it
+     28	005274	000404 				br	50$
+     29	005276				40$:	wrtall	#sh.088			; /63/ HALF"
+	005276	012746 	003251'			mov	#sh.088	,-(sp)		; pass the address
+	005302	004767 	000000G			call	wrtall			; do it
+     30	005306				50$:	wrtall	#sh.089			; /63/ " Duplex, MILNET XON is "
+	005306	012746 	003256'			mov	#sh.089	,-(sp)		; pass the address
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 25-1
+SHOW TERMINAL, CONSOLE
+
+	005312	004767 	000000G			call	wrtall			; do it
+     31	005316	005767 	000000G			tst	milnet			; and the MILNET mode?
+     32	005322	001005 				bne	60$
+     33	005324					wrtall	#sh.047			; /63/ "OFF"
+	005324	012746 	002150'			mov	#sh.047	,-(sp)		; pass the address
+	005330	004767 	000000G			call	wrtall			; do it
+     34	005334	000404 				br	70$
+     35	005336				60$:	wrtall	#sh.007			; /63/ "ENABLED"
+	005336	012746 	001073'			mov	#sh.007	,-(sp)		; pass the address
+	005342	004767 	000000G			call	wrtall			; do it
+     36	005346				70$:	wrtall	#sh.090			; /63/ ", BREAK is "
+	005346	012746 	003306'			mov	#sh.090	,-(sp)		; pass the address
+	005352	004767 	000000G			call	wrtall			; do it
+     37	005356	026727 	000002G	000022 		cmp	break+2	,#18.		; check break length
+     38	005364	003005 				bgt	80$			; it's long
+     39	005366					wrtall	#sh.091			; /63/ "short"
+	005366	012746 	003322'			mov	#sh.091	,-(sp)		; pass the address
+	005372	004767 	000000G			call	wrtall			; do it
+     40	005376	000404 				br	90$			; /63/
+     41	005400				80$:	wrtall	#sh.092			; /63/ "LONG"
+	005400	012746 	003330'			mov	#sh.092	,-(sp)		; pass the address
+	005404	004767 	000000G			call	wrtall			; do it
+     42	005410				90$:	.newline			; /63/
+	005410	004767 	000000G			call	l$pcrlf
+     43	005414	005767 	000000G			tst	tsxsav			; /63/ running under TSX?
+     44	005420	001402 				beq	100$			; /63/ skip sho$vl if not
+     45	005422	004767 	000734 			call	sho$vl			; /63/ show vlswch
+     46	005426	000167 	174730 		100$:	jmp	sho$es			; /63/ show escape
+     47
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 26
+SHOW TERMINAL, CONSOLE
+
+      1
+      2						.sbttl	SHOW ATTRIBUTES		; /63/ individual attrs ala C-Kermit
+      3
+      4	005432				sho$at:	wrtall	#sh.093			; "Attributes"
+	005432	012746 	003335'			mov	#sh.093	,-(sp)		; pass the address
+	005436	004767 	000000G			call	wrtall			; do it
+      5	005442	032767 	100000 	000000G		bit	#at.on	,doattr		; are attributes on?
+      6	005450	001007 				bne	10$			; ya..
+      7	005452					wrtall	#sh.095			; no, "Off"
+	005452	012746 	003355'			mov	#sh.095	,-(sp)		; pass the address
+	005456	004767 	000000G			call	wrtall			; do it
+      8	005462					.newline
+	005462	004767 	000000G			call	l$pcrlf
+      9	005466	000435 				br	50$			; if off, skip individual attributes
+     10	005470				10$:	wrtall	#sh.094			; "On"
+	005470	012746 	003350'			mov	#sh.094	,-(sp)		; pass the address
+	005474	004767 	000000G			call	wrtall			; do it
+     11	005500	005000 				clr	r0			; index := 0
+     12	005502				20$:	.newline
+	005502	004767 	000000G			call	l$pcrlf
+     13	005506	005760 	000000'			tst	attlst(r0)		; end of the list yet?
+     14	005512	001423 				beq	50$			; yes
+     15	005514					wrtall	atthdr(r0)		; print the header
+	005514	016046 	000020'			mov	atthdr(r0)	,-(sp)		; pass the address
+	005520	004767 	000000G			call	wrtall			; do it
+     16	005524	036067 	000000'	000000G		bit	attlst(r0),doattr	; see if a bit is turned on
+     17	005532	001405 				beq	30$			; no
+     18	005534					wrtall	#sh.094			; ya, "On"
+	005534	012746 	003350'			mov	#sh.094	,-(sp)		; pass the address
+	005540	004767 	000000G			call	wrtall			; do it
+     19	005544	000404 				br	40$			; next please
+     20	005546				30$:	wrtall	#sh.095			; no, "Off"
+	005546	012746 	003355'			mov	#sh.095	,-(sp)		; pass the address
+	005552	004767 	000000G			call	wrtall			; do it
+     21	005556	005720 			40$:	tst	(r0)+			; bump to next entry please
+     22	005560	000750 				br	20$			; go do it
+     23	005562	000207 			50$:	return
+     24
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 27
+SHOW ATTRIBUTES		; /63/ individual attrs ala C-Kermit
+
+      1
+      2						.sbttl	SHOW CL:		; /62/ all new
+      3
+      4	005564	005767 	000000G		sho$cl:	tst	tsxsav			; running under TSX?
+      5	005570	001005 				bne	10$			; ya
+      6	005572					direrr	#er$tsx			; no, can't do this
+	005572	012746 	000000G			mov	#er$tsx	,-(sp)
+	005576	004767 	000000G			call	direr$
+      7	005602	000463 				br	70$
+      8	005604				10$:	wrtall	#sh.096			; "CL PORTS: "
+	005604	012746 	003363'			mov	#sh.096	,-(sp)		; pass the address
+	005610	004767 	000000G			call	wrtall			; do it
+      9	005614	105767 	000000G			tstb	ports
+     10	005620	001005 				bne	20$
+     11	005622					wrtall	#sh.099			; nothing SET
+	005622	012746 	003427'			mov	#sh.099	,-(sp)		; pass the address
+	005626	004767 	000000G			call	wrtall			; do it
+     12	005632	000404 				br	30$
+     13	005634				20$:	wrtall	#ports
+	005634	012746 	000000G			mov	#ports	,-(sp)		; pass the address
+	005640	004767 	000000G			call	wrtall			; do it
+     14	005644				30$:	.newline
+	005644	004767 	000000G			call	l$pcrlf
+     15	005650					wrtall	#sh.097			; "CL UNITS: "
+	005650	012746 	003376'			mov	#sh.097	,-(sp)		; pass the address
+	005654	004767 	000000G			call	wrtall			; do it
+     16	005660	105767 	000000G			tstb	units
+     17	005664	001005 				bne	40$
+     18	005666					wrtall	#sh.099			; nothing SET
+	005666	012746 	003427'			mov	#sh.099	,-(sp)		; pass the address
+	005672	004767 	000000G			call	wrtall			; do it
+     19	005676	000404 				br	50$
+     20	005700				40$:	wrtall	#units
+	005700	012746 	000000G			mov	#units	,-(sp)		; pass the address
+	005704	004767 	000000G			call	wrtall			; do it
+     21	005710				50$:	.newline
+	005710	004767 	000000G			call	l$pcrlf
+     22	005714	005767 	000000G			tst	tsxcl			; /63/ is link device a CL unit now?
+     23	005720	001402 				beq	60$			; /63/ no
+     24	005722	000167 	000000G			jmp	sho$line		; /63/ ya, display its parameters
+     25	005726				60$:	wrtall	#sh.098			; /63/	"CL Priority: "
+	005726	012746 	003411'			mov	#sh.098	,-(sp)		; pass the address
+	005732	004767 	000000G			call	wrtall			; do it
+     26	005736	016700 	000000G			mov	cl.pri	,r0		; /63/ recover it
+     27	005742	004767 	000000G			call	L10266			; /63/ and dump it
+     28	005746					.newline			; /63/
+	005746	004767 	000000G			call	l$pcrlf
+     29	005752	000207 			70$:	return
+     30
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 28
+SHOW CL:		; /62/ all new
+
+      1
+      2						.sbttl	SHOW START-OF-PACKET
+      3
+      4	005754				sho$so:	wrtall	#sh.037			; /63/ "RECEIVE "
+	005754	012746 	001736'			mov	#sh.037	,-(sp)		; pass the address
+	005760	004767 	000000G			call	wrtall			; do it
+      5	005764					wrtall	#sh.100			; /63/ "start of packet SOH  "
+	005764	012746 	003443'			mov	#sh.100	,-(sp)		; pass the address
+	005770	004767 	000000G			call	wrtall			; do it
+      6	005774	016746 	000000G			mov	recsop	,-(sp)		; recover SOH char to a tiny buffer
+      7	006000	042716 	177600 			bic	#^c<177>,@sp		; hose parity
+      8	006004	010600 				mov	sp	,r0		; point to where it is on stack
+      9	006006	004767 	000000G			call	unfmts			; convert to "\000" format
+     10	006012					wrtall	r0			; display that
+	006012	010046 				mov	r0	,-(sp)		; pass the address
+	006014	004767 	000000G			call	wrtall			; do it
+     11	006020	004767 	175352 			call	tag.it			; tag with "^A" notation
+     12	006024					wrtall	#sh.039			; /63/ " SEND "
+	006024	012746 	001775'			mov	#sh.039	,-(sp)		; pass the address
+	006030	004767 	000000G			call	wrtall			; do it
+     13	006034					wrtall	#sh.101			; /63/ "  "
+	006034	012746 	003471'			mov	#sh.101	,-(sp)		; pass the address
+	006040	004767 	000000G			call	wrtall			; do it
+     14	006044					wrtall	#sh.100			; /63/ "start of packet SOH  "
+	006044	012746 	003443'			mov	#sh.100	,-(sp)		; pass the address
+	006050	004767 	000000G			call	wrtall			; do it
+     15	006054	016716 	000000G			mov	sensop	,@sp		; recover SOH char
+     16	006060	042716 	177600 			bic	#^c<177>,@sp		; hose parity
+     17	006064	010600 				mov	sp	,r0		; point to where it is on stack
+     18	006066	004767 	000000G			call	unfmts			; convert to "\000" format
+     19	006072					wrtall	r0			; display that
+	006072	010046 				mov	r0	,-(sp)		; pass the address
+	006074	004767 	000000G			call	wrtall			; do it
+     20	006100	004767 	175272 			call	tag.it			; tag with "^A" notation
+     21	006104	005726 				tst	(sp)+			; pop tiny buffer
+     22	006106	000207 				return
+     23
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 29
+SHOW START-OF-PACKET
+
+      1
+      2						.sbttl	SHOW BINARY-TYPE
+      3
+      4		000012 				BINWIDE	=	10.		; /63/ how many per line to list..
+      5
+      6	006110				sho$bt:	wrtall	#sh.102			; /63/ "BINARY-TYPE file extents: "
+	006110	012746 	003474'			mov	#sh.102	,-(sp)		; pass the address
+	006114	004767 	000000G			call	wrtall			; do it
+      7	006120	016701 	000000G			mov	bintyp	,r1		; get the address of the list
+      8	006124	012702 	000012 		10$:	mov	#binwide,r2		; /BBS/ list is simply a concatenated
+      9	006130					.newline			; string of file types rather than
+	006130	004767 	000000G			call	l$pcrlf
+     10	006134	105711 			20$:	tstb	@r1			; the more general one of a list
+     11	006136	001414 				beq	40$			; of pointers
+     12	006140					wrtall	#sh.103			; /63/ " *"  format it into *.xyz
+	006140	012746 	003527'			mov	#sh.103	,-(sp)		; pass the address
+	006144	004767 	000000G			call	wrtall			; do it
+     13	006150	012703 	000004 			mov	#4	,r3		; looping for 4 bytes
+     14	006154	112100 			30$:	movb	(r1)+	,r0		; /BBS/ replaces print to a length..
+     15	006156	004767 	000000G			call	writ1char
+     16	006162	077304 				sob	r3	,30$
+     17	006164	077215 				sob	r2	,20$		; and print the next one
+     18	006166	000756 				br	10$			; insert a newline
+     19	006170	022702 	000012 		40$:	cmp	#binwide,r2		; /BBS/ already done a new line?
+     20	006174	001402 				beq	50$			; /BBS/ ya, so why do another?
+     21	006176					.newline
+	006176	004767 	000000G			call	l$pcrlf
+     22	006202	000207 			50$:	return
+     23
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 30
+SHOW BINARY-TYPE
+
+      1
+      2					;	.sbttl	SHOW DEVICES, supported through CHKDEV which also be used
+      3
+      4					;	DEVWIDE	=	15.		; /63/ how many per line to list..
+      5
+      6					;sho$dv:wrtall	#sh.104			; /63/ "Accessable devices:"
+      7					;	mov	#devlst	,r1		; get the address of the list
+      8					;10$:	mov	#devwide,r2		; the list is simply a concatenated
+      9					;	.newline			; string of file types rather than
+     10					;20$:	tstb	@r1			; the more general one of a list
+     11					;	beq	50$			; of pointers
+     12					;  ;;	cmp	#devwide,r2		; at start of a line?
+     13					;  ;;	beq	30$			; ya..
+     14					;	movb	#space			; /62/
+     15					;	call	writ1char		; /62/
+     16					;30$:	mov	#4	,r3		; loop for 4 bytes
+     17					;40$:	movb	(r1)+	,r0		; /BBS/ replaces print to a length..
+     18					;	call	writ1char
+     19					;	sob	r3	,40$
+     20					;	sob	r2	,20$		; and print the next one
+     21					;	br	10$			; insert a newline
+     22					;50$:	cmp	#15.	,r2		; /BBS/ already done a new line?
+     23					;	beq	60$			; /BBS/ ya, so why do another?
+     24					;	.newline
+     25					;60$:	jmp	sho$su			; /62/ then show submounts
+     26
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 31
+SHOW BINARY-TYPE
+
+      1
+      2						.sbttl	SHOW PHONE		; /BBS/ modified..
+      3
+      4	006204	012702 	000000G		sho$ph:	mov	#pnhead	,r2		; pointer to list of numbers
+      5	006210	005712 				tst	(r2)			; /48/ anything there?
+      6	006212	001005 				bne	10$			; /48/ yes
+      7	006214					wrtall	#sh.105			; /63/ "No phone numbers defined"
+	006214	012746 	003556'			mov	#sh.105	,-(sp)		; pass the address
+	006220	004767 	000000G			call	wrtall			; do it
+      8	006224	000440 				br	70$			; /48/ exit
+      9	006226	011202 			10$:	mov	(r2)	,r2		; /48/ get pointer to next
+     10	006230	001436 				beq	70$			; /48/ nothing
+     11	006232	010203 				mov	r2	,r3		; /48/ copy pointer
+     12	006234	062703 	000002 			add	#2	,r3		; /48/ point to the text
+     13	006240	005004 				clr	r4			; init a flag
+     14	006242	005001 			20$:	clr	r1			; init a counter
+     15
+     16	006244	112300 			30$:	movb	(r3)+	,r0		; get a byte
+     17	006246	001424 				beq	60$			; done
+     18	006250	004767 	000000G			call	writ1char		; dump byte to TT
+     19	006254	120027 	000040 			cmpb	r0	,#space		; wuz it a space?
+     20	006260	001402 				beq	40$			; ya
+     21	006262	005201 				inc	r1			; no, bump char count
+     22	006264	000767 				br	30$			; and continue
+     23
+     24	006266	005704 			40$:	tst	r4			; been here before?
+     25	006270	001365 				bne	30$			; ya, leave other spaces as is
+     26	006272	010604 				mov	sp	,r4		; only use 1st space in string
+     27	006274	162701 	000024 			sub	#20.	,r1		; ya, compute padding req'd
+     28	006300	005401 				neg	r1			; make it a positive value
+     29	006302	003757 				ble	20$			; if not, leave it and continue
+     30	006304	112700 	000040 			movb	#space	,r0		; load a space
+     31	006310	004767 	000000G		50$:	call	writ1char		; then type it out
+     32	006314	077103 				sob	r1	,50$		; this many times..
+     33	006316	000752 				br	30$			; then on to the next string
+     34
+     35	006320				60$:	.newline
+	006320	004767 	000000G			call	l$pcrlf
+     36	006324	000740 				br	10$			; /48/ next please
+     37	006326	016700 	000000G		70$:	mov	phnum	,r0		; /62/ address of phone number
+     38	006332	105710 				tstb	@r0			; /62/ anything dialed yet?
+     39	006334	001411 				beq	80$			; /62/ no
+     40	006336					wrtall	#sh.106			; /63/ "Last number dialed:  "
+	006336	012746 	003611'			mov	#sh.106	,-(sp)		; pass the address
+	006342	004767 	000000G			call	wrtall			; do it
+     41	006346					wrtall	r0			; /62/ display the phone number
+	006346	010046 				mov	r0	,-(sp)		; pass the address
+	006350	004767 	000000G			call	wrtall			; do it
+     42	006354					.newline
+	006354	004767 	000000G			call	l$pcrlf
+     43	006360	000207 			80$:	return
+     44
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 32
+SHOW PHONE		; /BBS/ modified..
+
+      1
+      2						.sbttl	SHOW VLSWCH
+      3
+      4	006362	005767 	000000G		sho$vl:	tst	tsxsav			; running under TSX?
+      5	006366	001005 				bne	10$			; ya
+      6	006370					wrtall	#sh.107			; /63/ "Not available under RT-11"
+	006370	012746 	003637'			mov	#sh.107	,-(sp)		; pass the address
+	006374	004767 	000000G			call	wrtall			; do it
+      7	006400	000424 				br	30$
+      8
+      9	006402				10$:	wrtall	#sh.108			; /63/ "VLSWCH during CONNECT"
+	006402	012746 	003671'			mov	#sh.108	,-(sp)		; pass the address
+	006406	004767 	000000G			call	wrtall			; do it
+     10	006412					wrtall	#sh.079			; /63/ " is set "
+	006412	012746 	003164'			mov	#sh.079	,-(sp)		; pass the address
+	006416	004767 	000000G			call	wrtall			; do it
+     11	006422	105767 	000000G			tstb	vlflag			; the answer is..
+     12	006426	001405 				beq	20$			; 		  0 is local
+     13	006430					wrtall	#sh.109			; /63/ "REMOTE"	 <> means remote
+	006430	012746 	003727'			mov	#sh.109	,-(sp)		; pass the address
+	006434	004767 	000000G			call	wrtall			; do it
+     14	006440	000404 				br	30$
+     15	006442				20$:	wrtall	#sh.110			; /63/ "LOCAL"
+	006442	012746 	003736'			mov	#sh.110	,-(sp)		; pass the address
+	006446	004767 	000000G			call	wrtall			; do it
+     16	006452				30$:	.newline
+	006452	004767 	000000G			call	l$pcrlf
+     17	006456	000207 				return
+     18
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 33
+SHOW VLSWCH
+
+      1
+      2						.sbttl	SHOW SL			; /BBS/ added..
+      3
+      4	006460				sho$sl:	wrtall	#sh.111			; /63/ "SL status: "
+	006460	012746 	003744'			mov	#sh.111	,-(sp)		; pass the address
+	006464	004767 	000000G			call	wrtall			; do it
+      5	006470	005767 	000000G			tst	sl.on			; is it on?
+      6	006474	001005 				bne	10$			; ya
+      7	006476					wrtall	#sh.047			; /63/ "OFF"
+	006476	012746 	002150'			mov	#sh.047	,-(sp)		; pass the address
+	006502	004767 	000000G			call	wrtall			; do it
+      8	006506	000404 				br	20$
+      9	006510				10$:	wrtall	#sh.112			; /63/ "ON"
+	006510	012746 	003760'			mov	#sh.112	,-(sp)		; pass the address
+	006514	004767 	000000G			call	wrtall			; do it
+     10	006520	012700 	000054 		20$:	mov	#comma	,r0		; a comma
+     11	006524	004767 	000000G			call	writ1char		; between options
+     12	006530	005767 	000000G			tst	sl.ked			; is KED mode on?
+     13	006534	001004 				bne	30$			; ya
+     14	006536					wrtall	#sh.033			; /63/ "NO"
+	006536	012746 	001711'			mov	#sh.033	,-(sp)		; pass the address
+	006542	004767 	000000G			call	wrtall			; do it
+     15	006546				30$:	wrtall	#sh.113			; /63/ "KED"
+	006546	012746 	003763'			mov	#sh.113	,-(sp)		; pass the address
+	006552	004767 	000000G			call	wrtall			; do it
+     16	006556					.newline
+	006556	004767 	000000G			call	l$pcrlf
+     17	006562	000207 				return
+     18
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 34
+SHOW SL			; /BBS/ added..
+
+      1
+      2						.sbttl	SHOW MEMORY	; /BBS/ all new
+      3
+      4	006564	005767 	000000G		sho$me:	tst	tsxsav			; running under TSX?
+      5	006570	001405 				beq	10$			; /62/ no
+      6	006572					wrtall	#sh.114			; /63/ "TSX keeps handlers resident"
+	006572	012746 	003767'			mov	#sh.114	,-(sp)		; pass the address
+	006576	004767 	000000G			call	wrtall			; do it
+      7	006602	000447 				br	50$
+      8	006604	005767 	000000G		10$:	tst	jobsts			; /62/ FRUNed?
+      9	006610	001405 				beq	20$			; /62/ no
+     10	006612					wrtall	#sh.115			; /63/ "can't fetch from FRUNed pgm"
+	006612	012746 	004034'			mov	#sh.115	,-(sp)		; pass the address
+	006616	004767 	000000G			call	wrtall			; do it
+     11	006622	000437 				br	50$
+     12	006624	005767 	000000G		20$:	tst	vbgexe			; /62/ is VBGEXE running this program?
+     13	006630	001405 				beq	30$			; /62/ no
+     14	006632					wrtall	#sh.116			; /63/ "VBGEXE running this program"
+	006632	012746 	004105'			mov	#sh.116	,-(sp)		; pass the address
+	006636	004767 	000000G			call	wrtall			; do it
+     15	006642	000427 				br	50$
+     16	006644	016746 	000000G		30$:	mov	fetptmax,-(sp)		; this is top of memory
+     17	006650	167716 	000000G			sub	@fetpt	,@sp		; minus top of program + handlers
+     18	006654	012600 				mov	(sp)+	,r0		; equals what's left..
+     19	006656	006200 				asr	r0			; convert to words
+     20	006660	010001 				mov	r0	,r1		; save a copy
+     21	006662	004767 	000000G			call	L10266			; display it
+     22	006666					wrtall	#sh.117			; /63/ ". word"
+	006666	012746 	004144'			mov	#sh.117	,-(sp)		; pass the address
+	006672	004767 	000000G			call	wrtall			; do it
+     23	006676	005301 				dec	r1			; was it just one word?
+     24	006700	001404 				beq	40$			; ya
+     25	006702					wrtall	#sh.118			; /63/ no, this "s" makes it "words"
+	006702	012746 	004153'			mov	#sh.118	,-(sp)		; pass the address
+	006706	004767 	000000G			call	wrtall			; do it
+     26	006712				40$:	wrtall	#sh.119			; /63/ " free to load handlers"
+	006712	012746 	004155'			mov	#sh.119	,-(sp)		; pass the address
+	006716	004767 	000000G			call	wrtall			; do it
+     27	006722				50$:	.newline			; /62/
+	006722	004767 	000000G			call	l$pcrlf
+     28	006726	000207 				return
+     29
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 35
+SHOW MEMORY	; /BBS/ all new
+
+      1
+      2						.sbttl	SHOW REPEAT-QUOTING, SERVER, UPDATE	; /BBS/ added
+      3						.enabl	lsb
+      4
+      5	006730				sho$up:	wrtall	#sh.120			; /63/ "Packets between updates: "
+	006730	012746 	004204'			mov	#sh.120	,-(sp)		; pass the address
+	006734	004767 	000000G			call	wrtall			; do it
+      6	006740	016700 	000000G			mov	blip	,r0		; the interval in question
+      7	006744	004767 	000000G			call	L10266			; write it to TT
+      8	006750	000435 				br	20$			; /63/
+      9
+     10	006752				sho$sv:	wrtall	#sh.121			; /63/ "Server time-out: "
+	006752	012746 	004246'			mov	#sh.121	,-(sp)		; pass the address
+	006756	004767 	000000G			call	wrtall			; do it
+     11	006762	016700 	000000G			mov	serwait	,r0		; the time-out value
+     12	006766	004767 	000000G			call	L10266			; write it to TT
+     13	006772					wrtall	#sh.123			; /63/ " seconds"
+	006772	012746 	004325'			mov	#sh.123	,-(sp)		; pass the address
+	006776	004767 	000000G			call	wrtall			; do it
+     14	007002	000420 				br	20$			; /63/
+     15
+     16	007004				sho$rp:	wrtall	#sh.122			; /63/ "Repeated character quoting: "
+	007004	012746 	004270'			mov	#sh.122	,-(sp)		; pass the address
+	007010	004767 	000000G			call	wrtall			; do it
+     17	007014	005767 	000000G			tst	setrpt			; is it on?
+     18	007020	001005 				bne	10$			; ya..
+     19	007022					wrtall	#sh.019			; /63/ "DISABLED"
+	007022	012746 	001367'			mov	#sh.019	,-(sp)		; pass the address
+	007026	004767 	000000G			call	wrtall			; do it
+     20	007032	000404 				br	20$
+     21	007034				10$:	wrtall	#sh.021			; /63/ "enabled"
+	007034	012746 	001401'			mov	#sh.021	,-(sp)		; pass the address
+	007040	004767 	000000G			call	wrtall			; do it
+     22	007044				20$:	.newline
+	007044	004767 	000000G			call	l$pcrlf
+     23	007050	000207 				return
+     24
+     25						.dsabl	lsb
+     26
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 36
+SHOW REPEAT-QUOTING, SERVER, UPDATE	; /BBS/ added
+
+      1
+      2						.sbttl	SHOW CONTROL-CHARACTER	; /63/ all new..
+      3
+      4	007052				sho$ct:	wrtall	#sh.124			; print first part of header
+	007052	012746 	004336'			mov	#sh.124	,-(sp)		; pass the address
+	007056	004767 	000000G			call	wrtall			; do it
+      5	007062	116700 	000005G			movb	senpar+p.qctl,r0	; recover the control char quote char
+      6	007066	004767 	000000G			call	L10266			; dump its value to the terminal
+      7	007072					wrtall	#sh.125			; print next part of header
+	007072	012746 	004357'			mov	#sh.125	,-(sp)		; pass the address
+	007076	004767 	000000G			call	wrtall			; do it
+      8	007102	116700 	000005G			movb	senpar+p.qctl,r0	; get control char quote char again
+      9	007106	004767 	000000G			call	writ1char		; now dump it as a printed char
+     10	007112					wrtall	#sh.126			; and finish up the header line..
+	007112	012746 	004362'			mov	#sh.126	,-(sp)		; pass the address
+	007116	004767 	000000G			call	wrtall			; do it
+     11	007122	012703 	000000G			mov	#ctlflgs,r3		; top of the control chars flags list
+     12	007126	005203 				inc	r3			; skip past first entry, which is 255.
+     13	007130	005004 				clr	r4			; init control char value register
+     14	007132	012705 	000020 			mov	#20	,r5		; 16. lines of stuff to display
+     15
+     16	007136	010302 			10$:	mov	r3	,r2		; pointer to where we are in ctlflgs
+     17	007140	010401 				mov	r4	,r1		; this time do this set of numbers
+     18	007142	004767 	000112 			call	ct.n20			; display some data
+     19	007146	020127 	000037 			cmp	r1	,#37		; is it time to do DEL?
+     20	007152	001011 				bne	20$			; not yet
+     21	007154	005202 				inc	r2			; bump to chr$(177)'s flag location
+     22	007156	062701 	000140 			add	#140	,r1		; label it correctly
+     23	007162	004767 	000106 			call	ct.num			; display the data
+     24	007166	162701 	000140 			sub	#140	,r1		; restore label reg
+     25	007172	005302 				dec	r2			; restore ctlflgs index
+     26	007174	000404 				br	30$			; and continue
+     27	007176				20$:	wrtall	#sh.128			; 9 spaces for display formatting
+	007176	012746 	004445'			mov	#sh.128	,-(sp)		; pass the address
+	007202	004767 	000000G			call	wrtall			; do it
+     28	007206	062702 	000021 		30$:	add	#21	,r2		; bump to next location for the row
+     29	007212	062701 	000160 			add	#160	,r1		; bump the char name label reg too
+     30	007216	004767 	000036 			call	ct.n20			; display some data
+     31	007222	020127 	000237 			cmp	r1	,#237		; done them all yet?
+     32	007226	001006 				bne	40$			; no
+     33	007230	012702 	000000G			mov	#ctlflgs,r2		; top of the control chars flags list
+     34	007234	012701 	000377 			mov	#377	,r1		; load the appropriate label
+     35	007240	004767 	000030 			call	ct.num			; display the data
+     36	007244				40$:	.newline
+	007244	004767 	000000G			call	l$pcrlf
+     37	007250	005203 				inc	r3			; bump the ctlflgs index
+     38	007252	005204 				inc	r4			; and the control char value reg
+     39	007254	077550 				sob	r5	,10$		; next..
+     40	007256	000207 				return
+     41
+     42	007260	004767 	000010 		ct.n20:	call	ct.num			; display some data then
+     43	007264	062702 	000020 			add	#20	,r2		; bump to the next columns
+     44	007270	062701 	000020 			add	#20	,r1		; and do it again..
+     45	007274				ct.num:	deccvt	r1 ,#spare1 ,#5		; convert integer to decimal number
+	007274	010546 				mov	r5	,-(sp)
+	007276	012746 	000005 			mov	#5	,-(sp)
+	007302	010146 				mov	r1	,-(sp)
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 36-1
+SHOW CONTROL-CHARACTER	; /63/ all new..
+
+	007304	012746 	000000G			mov	#spare1	,-(sp)
+	007310	010605 				mov	sp	,r5
+	007312	004767 	000000G			call	l$cvtnum
+	007316	062706 	000006 			add	#6	,sp
+	007322	012605 				mov	(sp)+	,r5
+     46	007324	105067 	000005G			clrb	spare1+5		; null terminate
+     47	007330					wrtall	#spare1			; display it
+	007330	012746 	000000G			mov	#spare1	,-(sp)		; pass the address
+	007334	004767 	000000G			call	wrtall			; do it
+     48	007340					wrtall	#sh.127			; ": "
+	007340	012746 	004442'			mov	#sh.127	,-(sp)		; pass the address
+	007344	004767 	000000G			call	wrtall			; do it
+     49	007350	111200 				movb	(r2)	,r0		; copy the state
+     50	007352	004767 	000000G			call	L10266			; display it as a number
+     51	007356	012700 	000040 			mov	#space	,r0		; a trailing space
+     52	007362	004767 	000000G			call	writ1char		; dump it to tt
+     53	007366	000207 				return
+     54
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 37
+SHOW CONTROL-CHARACTER	; /63/ all new..
+
+      1
+      2						.sbttl	COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
+      3						.enabl	lsb
+      4
+      5	007370				c$copy::upcase	argbuf			; upper case all args
+	007370	016700 	000000G			mov	argbuf	,r0
+	007374	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	007400	004767 	000630 			call	gettwo			; ensure the "to:" argument is here
+      7	007404	005700 				tst	r0			; did it work out ok?
+      8	007406	001111 				bne	30$			; /63/ nope..
+      9	007410					upcase	argbuf			; /62/ in case from kybd "To:" prompt
+	007410	016700 	000000G			mov	argbuf	,r0
+	007414	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     10	007420	000550 				br	c.print			; /63/
+     11
+     12	007422				c$del::	upcase	argbuf			; upper case the argument
+	007422	016700 	000000G			mov	argbuf	,r0
+	007426	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     13	007432					calls	delete	,<argbuf>	; try to delete the file
+	007432	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	007434	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	007440	010605 				  mov	sp	,r5		; set pointer to argument list
+	007442	004767 	000000G			  jsr	pc	,delete		; call the subroutine
+	007446	005726 				  tst	(sp)+			; pop parameter list from stack
+	007450	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	007452	005700 				tst	r0			; did it work?
+     15	007454	001067 				bne	40$			; /63/ no
+     16	007456	005767 	000000G			tst	infomsg			; SET TT QUIET?
+     17	007462	001463 				beq	30$			; /63/ ya, skip result message
+     18	007464					wrtall	#srcnam			; no wildcarding
+	007464	012746 	000000G			mov	#srcnam	,-(sp)		; pass the address
+	007470	004767 	000000G			call	wrtall			; do it
+     19	007474					wrtall	#sh.130			; /63/ simplifies things
+	007474	012746 	004474'			mov	#sh.130	,-(sp)		; pass the address
+	007500	004767 	000000G			call	wrtall			; do it
+     20	007504	000447 				br	20$
+     21
+     22	007506				c$rena::upcase	argbuf			; upper case all args
+	007506	016700 	000000G			mov	argbuf	,r0
+	007512	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     23	007516	004767 	000512 			call	gettwo			; ensure a "to:" argument is here
+     24	007522	005700 				tst	r0			; did it work out ok?
+     25	007524	001042 				bne	30$			; /63/ no
+     26	007526					upcase	argbuf			; /62/ in case from kybd "To:" prompt
+	007526	016700 	000000G			mov	argbuf	,r0
+	007532	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     27	007536					calls	rename	,<cmdbuf,argbuf> ; do the rename now
+	007536	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	007540	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	007544	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	007550	010605 				  mov	sp	,r5		; set up the argument list pointer
+	007552	004767 	000000G			  jsr	pc	,rename		; and go to the routine
+	007556	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	007560	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     28	007562	005700 				tst	r0			; did it work?
+     29	007564	001023 				bne	40$			; /63/ no
+     30	007566	005767 	000000G			tst	infomsg			; SET TT QUIET?
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 37-1
+COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
+
+     31	007572	001417 				beq	30$			; /63/ ya, skip result message
+     32	007574					wrtall	#srcnam			; no wildcarding
+	007574	012746 	000000G			mov	#srcnam	,-(sp)		; pass the address
+	007600	004767 	000000G			call	wrtall			; do it
+     33	007604					wrtall	#sh.129			; /63/ simplifies
+	007604	012746 	004457'			mov	#sh.129	,-(sp)		; pass the address
+	007610	004767 	000000G			call	wrtall			; do it
+     34	007614				10$:	wrtall	#filnam			; things
+	007614	012746 	000000G			mov	#filnam	,-(sp)		; pass the address
+	007620	004767 	000000G			call	wrtall			; do it
+     35	007624				20$:	.newline
+	007624	004767 	000000G			call	l$pcrlf
+     36	007630	005000 				clr	r0			; /63/ no error
+     37	007632	000207 			30$:	return
+     38	007634				40$:	direrr	r0			; handle error
+	007634	010046 				mov	r0	,-(sp)
+	007636	004767 	000000G			call	direr$
+     39	007642	000207 				return
+     40
+     41	007644				c$prin::upcase	argbuf			; upper case all args
+	007644	016700 	000000G			mov	argbuf	,r0
+	007650	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     42	007654					strcpy	cmdbuf	,argbuf		; /62/ and put input file name here
+	007654	016746 	000000G			mov	argbuf	,-(sp)
+	007660	016746 	000000G			mov	cmdbuf	,-(sp)
+	007664	004767 	000000G			jsr	pc	,strcpy
+     43	007670					scan	#'.	,cmdbuf		; is there a dot in the name?
+	007670	016746 	000000G			mov	cmdbuf	,-(sp)
+	007674	005046 				clr	-(sp)
+	007676	152716 	000056 			bisb	#'.	,@sp
+	007702	004767 	000000G			call	scanch
+     44	007706	005700 				tst	r0
+     45	007710	001006 				bne	50$			; ya..
+     46	007712					strcat	cmdbuf	,#typdef	; no, add .LST to it
+	007712	012746 	004675'			mov	#typdef	,-(sp)
+	007716	016746 	000000G			mov	cmdbuf	,-(sp)
+	007722	004767 	000000G			jsr	pc	,strcat
+     47	007726				50$:	strcpy	argbuf	,#pridev	; /63/ make LP: the output device
+	007726	012746 	004657'			mov	#pridev	,-(sp)
+	007732	016746 	000000G			mov	argbuf	,-(sp)
+	007736	004767 	000000G			jsr	pc	,strcpy
+     48	007742					.br	c.print			; /63/
+     49
+     50	007742	016702 	000000G		c.print:mov	argbuf	,r2		; save a few bytes, use a reg
+     51	007746	016746 	000000G			mov	rawfil	,-(sp)		; save current setting
+     52	007752	005067 	000000G			clr	rawfil			; enable namcvt
+     53	007756					calls	namcvt	,<r2,#spare1>	; extract "file.typ"
+	007756	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	007760	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	007764	010246 				        mov	r2	,-(sp)	; push it
+	007766	010605 				  mov	sp	,r5		; set up the argument list pointer
+	007770	004767 	000000G			  jsr	pc	,namcvt		; and go to the routine
+	007774	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	007776	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     54	010000	105767 	000000G			tstb	spare1			; anything left?
+     55	010004	001017 				bne	60$			; ya, continue
+     56	010006					calls	namcvt	,<cmdbuf,#spare1> ; no, get input "file.typ"
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 37-2
+COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
+
+	010006	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	010010	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	010014	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	010020	010605 				  mov	sp	,r5		; set up the argument list pointer
+	010022	004767 	000000G			  jsr	pc	,namcvt		; and go to the routine
+	010026	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	010030	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     57	010032					strcat	r2	,#spare1	; concat input_file_name to output_dev
+	010032	012746 	000000G			mov	#spare1	,-(sp)
+	010036	010246 				mov	r2	,-(sp)
+	010040	004767 	000000G			jsr	pc	,strcat
+     58	010044	012667 	000000G		60$:	mov	(sp)+	,rawfil		; back to where it wuz..
+     59	010050					calls	fparse	,<cmdbuf,#srcnam> ; /62/ get attrs here as lookup is
+	010050	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	010052	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	010056	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	010062	010605 				  mov	sp	,r5		; set up the argument list pointer
+	010064	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	010070	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	010072	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     60	010074	005067 	000000G			clr	index			; /62/ in another overlay  init index
+     61	010100					calls   lookup  ,<#srcnam,#spare1> ; /62/ load input file attributes
+	010100	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	010102	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	010106	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	010112	010605 				  mov	sp	,r5		; set up the argument list pointer
+	010114	004767 	000000G			  jsr	pc	,lookup		; and go to the routine
+	010120	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	010122	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     62	010124					.purge	#lun.sr			; /62/ dump lookup channel
+	010124	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	010130	104374 				EMT	^O374
+     63	010132					calls	copy	,<cmdbuf,r2>	; do the copy now
+	010132	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	010134	010246 				        mov	r2	,-(sp)	; push it
+	010136	016746 	000000G			        mov	cmdbuf	,-(sp)	; push it
+	010142	010605 				  mov	sp	,r5		; set up the argument list pointer
+	010144	004767 	000000G			  jsr	pc	,copy		; and go to the routine
+	010150	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	010152	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     64	010154	005700 				tst	r0			; did it work?
+     65	010156	001226 				bne	40$			; no
+     66	010160	005767 	000000G			tst	infomsg			; SET TT QUIET?
+     67	010164	001622 				beq	30$			; /63/ ya, skip result message
+     68	010166	010100 				mov	r1	,r0		; print the
+     69	010170	004767 	000000G			call	L10266			; block count
+     70	010174					wrtall	#sh.131			; /63/ and a header
+	010174	012746 	004505'			mov	#sh.131	,-(sp)		; pass the address
+	010200	004767 	000000G			call	wrtall			; do it
+     71	010204	005301 				dec	r1			; how many blocks were moved?
+     72	010206	001404 				beq	70$			; had to be just one, skip "s"
+     73	010210					wrtall	#sh.118			; /63/ not 1, this "s" makes it plural
+	010210	012746 	004153'			mov	#sh.118	,-(sp)		; pass the address
+	010214	004767 	000000G			call	wrtall			; do it
+     74	010220				70$:	wrtall	#sh.132			; /63/ then do the next part of log
+	010220	012746 	004514'			mov	#sh.132	,-(sp)		; pass the address
+	010224	004767 	000000G			call	wrtall			; do it
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 37-3
+COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
+
+     75	010230	000167 	177360 			jmp	10$			; /63/ message and where it went
+     76
+     77						.dsabl	lsb
+     78
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 38
+COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
+
+      1
+      2						.sbttl	Get second argument for a command
+      3						.enabl	lsb
+      4
+      5					;	input:	argbuf	= command args
+      6					;	output:	cmdbuf	= first arg
+      7					;		argbuf	= second arg
+      8					;		 r0	= if <>, error code
+      9
+     10		000234 				CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.TSPA ; /62/ don't upper case
+     11
+     12	010234				gettwo::save	<r1,r2>
+	010234	010146 				 mov	r1	,-(sp)
+	010236	010246 				 mov	r2	,-(sp)
+     13	010240	016702 	000000G			mov	argbuf	,r2		; point to the argument buffer
+     14	010244	105712 				tstb	@r2			; anything there (should be)?
+     15	010246	001466 				beq	40$			; no
+     16	010250	005302 				dec	r2			; ya, init so following loop runs..
+     17	010252	005202 			10$:	inc	r2			; next byte
+     18	010254	105712 				tstb	@r2			; We have to finish parsing this
+     19	010256	001420 				beq	20$			; end of it, prompt for "To:"
+     20	010260	121227 	000040 			cmpb	@r2	,#space		; find a space yet?
+     21	010264	001372 				bne	10$			; no
+     22	010266	105022 				clrb	(r2)+			; yes, make it .asciz
+     23	010270					strcpy	cmdbuf	,argbuf		; /62/ save the first part of the arg
+	010270	016746 	000000G			mov	argbuf	,-(sp)
+	010274	016746 	000000G			mov	cmdbuf	,-(sp)
+	010300	004767 	000000G			jsr	pc	,strcpy
+     24	010304					strcpy	argbuf	,r2		; /62/ return arg number two in argbuf
+	010304	010246 				mov	r2	,-(sp)
+	010306	016746 	000000G			mov	argbuf	,-(sp)
+	010312	004767 	000000G			jsr	pc	,strcpy
+     25	010316	000441 				br	30$			; got old and new so we are all set
+     26
+     27	010320	016702 	000000G		20$:	mov	argbuf	,r2		; where the "to:" arg will be read in
+     28	010324					strcpy	cmdbuf	,r2		; /62/ save old arg as first part
+	010324	010246 				mov	r2	,-(sp)
+	010326	016746 	000000G			mov	cmdbuf	,-(sp)
+	010332	004767 	000000G			jsr	pc	,strcpy
+     29	010336					calls	readcmd	,<r2,#sh.133>	; /63/ use SL editor..
+	010336	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	010340	012746 	004530'			        mov	#sh.133	,-(sp)	; push it
+	010344	010246 				        mov	r2	,-(sp)	; push it
+	010346	010605 				  mov	sp	,r5		; set up the argument list pointer
+	010350	004767 	000000G			  jsr	pc	,readcmd		; and go to the routine
+	010354	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	010356	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     30	010360	005700 				tst	r0			; did it work?
+     31	010362	001020 				bne	40$			; /62/ no
+     32	010364					calls	cvt$$	,<r2,r1,#cvtarg> ; /62/ don't upper case it yet!
+	010364	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	010366	012746 	000234 			        mov	#cvtarg	,-(sp)	; push it
+	010372	010146 				        mov	r1	,-(sp)	; push it
+	010374	010246 				        mov	r2	,-(sp)	; push it
+	010376	010605 				  mov	sp	,r5		; set up the argument list pointer
+	010400	004767 	000000G			  jsr	pc	,cvt$$		; and go to the routine
+	010404	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 38-1
+Get second argument for a command
+
+	010410	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     33	010412	005700 				tst	r0			; anything left?
+     34	010414	001741 				beq	20$			; no
+     35	010416	060200 				add	r2	,r0		; yes, point to end
+     36	010420	105010 				clrb	@r0			; and make it .asciz
+     37	010422	005000 			30$:	clr	r0			; no errors please
+     38	010424				40$:	unsave	<r2,r1>
+	010424	012602 				 mov	(sp)+	,r2
+	010426	012601 				 mov	(sp)+	,r1
+     39	010430	000207 				return
+     40
+     41						.dsabl	lsb
+     42
+     43		000001 				.end
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 38-2
+Symbol table
+
+ALSIZE= 002000   	C$STAT  003430RG    002	INFOMS= ****** GX	P.MXL1= 000013   	SHO$IN  002314R     002
+ARGBUF= ****** GX	C.CRLF= 000004   	ININAM= ****** GX	P.MXL2= 000014   	SHO$LI= ****** GX
+ASCDAT= ****** GX	C.LCUC= 000040   	INITRY= ****** GX	P.NPAD= 000002   	SHO$ME  006564R     002
+ASCTIM= ****** GX	C.LSPA= 000010   	JOBSTS= ****** GX	P.PADC= 000003   	SHO$PA  002422R     002
+ATTHDR  000020R     003	C.PRIN  007742R     002	JSW   = 000044   	P.QBIN= 000006   	SHO$PH  006204R     002
+ATTLST  000000R     003	C.SSPA= 000020   	KRTCDF= 000001   	P.QCTL= 000005   	SHO$PK  002446R     002
+AT.ALL  000177   	C.TSPA= 000200   	KRTINC= 000001   	P.REPT= 000010   	SHO$PR  004772R     002
+AT.CDT  000001   	C2      000022R     004	LD$BUF  000006R     004	P.SPSI= 000000   	SHO$PS  005032R     002
+AT.INF  000002   	C3      000024R     004	LD$DAT  000043R     004	P.TIME= 000001   	SHO$RP  007004R     002
+AT.LEN  000004   	C4      000026R     004	LD$NAM  000053R     004	P.VEND= 000017   	SHO$RT  003274R     002
+AT.ON   100000   	DEBHDR  000266R     003	LD$NUM  000002R     004	P.WIND= 000012   	SHO$SL  006460R     002
+AT.PRO  000010   	DEBLST  000252R     003	LD$STA  000000R     004	RANERR= ****** GX	SHO$SO  005754R     002
+AT.SYS  000020   	DECNAT  000002   	LF    = 000012   	RASLUG  004663R     003	SHO$SU  001206R     002
+AT.TYP  000040   	DEC2    004372R     002	LIS.CT  004617R     003	RATAG   004667R     003	SHO$SV  006752R     002
+AT.XLE  000100   	DEFDIR= ****** GX	LN$CNT= 000012   	RAWFIL= ****** GX	SHO$TI  001000RG    002
+BELL  = 000007   	DEL   = 000177   	LN$MAX= 000204   	RDRATE= ****** GX	SHO$TO  003126R     002
+BINARY  000001   	DELETE= ****** GX	LOCASE= ****** GX	RDTOA = ****** GX	SHO$TT  005076R     002
+BINTYP= ****** GX	DIRER$= ****** GX	LOGFIL= ****** GX	READCM= ****** GX	SHO$UP  006730R     002
+BINWID= 000012   	DKNAME= ****** GX	LOG$AL= 000003   	READON= 000001   	SHO$VE= ****** GX
+BLIP  = ****** GX	DKSLUG  004575R     003	LOG$CO= 000002   	RECLNG= ****** GX	SHO$VL  006362R     002
+BLKNUM= ****** GX	DOATTR= ****** GX	LOG$DE= 000020   	RECSOP= ****** GX	SHO$XX  001116R     002
+BLOLST  000162R     003	DOAUTO= ****** GX	LOG$IO= 000010   	RECTIM= ****** GX	SHO$YY  001160RG    002
+BRATE   004416R     002	DOLONG= ****** GX	LOG$ON= 040000   	RENAME= ****** GX	SHO.DA  000726R     002
+BREAK = ****** GX	DOT   = 000056   	LOG$OP= 100000   	RTVOL = ****** GX	SH.001  000742R     003
+BS    = 000010   	DOWILD= ****** GX	LOG$PA= 000001   	SCANCH= ****** GX	SH.002  000765R     003
+CAPA.A= 000010   	DUPLEX= ****** GX	LOG$RP= 000004   	SCOLON= 000073   	SH.003  001023R     003
+CAPA.L= 000002   	EN$SIZ= ****** GX	LOOKUP= ****** GX	SEED  = ****** GX	SH.004  001054R     003
+CAPA.S= 000004   	ERBFSI= 000170   	LUN.LO= ****** GX	SENDLY= ****** GX	SH.005  001066R     003
+CHARIN= ****** GX	ERRBYT= 000052   	LUN.SR= ****** GX	SENLEN= ****** GX	SH.006  001072R     003
+CHAROU= ****** GX	ERROR$= 000004   	L$CVTN= ****** GX	SENLNG= ****** GX	SH.007  001073R     003
+CLKFLG= ****** GX	ERRTXT= ****** GX	L$PCRL= ****** GX	SENPAR= ****** GX	SH.008  001103R     003
+CL.PRI= ****** GX	ER$TAM= ****** GX	L$WRDE= ****** GX	SENSOP= ****** GX	SH.009  001115R     003
+CMDBUF= ****** GX	ER$TSX= ****** GX	L10266= ****** GX	SENTIM= ****** GX	SH.010  001131R     003
+CMD$UN= ****** GX	ER$TUN= ****** GX	MAXLNG= 003600   	SERWAI= ****** GX	SH.011  001151R     003
+COMMA = 000054   	ER$V62= ****** GX	MAXPAK  000136   	SETCHK= ****** GX	SH.012  001153R     003
+CONESC= ****** GX	ESC   = 000033   	MAXTRY= ****** GX	SETRPT= ****** GX	SH.013  001176R     003
+CONN    000030R     004	EXIEOF= ****** GX	MILNET= ****** GX	SEVER$= 000010   	SH.014  001236R     003
+CONPAR= ****** GX	FATAL$= 000020   	NAMCVT= ****** GX	SHOLST  000000R     006	SH.015  001260R     003
+CON$ES= 000034   	FETPT = ****** GX	NOSCOP= 000000   	SHO$AL= ****** GX	SH.016  001302R     003
+CON8BI= ****** GX	FETPTM= ****** GX	NOTHER= 000002   	SHO$AT  005432R     002	SH.017  001334R     003
+COPY  = ****** GX	FF    = 000014   	PARITY= ****** GX	SHO$A0  000120RG    002	SH.018  001366R     003
+CR    = 000015   	FILEIN= ****** GX	PARLST  000636R     003	SHO$A1  000142RG    002	SH.019  001367R     003
+CSI.FA= ****** GX	FILEOU= ****** GX	PAR$EV  000002   	SHO$BL  002220R     002	SH.020  001400R     003
+CTLFLG= ****** GX	FILLST  000476R     003	PAR$MA  000003   	SHO$BT  006110R     002	SH.021  001401R     003
+CTRL$N= 000016   	FILNAM= ****** GX	PAR$NO  000000   	SHO$CL  005564R     002	SH.022  001411R     003
+CTRL$O= 000017   	FILPRO= ****** GX	PAR$OD  000001   	SHO$CO  005176R     002	SH.023  001443R     003
+CT.NUM  007274R     002	FPARSE= ****** GX	PAR$SP  000004   	SHO$CT  007052R     002	SH.024  001475R     003
+CT.N20  007260R     002	F.FLAG= 000010   	PAUSET= ****** GX	SHO$DA  000714RG    002	SH.025  001530R     003
+CVTARG= 000234   	F.NAM1= 000002   	PCNT.R= ****** GX	SHO$DE  000424R     002	SH.026  001535R     003
+CVT$$ = ****** GX	F.NAM2= 000004   	PCNT.S= ****** GX	SHO$DF  001110R     002	SH.027  001546R     003
+C$COPY  007370RG    002	F.TYPE= 000006   	PHNUM = ****** GX	SHO$DL  004642R     002	SH.028  001601R     003
+C$DEL   007422RG    002	GETCM0= ****** GX	PNHEAD= ****** GX	SHO$DP  000416R     002	SH.029  001615R     003
+C$HOME  001144RG    002	GETTWO  010234RG    002	PORTS = ****** GX	SHO$DY  000764RG    002	SH.030  001640R     003
+C$PRIN  007644RG    002	HANDCH= ****** GX	PRIDEV  004657R     003	SHO$EO  002254R     002	SH.031  001651R     003
+C$PWD   001066RG    002	HOSLUG  004606R     003	P.CAPA= 000011   	SHO$ES  002362R     002	SH.032  001662R     003
+C$RENA  007506RG    002	INCFIL= ****** GX	P.CHKT= 000007   	SHO$FI  001560R     002	SH.033  001711R     003
+C$SHOW  000000RG    002	INDEX = ****** GX	P.EOL = 000004   	SHO$HA  004712R     002	SH.034  001714R     003
+KRTSHO	The SHOW command	MACRO V05.03b  00:01  Page 38-3
+Symbol table
+
+SH.035  001721R     003	SH.066  002667R     003	SH.097  003376R     003	SH.128  004445R     003	TXFLAG  000020R     004
+SH.036  001726R     003	SH.067  002712R     003	SH.098  003411R     003	SH.129  004457R     003	TYPDEF  004675R     003
+SH.037  001736R     003	SH.068  002737R     003	SH.099  003427R     003	SH.130  004474R     003	UNFMTS= ****** GX
+SH.038  001747R     003	SH.069  002757R     003	SH.100  003443R     003	SH.131  004505R     003	UNITS = ****** GX
+SH.039  001775R     003	SH.070  003004R     003	SH.101  003471R     003	SH.132  004514R     003	UPCASE= ****** GX
+SH.040  002004R     003	SH.071  003031R     003	SH.102  003474R     003	SH.133  004530R     003	USERRB= 000053
+SH.041  002034R     003	SH.072  003037R     003	SH.103  003527R     003	SH.134  004536R     003	VBGEXE= ****** GX
+SH.042  002036R     003	SH.073  003044R     003	SH.104  003532R     003	SIZOF = ****** GX	VLFLAG= ****** GX
+SH.043  002062R     003	SH.074  003067R     003	SH.105  003556R     003	SL.KED= ****** GX	VTTYPE= ****** GX
+SH.044  002110R     003	SH.075  003074R     003	SH.106  003611R     003	SL.ON = ****** GX	VT100 = 000002
+SH.045  002126R     003	SH.076  003101R     003	SH.107  003637R     003	SOH   = 000001   	VT200 = 000003
+SH.046  002145R     003	SH.077  003127R     003	SH.108  003671R     003	SPACE = 000040   	WARN$ = 000002
+SH.047  002150R     003	SH.078  003151R     003	SH.109  003727R     003	SPARE1= ****** GX	WASNUL= ****** GX
+SH.048  002154R     003	SH.079  003164R     003	SH.110  003736R     003	SRCNAM= ****** GX	WRIT1C= ****** GX
+SH.049  002173R     003	SH.080  003175R     003	SH.111  003744R     003	STRCAT= ****** GX	WRTALL= ****** GX
+SH.050  002212R     003	SH.081  003206R     003	SH.112  003760R     003	STRCPY= ****** GX	XOFF  = 000023
+SH.051  002224R     003	SH.082  003211R     003	SH.113  003763R     003	SUCCS$= 000001   	XON   = 000021
+SH.052  002247R     003	SH.083  003221R     003	SH.114  003767R     003	TAB   = 000011   	XTIME   004164R     002
+SH.053  002272R     003	SH.084  003231R     003	SH.115  004034R     003	TAG.IT  003376R     002	XXSDIA= ****** GX
+SH.054  002315R     003	SH.085  003233R     003	SH.116  004105R     003	TERMIN  177777   	$ALLSI= 003614
+SH.055  002324R     003	SH.086  003235R     003	SH.117  004144R     003	TEXT    000000   	$CDDMG= ****** GX
+SH.056  002352R     003	SH.087  003244R     003	SH.118  004153R     003	TILDE = 000176   	$IMAGE= ****** GX
+SH.057  002400R     003	SH.088  003251R     003	SH.119  004155R     003	TIMES = ****** GX	$LISTL= 000004 G
+SH.058  002401R     003	SH.089  003256R     003	SH.120  004204R     003	TOTP.R= ****** GX	$$    = 000003
+SH.059  002404R     003	SH.090  003306R     003	SH.121  004246R     003	TOTP.S= ****** GX	$$NAME= 000705R     005
+SH.060  002554R     003	SH.091  003322R     003	SH.122  004270R     003	TRACE = ****** GX	$$TRIP= 000000
+SH.061  002610R     003	SH.092  003330R     003	SH.123  004325R     003	TSXCL = ****** GX	$$1   = 000001
+SH.062  002614R     003	SH.093  003335R     003	SH.124  004336R     003	TSXSAV= ****** GX	$$2   = 000000
+SH.063  002623R     003	SH.094  003350R     003	SH.125  004357R     003	TSXVER= ****** GX	$$5   = 000002
+SH.064  002635R     003	SH.095  003355R     003	SH.126  004362R     003	TTLST   000702R     003	...V1 = 000003
+SH.065  002647R     003	SH.096  003363R     003	SH.127  004442R     003	TTY   = 000001   	...V2 = 000027
+
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	010432    002	(RO,I,LCL,REL,CON)
+$PDATA	004702    003	(RO,D,LCL,REL,CON)
+$RWDAT	000120    004	(RW,D,LCL,REL,CON)
+CMDTXT	000714    005	(RO,D,LCL,REL,CON)
+CMDDSP	000672    006	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 18
+Work  file writes: 23
+Size of work file: 14031 Words  ( 55 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.52
+KRTSHO,KRTSHO=KRTSHO

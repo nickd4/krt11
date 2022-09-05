@@ -1,0 +1,1005 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    7-   5	Error codes defined
+    8-   2	Error messages mapped
+    9-   3	Error message generator	; /BBS/ somewhat changed..
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTERR	Error code to message text translation
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	strip trailing blank from prompt string when making error message
+      7					;	add er$wpe, er$dna
+      8
+      9					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     10					;
+     11					;	add error message for logfile problems
+     12
+     13					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     14					;
+     15					;	moved error message prefix routine here from KRTPAK
+     16					;	moved all system error messages here, from various modules
+     17
+     18					;	Brian Nelson  10-Aug-84  09:24:56
+     19					;
+     20					;	Copyright 1984 Change Software, Inc.
+     21
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3
+      4	000000					.psect	$pdata
+      5						.sbttl	Error codes defined
+      6
+      7						; Kermit's main loop handles these five errors
+      8		177777 				cmd$ab	==	-1		; ^C abort
+      9		177776 				cmd$ex	==	-2		; ^Z exit
+     10		177775 				cmd$nx	==	-3		; ^Z but don't exit to monitor
+     11		177774 				cmd$bad	==	-4		; unrecognizable
+     12		177773 				cmd$un	==	-5		; ambiguous
+     13
+     14		177772 				er$ful	==	-6		; not enough room
+     15		177771 				er$nmf	==	-7		; no more files
+     16		177770 				er$iop	==	-10		; invalid I/O request
+     17		177767 				er$sys	==	-11		; system error
+     18		177766 				er$lby	==	-12		; lun open
+     19		177765 				er$rer	==	-13		; read error
+     20		177764 				er$wer	==	-14		; write error
+     21		177763 				er$prv	==	-15		; protection error
+     22		177762 				er$rtb	==	-16		; record too big
+     23		177761 				er$que	==	-17		; no free que element
+     24		177760 				er$nin	==	-20		; no data available
+     25		177757 				er$spx	==	-21		; speed not settable
+     26		177756 				er$pls	==	-22		; please set line first
+     27		177755 				er$lgf	==	-23		; please open a logfile first
+     28		177754 				er$raw	==	-24		; can't log raw I/O with other opts
+     29		177753 				er$rax	==	-25		; can't do this with raw logging
+     30		177752 				er$mal	==	-26		; malloc can't get enough memory
+     31		177751 				er$spe	==	-27		; unknown speed
+     32		177750 				er$sy1	==	-30		; .close system error
+     33		177747 				er$sy2	==	-31		; .csispc system error
+     34		177746 				er$sy3	==	-32		; .enter system error
+     35		177745 				er$sy4	==	-33		; .fetch system error
+     36		177744 				er$vol	==	-34		; not an RT-11 disk volume
+     37		177743 				er$nop	==	-35		; I/O channel not open
+     38		177742 				er$wld	==	-36		; no wildcard support
+     39		177741 				er$xco	==	-37		; could not access XC/XL
+     40		177740 				er$bnl	==	-40		; binary types list is full
+     41		177737 				er$one	==	-41		; illegal file type
+     42		177736 				er$fet	==	-42		; no room to load handler
+     43		177735 				er$ukn	==	-43		; illegal serial line device name
+     44		177734 				fa$imp	==	-44		; /51/ .serr fatal errors
+     45		177733 				fa$nhd	==	-45		; /51/ no device handler
+     46		177732 				fa$dio	==	-46		; /51/ error in directory I/O
+     47		177731 				fa$fet	==	-47		; /51/ fetch error
+     48		177730 				fa$ovr	==	-50		; /51/ overlay error
+     49		177727 				fa$dfl	==	-51		; /51/ directory full
+     50		177726 				fa$adr	==	-52		; /51/ bad address
+     51		177725 				fa$lun	==	-53		; /51/ bad lun
+     52		177724 				fa$idr	==	-54		; TSX+ access restricted
+     53		177723 				er$fgf	==	-55		; /51/ can't fetch in FG
+     54		177722 				er$try	==	-56		; retries must be 3 to 30 only
+     55		177721 				er$ld1	==	-57		; invalid LD unit #
+     56		177720 				er$ld5	==	-60		; LD nesting error
+     57		177717 				er$tim	==	-61		; set time-out error
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 7-1
+Error codes defined
+
+     58		177716 				ld$bsy	==	-62		; chan(s) open to a logical disk
+     59		177715 				er$txp	==	-63		; /62/ packet min len is 20 bytes
+     60		177714 				er$bad	==	-64		; bad option or value
+     61		177713 				er$sam	==	-65		; ambiguous set command
+     62		177712 				er$sun	==	-66		; unrecognizable set command
+     63		177711 				er$tt	==	-67		; can't connect TT to TT
+     64		177710 				er$ass	==	-70		; assign error
+     65		177707 				er$ram	==	-71		; ambiguous REMOTE command
+     66		177706 				er$run	==	-72		; unrecognizable REMOTE command
+     67		177705 				er$unr	==	-73		; unrecognizable command
+     68		177704 				er$amb	==	-74		; ambiguous command
+     69		177703 				er$snd	==	-75		; send syntax error
+     70		177702 				er$get	==	-76		; get syntax error
+     71		177701 				er$not	==	-77		; not a local Kermit..
+     72		177700 				er$dk	==	-100		; only supported assign is DK
+     73		177677 				er$tam	==	-101		; ambiguous SHOW command
+     74		177676 				er$tun	==	-102		; unrecognizable SHOW command
+     75		177675 				er$ser	==	-103		; no server subcommands
+     76		177674 				er$abt	==	-104		; process aborted
+     77		177673 				er$dcd	==	-105		; can't dial whilst DCD is asserted
+     78		177672 				er$inr	==	-106		; invalid number of retries
+     79		177671 				er$npn	==	-107		; no previous number dialed
+     80		177670 				er$mdm	==	-110		; please set modem first
+     81		177667 				er$ndf	==	-111		; no dial formatting string
+     82		177666 				er$idl	==	-112		; can't release modem
+     83		177665 				er$unm	==	-113		; unknown modem type
+     84		177664 				er$nnf	==	-114		; no number found for name
+     85		177663 				er$abk	==	-115		; aborted from keyboard
+     86		177662 				er$wke	==	-116		; can't get wake string from modem
+     87		177661 				er$tsx	==	-117		; only supported under TSX
+     88		177660 				er$120	==	-120		; already allocated or in use
+     89		177657 				er$121	==	-121		; invalid unit number
+     90		177656 				er$122	==	-122		; TSX allocation table is full
+     91		177655 				er$123	==	-123		; ALLOCATE privilege required
+     92		177654 				er$124	==	-124		; TERMINAL privilege required
+     93		177653 				er$125	==	-125		; invalid TSX line number
+     94		177652 				er$126	==	-126		; already assigned to a CL unit
+     95		177651 				er$127	==	-127		; in use by a time-sharing user
+     96		177650 				er$oct	==	-130		; must be octal 1 to 36 only
+     97		177647 				er$dev	==	-131		; device not responding
+     98		177646 				er$eof	==	-132		; end of file
+     99		177645 				er$fnf	==	-133		; file not found
+    100		177644 				er$iln	==	-134		; illegal logical name
+    101		177643 				er$aop	==	-135		; ambiguous option or value
+    102		177642 				er$own	==	-136		; CL unit not owned by this job
+    103		177641 				er$137	==	-137		; you are already using this device
+    104		177640 				er$140	==	-140		; must drop current assign first
+    105		177637 				er$141	==	-141		; no ports and/or units supplied
+    106		177636 				er$142	==	-142		; none of specified CL units is free
+    107		177635 				er$143	==	-143		; none of specified TSX lines is free
+    108		177634 				er$144	==	-144		; bad delimiter in PORTS string
+    109		177633 				er$145	==	-145		; SET SPEED from PORTS string failed
+    110		177632 				er$146	==	-146		; SET MODEM from PORTS string failed
+    111		177631 				er$147	==	-147		; bad XMODE value in PORTS string
+    112		177630 				er$150	==	-150		; can't .close XL once it's opened
+    113		177627 				er$pri	==	-151		; TSX priority bump bad value error
+    114		177626 				er$v62	==	-152		; TSX V6.2 or above needed to do this
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 7-2
+Error codes defined
+
+    115		177625 				er$v63	==	-153		; ditto re TSX V6.3 or above
+    116		177624 				er$wks	==	-154		; wake string is undefined
+    117		177623 				er$lwe	==	-155		; logfile write error
+    118		177622 				er$fnm	==	-156		; bad file name
+    119		177621 				er$km	==	-157		; KM handler only
+    120		177620 				er$ttx	==	-160		; /63/ TT not supported here
+    121		177617 				er$wpe	==	-161		; /63/ attempt to write past eof
+    122		177616 				er$dna	==	-162		; /63/ bad device name
+    123
+    124		000162 				maxerr	=	 162		; must be abs(maxerr)
+    125
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 8
+Error codes defined
+
+      1
+      2						.sbttl	Error messages mapped
+      3
+      4	000000	006641'			errmap:	.word	baderr		; come here when error doesn't map
+      5	000002	000346'	000346'	000346'		.word	10$,20$,30$,40$,50$,60$,70$,100$,110$,120$
+      6	000026	000526'	000550'	000573'		.word	130$,140$,150$,160$,170$,200$,210$,220$,230$,240$,250$
+      7	000054	001175'	001240'	001256'		.word	260$,270$,300$,310$,320$,330$,340$,350$,360$,370$,400$
+      8	000102	001720'	001751'	002025'		.word	410$,420$,430$,440$,450$,460$,470$,500$,510$,520$,530$
+      9	000130	002357'	002423'	002503'		.word	540$,550$,560$,570$,600$,610$,620$,630$,640$,650$,660$
+     10	000156	003153'	003202'	003255'		.word	670$,700$,710$,720$,730$,740$,750$,760$,770$,1000$
+     11	000202	003650'	003677'	003733'		.word	1010$,1020$,1030$,1040$,1050$,1060$,1070$,1100$,1110$
+     12	000224	004250'	004315'	004340'		.word	1120$,1130$,1140$,1150$,1160$,1170$,1200$,1210$,1220$
+     13	000246	004664'	004720'	004754'		.word	1230$,1240$,1250$,1260$,1270$,1300$,1310$,1320$,1330$
+     14	000270	005222'	005247'	005301'		.word	1340$,1350$,1360$,1370$,1400$,1410$,1420$,1430$,1440$
+     15	000312	005746'	006022'	006075'		.word	1450$,1460$,1470$,1500$,1510$,1520$,1530$,1540$,1550$
+     16	000334	006436'	006454'	006500'		.word	1560$,1570$,1600$,1610$,1620$	; /63/
+     17
+     18					; /62/	These first five errors are always handled by Kermit's main loop
+     19	000346				10$:	;	cmd$ab	==	-1		; ^C abort
+     20	000346				20$:	;	cmd$ex	==	-2		; ^Z exit
+     21	000346				30$:	;	cmd$nx	==	-3		; ^Z but don't exit to monitor
+     22	000346				40$:	;	cmd$bad	==	-4		; unrecognizable
+     23	000346				50$:	;	cmd$un	==	-5		; ambiguous
+     24	000346	   105 	   162 	   162 		.asciz	"Error handling failed!"	; just in case
+     25
+     26	000375	   116 	   157 	   164 	60$:	.asciz	"Not enough room"
+     27	000415	   116 	   157 	   040 	70$:	.asciz	"No more files"
+     28	000433	   111 	   156 	   166 	100$:	.asciz	"Invalid I/O request"
+     29	000457	   123 	   171 	   163 	110$:	.asciz	"System error"
+     30	000474	   114 	   157 	   147 	120$:	.asciz	"Logical unit already open"
+     31	000526	   104 	   145 	   166 	130$:	.asciz	"Device read error"
+     32	000550	   104 	   145 	   166 	140$:	.asciz	"Device write error"
+     33	000573	   106 	   151 	   154 	150$:	.asciz	"File is protected"
+     34	000615	   122 	   145 	   143 	160$:	.asciz	"Record too long for GETREC buffer"
+     35	000657	   116 	   157 	   040 	170$:	.asciz	"No queue element free"
+     36	000705	   116 	   157 	   040 	200$:	.asciz	"No data available"
+     37	000727	   123 	   160 	   145 	210$:	.asciz	"Speed not settable"
+     38	000752	   120 	   154 	   145 	220$:	.asciz	"Please SET LINE first"
+     39	001000	   120 	   154 	   145 	230$:	.asciz	"Please open a LOGFILE first"
+     40	001034	   103 	   141 	   156 	240$:	.asciz	"Can't log RAW I/O with another disk-based DEBUG option set"
+     41	001127	   103 	   141 	   156 	250$:	.asciz	"Can't do this with RAW I/O logging on"
+     42	001175	   111 	   156 	   163 	260$:	.asciz	"Insufficient free memory remaining"
+     43	001240	   125 	   156 	   153 	270$:	.asciz	"Unknown speed"
+     44	001256	   056 	   103 	   114 	300$:	.asciz	".CLOSE system error"
+     45	001302	   056 	   103 	   123 	310$:	.asciz	".CSISPC system error"
+     46	001327	   056 	   105 	   116 	320$:	.asciz	".ENTER system error"
+     47	001353	   056 	   106 	   105 	330$:	.asciz	".FETCH system error"
+     48	001377	   104 	   151 	   163 	340$:	.asciz	"Disk home block not RT-11 format, see HELP SET FILE NOVOL"
+     49	001471	   111 	   057 	   117 	350$:	.asciz	"I/O channel not open"
+     50	001516	   115 	   165 	   154 	360$:	.asciz	"Multiple files or wildcarding not supported here"
+     51	001577	   103 	   141 	   156 	370$:	.asciz	"Can't open the communications port"
+     52	001642	   115 	   141 	   170 	400$:	.asciz	"Maximum of 31 entries in the BINARY-TYPE list"
+     53	001720	   111 	   154 	   154 	410$:	.asciz	"Illegal file type string"
+     54	001751	   111 	   156 	   163 	420$:	.asciz	"Insufficient lowcore memory to load handler"
+     55	002025	   111 	   154 	   154 	430$:	.asciz	"Illegal serial line device name"
+     56	002065	   125 	   156 	   153 	440$:	.asciz	"Unknown .SERR error"			; /62/
+     57	002111	   116 	   157 	   040 	450$:	.asciz	"No device handler or device not responding" ; /62/
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 8-1
+Error messages mapped
+
+     58	002164	   104 	   151 	   162 	460$:	.asciz	"Directory I/O error"			; /51/
+     59	002210	   056 	   106 	   105 	470$:	.asciz	".FETCH error, please LOAD handler"	; /51/
+     60	002252	   117 	   166 	   145 	500$:	.asciz	"Overlay read error"			; /51/
+     61	002275	   104 	   151 	   162 	510$:	.asciz	"Directory is full"			; /51/
+     62	002317	   111 	   156 	   166 	520$:	.asciz	"Invalid address"			; /51/
+     63	002337	   111 	   156 	   166 	530$:	.asciz	"Invalid channel"			; /51/
+     64	002357	   104 	   145 	   166 	540$:	.asciz	"Device or file is access restricted"	; /BBS/ TSX+ uses this
+     65	002423	   103 	   141 	   156 	550$:	.asciz	"Can't .FETCH in Foreground, please LOAD handler" ; /51/
+     66	002503	   122 	   145 	   164 	560$:	.asciz	"Retries must be between 3 and 30"
+     67	002544	   111 	   156 	   166 	570$:	.asciz	"Invalid logical device, LD0 to LD7 only"
+     68	002614	   114 	   157 	   147 	600$:	.asciz	"Logical disks must be nested in increasing unit number order"
+     69	002711	   124 	   151 	   155 	610$:	.asciz	"Time-out must be between 0 and 94"	; /62/
+     70	002753	   103 	   150 	   141 	620$:	.asciz	"Channel open to a logical disk"
+     71	003012	   115 	   151 	   156 	630$:	.asciz	"Minimum packet length is 20"		; /62/
+     72	003046	   102 	   141 	   144 	640$:	.asciz	"Bad option or value"
+     73	003072	   101 	   155 	   142 	650$:	.asciz	"Ambiguous SET command"
+     74	003120	   125 	   156 	   162 	660$:	.asciz	"Unrecognizable SET command"
+     75	003153	   103 	   141 	   156 	670$:	.asciz	"Can't connect TT to TT"
+     76	003202	   123 	   171 	   156 	700$:	.asciz	"Syntax is ASS dev DK, only DK is supported"
+     77	003255	   101 	   155 	   142 	710$:	.asciz	"Ambiguous REMOTE command"
+     78	003306	   125 	   156 	   162 	720$:	.asciz	"Unrecognizable REMOTE command"
+     79	003344	   125 	   156 	   162 	730$:	.asciz	"Unrecognizable command"
+     80	003373	   101 	   155 	   142 	740$:	.asciz	"Ambiguous command"
+     81	003415	   123 	   171 	   156 	750$:	.asciz	"Syntax is SEND file.typ [dev:][asfile.new]"
+     82	003470	   123 	   171 	   156 	760$:	.asciz	"Syntax is GET file.typ [dev:][asfile.new]"
+     83	003542	   116 	   157 	   164 	770$:	.asciz	"Not running as a LOCAL Kermit"
+     84	003600	   124 	   150 	   145 	1000$:	.asciz	"The only supported logical assign is DK"
+     85	003650	   101 	   155 	   142 	1010$:	.asciz	"Ambiguous SHOW command"
+     86	003677	   125 	   156 	   162 	1020$:	.asciz	"Unrecognizable SHOW command"
+     87	003733	   123 	   145 	   162 	1030$:	.asciz	"Server sub-commands are not supported"
+     88	004001	   120 	   162 	   157 	1040$:	.asciz	"Process aborted"
+     89	004021	   103 	   141 	   156 	1050$:	.asciz	"Can't DIAL whilst DCD is asserted, use HANGUP first"
+     90	004105	   111 	   156 	   166 	1060$:	.asciz	"Invalid number of retries"
+     91	004137	   116 	   157 	   040 	1070$:	.asciz	"No previous number dialed"
+     92	004171	   120 	   154 	   145 	1100$:	.asciz	"Please SET MODEM first"
+     93	004220	   106 	   117 	   122 	1110$:	.asciz	"FORMAT string undefined"
+     94	004250	   115 	   157 	   144 	1120$:	.asciz	"Modem not restored to its idle state"
+     95	004315	   125 	   156 	   153 	1130$:	.asciz	"Unknown modem type"
+     96	004340	   116 	   157 	   040 	1140$:	.asciz	"No number found for specified name"
+     97	004403	   101 	   142 	   157 	1150$:	.asciz	"Aborted from keyboard"
+     98	004431	   103 	   141 	   156 	1160$:	.asciz	"Can't get wake$prompt from modem"
+     99	004472	   101 	   166 	   141 	1170$:	.asciz	"Available under TSX-Plus only"
+    100	004530	   103 	   114 	   040 	1200$:	.asciz	"CL unit allocated or in use by another job"
+    101	004603	   111 	   156 	   166 	1210$:	.asciz	"Invalid CL unit number"
+    102	004632	   124 	   123 	   130 	1220$:	.asciz	"TSX allocation table full"
+    103	004664	   101 	   114 	   114 	1230$:	.asciz	"ALLOCATE privilege required"
+    104	004720	   124 	   105 	   122 	1240$:	.asciz	"TERMINAL privilege required"
+    105	004754	   111 	   156 	   166 	1250$:	.asciz	"Invalid TSX line number"
+    106	005004	   114 	   151 	   156 	1260$:	.asciz	"Line already assigned to a CL unit"
+    107	005047	   114 	   151 	   156 	1270$:	.asciz	"Line in use by a time-sharing user"
+    108	005112	   122 	   141 	   156 	1300$:	.asciz	"Range is 1 to 36 octal"
+    109	005141	   104 	   145 	   166 	1310$:	.asciz	"Device not responding"	; /BBS/ distinguish from no access
+    110	005167	   105 	   156 	   144 	1320$:	.asciz	"End of file"
+    111	005203	   106 	   151 	   154 	1330$:	.asciz	"File not found"
+    112	005222	   111 	   154 	   154 	1340$:	.asciz	"Illegal logical name"
+    113	005247	   101 	   155 	   142 	1350$:	.asciz	"Ambiguous option or value"
+    114	005301	   123 	   160 	   145 	1360$:	.asciz	"Specified CL unit is not the current link device"
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 8-2
+Error messages mapped
+
+    115	005362	   131 	   157 	   165 	1370$:	.asciz	"You are already using this device on another job"
+    116	005443	   103 	   165 	   162 	1400$:	.asciz	"Current device must be dropped (SET LINE TT) first"
+    117	005526	   102 	   141 	   144 	1410$:	.asciz	"Bad or missing data in PORTS or UNITS string"
+    118	005603	   116 	   157 	   040 	1420$:	.asciz	"No specified CL unit is free"
+    119	005640	   116 	   157 	   040 	1430$:	.asciz	"No specified TSX line is free"
+    120	005676	   102 	   141 	   144 	1440$:	.asciz	"Bad parameter delimiter in PORTS string"
+    121	005746	   123 	   105 	   124 	1450$:	.asciz	"SET SPEED from value in PORTS string failed"
+    122	006022	   123 	   105 	   124 	1460$:	.asciz	"SET MODEM from type in PORTS string failed"
+    123	006075	   123 	   105 	   124 	1470$:	.asciz	"SET PHO XMODE from value in PORTS string failed"
+    124	006155	   103 	   165 	   162 	1500$:	.asciz	"Current device can only be released by exiting Kermit"
+    125	006243	   120 	   162 	   151 	1510$:	.asciz	"Priority range is 1 to 127"
+    126	006276	   124 	   123 	   130 	1520$:	.asciz	"TSX V6.2 or above required"
+    127	006331	   124 	   123 	   130 	1530$:	.asciz	"TSX V6.3 or above required"
+    128	006364	   127 	   101 	   113 	1540$:	.asciz	"WAKE-STRING undefined"
+    129	006412	   114 	   157 	   147 	1550$:	.asciz	"Logfile write error"
+    130	006436	   102 	   141 	   144 	1560$:	.asciz	"Bad file name"
+    131	006454	   113 	   115 	   040 	1570$:	.asciz	"KM handler required"
+    132	006500	   124 	   124 	   040 	1600$:	.asciz	"TT is not supported here"	; /63/
+    133	006531	   101 	   164 	   164 	1610$:	.asciz	"Attempt to write past EOF, possible FILE-TYPE mis-match"
+    134	006621	   102 	   141 	   144 	1620$:	.asciz	"Bad device name"		; /63/
+    135	006641	   125 	   156 	   153 	baderr:	.asciz	"Unknown error  r0 = "
+    136						.even
+    137
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 9
+Error messages mapped
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Error message generator	; /BBS/ somewhat changed..
+      4
+      5					;	S Y S E R R
+      6					;
+      7					;	input:	  (r5)	= error number
+      8					;	output:	 2(r5)	= buffer for error message text
+      9
+     10					;	.save
+     11					;	.psect	$pdata
+     12					;prefix:.asciz	"?KRTBBS-E-"		; error message header for the bbs
+     13					;	.even
+     14					;	.restore
+     15
+     16	000000				syserr::save	<r0,r1,r2>
+	000000	010046 				 mov	r0	,-(sp)
+	000002	010146 				 mov	r1	,-(sp)
+	000004	010246 				 mov	r2	,-(sp)
+     17	000006	012701 	006641'			mov	#baderr	,r1		; preset bad error text
+     18	000012	016502 	000002 			mov	2(r5)	,r2		; pointer for err msg out buff
+     19
+     20	000016	112722 	000077 			movb	#'?	,(r2)+		; insert RT-11 err msg ident
+     21	000022	012700 	000000G			mov	#prompt	,r0		; point to prompt
+     22	000026	112022 			10$:	movb	(r0)+	,(r2)+		; copy the prompt into err msg
+     23	000030	001414 				beq	20$			; that's it..
+     24	000032	126227 	177777 	000172 		cmpb	-1(r2)	,#'z!40		; try against a lower case "z"
+     25	000040	101372 				bhi	10$			; it's higher..
+     26	000042	126227 	177777 	000141 		cmpb	-1(r2)	,#'a!40		; try against a lower case "a"
+     27	000050	103766 				blo	10$			; it's lower..
+     28	000052	142762 	000040 	177777 		 bicb	#40	,-1(r2)		; char is in range, translate
+     29	000060	000762 				br	10$			; next one..
+     30	000062	005302 			20$:	dec	r2			; back up over null
+     31	000064	126227 	177777 	000040 	30$:	cmpb	-1(r2)	,#space		; /63/ trailing blank?
+     32	000072	001404 				beq	40$			; /63/ ya, hose it
+     33	000074	126227 	177777 	000076 		cmpb	-1(r2)	,#'>		; trailing ">" ?
+     34	000102	001002 				bne	50$			; no
+     35	000104	105742 			40$:	tstb	-(r2)			; back up over unwanted char
+     36	000106	000766 				br	30$			; /63/ and look for another..
+     37
+     38	000110	112722 	000055 		50$:	movb	#'-	,(r2)+		; and append
+     39	000114	112722 	000105 			movb	#'E	,(r2)+		; severity code
+     40	000120	112722 	000055 			movb	#'-	,(r2)+		; "Kermit-11-E-"
+     41
+     42					; /BBS/	this is only for the bbs..
+     43					;	mov	#prefix	,r0		; slug as from this err handler
+     44					;10$:	movb	(r0)+	,(r2)+		; copy the prompt into err msg
+     45					;	bne	10$			; until a null is copied
+     46					;	dec	r2			; back up over null
+     47
+     48	000124	011500 				mov	(r5)	,r0		; the error number
+     49	000126	002001 				bge	60$			; if =>0 it's ok
+     50	000130	005400 				neg	r0			; else change sign
+     51	000132	020027 	000162 		60$:	cmp	r0	,#maxerr	; is this a valid call today?
+     52	000136	101003 				bhi	70$			; no
+     53	000140	006300 				asl	r0			; ya, get error number into word
+     54	000142	016001 	000000'			mov	errmap(r0),r1		; offset and get the text address
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 9-1
+Error message generator	; /BBS/ somewhat changed..
+
+     55	000146	010146 			70$:	mov	r1	,-(sp)		; save pointer to actual err msg
+     56	000150	112122 			80$:	movb	(r1)+	,(r2)+		; then copy it until a null byte
+     57	000152	001376 				bne	80$			; next please
+     58	000154	022627 	006641'			cmp	(sp)+	,#baderr	; is it "unknown error call" ?
+     59	000160	001021 				bne	90$			; no
+     60	000162	112762 	000074 	177777 		movb	#'<	,-1(r2)		; yes, put "<" where null wuz
+     61	000170					calls	l$otoa	,<r2,2(r5)>	; convert octal number to ascii
+	000170	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000172	016546 	000002 			        mov	2(r5)	,-(sp)	; push it
+	000176	010246 				        mov	r2	,-(sp)	; push it
+	000200	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000202	004767 	000000G			  jsr	pc	,l$otoa		; and go to the routine
+	000206	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000210	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     62	000212	062702 	000006 			add	#6	,r2		; skip past the converted number
+     63	000216	112722 	000076 			movb	#'>	,(r2)+		; terminate the string
+     64	000222	105012 				clrb	(r2)			; finally, .asciz please
+     65	000224				90$:	unsave	<r2,r1,r0>
+	000224	012602 				 mov	(sp)+	,r2
+	000226	012601 				 mov	(sp)+	,r1
+	000230	012600 				 mov	(sp)+	,r0
+     66	000232	000207 				return
+     67
+     68		000001 				.end
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 9-2
+Symbol table
+
+ALSIZE= 001000   	ER$ASS= 177710 G 	ER$RER= 177765 G 	ER$137= 177641 G 	PAR$EV  000002
+AT.ALL  000177   	ER$BAD= 177714 G 	ER$RTB= 177762 G 	ER$140= 177640 G 	PAR$MA  000003
+AT.CDT  000001   	ER$BNL= 177740 G 	ER$RUN= 177706 G 	ER$141= 177637 G 	PAR$NO  000000
+AT.INF  000002   	ER$DCD= 177673 G 	ER$SAM= 177713 G 	ER$142= 177636 G 	PAR$OD  000001
+AT.LEN  000004   	ER$DEV= 177647 G 	ER$SER= 177675 G 	ER$143= 177635 G 	PAR$SP  000004
+AT.ON   100000   	ER$DK = 177700 G 	ER$SND= 177703 G 	ER$144= 177634 G 	PROMPT= ****** GX
+AT.PRO  000010   	ER$DNA= 177616 G 	ER$SPE= 177751 G 	ER$145= 177633 G 	P.CAPA= 000011
+AT.SYS  000020   	ER$EOF= 177646 G 	ER$SPX= 177757 G 	ER$146= 177632 G 	P.CHKT= 000007
+AT.TYP  000040   	ER$FET= 177736 G 	ER$SUN= 177712 G 	ER$147= 177631 G 	P.EOL = 000004
+AT.XLE  000100   	ER$FGF= 177723 G 	ER$SYS= 177767 G 	ER$150= 177630 G 	P.MXL1= 000013
+BADERR  006641R     003	ER$FNF= 177645 G 	ER$SY1= 177750 G 	ESC   = 000033   	P.MXL2= 000014
+BELL  = 000007   	ER$FNM= 177622 G 	ER$SY2= 177747 G 	FATAL$= 000020   	P.NPAD= 000002
+BINARY  000001   	ER$FUL= 177772 G 	ER$SY3= 177746 G 	FA$ADR= 177726 G 	P.PADC= 000003
+BS    = 000010   	ER$GET= 177702 G 	ER$SY4= 177745 G 	FA$DFL= 177727 G 	P.QBIN= 000006
+CAPA.A= 000010   	ER$IDL= 177666 G 	ER$TAM= 177677 G 	FA$DIO= 177732 G 	P.QCTL= 000005
+CAPA.L= 000002   	ER$ILN= 177644 G 	ER$TIM= 177717 G 	FA$FET= 177731 G 	P.REPT= 000010
+CAPA.S= 000004   	ER$INR= 177672 G 	ER$TRY= 177722 G 	FA$IDR= 177724 G 	P.SPSI= 000000
+CMD$AB= 177777 G 	ER$IOP= 177770 G 	ER$TSX= 177661 G 	FA$IMP= 177734 G 	P.TIME= 000001
+CMD$BA= 177774 G 	ER$KM = 177621 G 	ER$TT = 177711 G 	FA$LUN= 177725 G 	P.VEND= 000017
+CMD$EX= 177776 G 	ER$LBY= 177766 G 	ER$TTX= 177620 G 	FA$NHD= 177733 G 	P.WIND= 000012
+CMD$NX= 177775 G 	ER$LD1= 177721 G 	ER$TUN= 177676 G 	FA$OVR= 177730 G 	SCOLON= 000073
+CMD$UN= 177773 G 	ER$LD5= 177720 G 	ER$TXP= 177715 G 	FF    = 000014   	SEVER$= 000010
+COMMA = 000054   	ER$LGF= 177755 G 	ER$UKN= 177735 G 	JSW   = 000044   	SOH   = 000001
+CON$ES= 000034   	ER$LWE= 177623 G 	ER$UNM= 177665 G 	KRTINC= 000001   	SPACE = 000040
+CR    = 000015   	ER$MAL= 177752 G 	ER$UNR= 177705 G 	LD$BSY= 177716 G 	SUCCS$= 000001
+CTRL$N= 000016   	ER$MDM= 177670 G 	ER$VOL= 177744 G 	LF    = 000012   	SYSERR  000000RG    002
+CTRL$O= 000017   	ER$NDF= 177667 G 	ER$V62= 177626 G 	LN$CNT= 000003   	TAB   = 000011
+C.CRLF= 000004   	ER$NIN= 177760 G 	ER$V63= 177625 G 	LN$MAX= 000120   	TERMIN  177777
+C.LCUC= 000040   	ER$NMF= 177771 G 	ER$WER= 177764 G 	LOG$AL= 000003   	TEXT    000000
+C.LSPA= 000010   	ER$NNF= 177664 G 	ER$WKE= 177662 G 	LOG$CO= 000002   	TILDE = 000176
+C.SSPA= 000020   	ER$NOP= 177743 G 	ER$WKS= 177624 G 	LOG$DE= 000020   	TTY   = 000001
+C.TSPA= 000200   	ER$NOT= 177701 G 	ER$WLD= 177742 G 	LOG$IO= 000010   	USERRB= 000053
+DECNAT  000002   	ER$NPN= 177671 G 	ER$WPE= 177617 G 	LOG$ON= 040000   	VT100 = 000002
+DEL   = 000177   	ER$OCT= 177650 G 	ER$XCO= 177741 G 	LOG$OP= 100000   	VT200 = 000003
+DOT   = 000056   	ER$ONE= 177737 G 	ER$120= 177660 G 	LOG$PA= 000001   	WARN$ = 000002
+ERBFSI= 000170   	ER$OWN= 177642 G 	ER$121= 177657 G 	LOG$RP= 000004   	XOFF  = 000023
+ERRBYT= 000052   	ER$PLS= 177756 G 	ER$122= 177656 G 	L$OTOA= ****** GX	XON   = 000021
+ERRMAP  000000R     003	ER$PRI= 177627 G 	ER$123= 177655 G 	MAXERR= 000162   	$ALLSI= 001144
+ERROR$= 000004   	ER$PRV= 177763 G 	ER$124= 177654 G 	MAXLNG= 001130   	$$    = 000002
+ER$ABK= 177663 G 	ER$QUE= 177761 G 	ER$125= 177653 G 	MAXPAK  000136   	$$1   = 000001
+ER$ABT= 177674 G 	ER$RAM= 177707 G 	ER$126= 177652 G 	NONEIS= 000001   	$$2   = 000000
+ER$AMB= 177704 G 	ER$RAW= 177754 G 	ER$127= 177651 G 	NOSCOP= 000000   	$$5   = 000002
+ER$AOP= 177643 G 	ER$RAX= 177753 G
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	000234    002	(RO,I,LCL,REL,CON)
+$PDATA	006666    003	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 11
+Work  file writes: 12
+Size of work file: 12776 Words  ( 50 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+KRTERR	Error code to message t	MACRO V05.03b  00:01  Page 9-3
+Symbol table
+
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.22
+KRTERR,KRTERR=KRTNHD,KRTERR

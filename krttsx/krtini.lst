@@ -1,0 +1,1784 @@
+KRTINI	Initialization and rare	MACRO V05.03b  00:01
+Table of contents
+
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    7-   2	Misc defaults		; /63/ moved these here from KRTPAK
+    8-   2	Local data		; /63/ consolidated here..
+    9-   3	Initialize ourselves	; /62/ rearranged for clarity..
+   10-   2	Setup defaults for our SINIT parameters
+   11-   2	Setup defaults for other Kermit's SINIT parameters
+   12-   2	Read other Kermit's SINIT parameters
+   13-   2	Fill a buffer with my initialization parameters
+   14-   2	Restore set checksum type and init a few things
+   15-   2	Dump a debug packet to disk
+   16-   2	Init stats registers	; /62/ now includes clrsta
+   17-   2	Increment stats
+   18-   2	Initialize repeat count for sending packets
+   19-   2	Decide what to do about displaying packet counts
+   20-   2	Display received packets stats
+   21-   2	Display sent packets stats
+   22-   2	Display packet stats via ^A	; 9-Dec-86 07:46:02
+   23-   2	Display a 32-bit number	; /43/
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTINI	Initialization and rarely used routines
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5
+      6					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      7					;
+      8					;	dump FILLOG, as PRINTM now does this
+      9					;	provide for logfile errors
+     10					;	add current_block_pointer/size_of file to ^A stats display
+     11					;
+     12					;	check packet length in dskdmp, don't trap to 4 writing past end
+     13					;	of buffer due to line noise and/or modems retraining
+     14					;
+     15					;	major cleanup and maintenance update
+     16
+     17					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     18					;
+     19					;	prompt set to KRT
+     20					;
+     21					;	call to an .INI file now tries INI, KRT then DK and finally
+     22					;	SY.  take file echo is disabled if krt.ini is found, then
+     23					;	enabled when the init file is closed (in readcmd, in krtcmd)
+     24					;	name of init file (if found) is displayed while reading same..
+     25					;
+     26					;	recdsp table fixed to call recvt1 (instead of senvt1 .. ) for
+     27					;	terminals >VT100
+     28					;
+     29					;	added warning message when 8-bit quoting is first forced on and
+     30					;	init stuff in fixchk so the need for 8-bit quoting is tested on
+     31					;	each xfr, thus one need not exit/restart Kermit to turn it off
+     32					;
+     33					;	packet length display in log files now accommodates four digit
+     34					;	numbers, as the max. packet is now 1024. bytes
+     35					;
+     36					;	kill normal packet stats display when logging to TT
+     37					;	reset parity found while set NONE warning before each transaction
+     38					;	fixed warning messages for unsupported/disabled long packets
+     39					;	dkname used to home, here it's init'd to physical DK at start-up
+     40
+     41					;	03-Jul-84  09:34:32  Brian Nelson
+     42					;
+     43					;	Copyright 1984 Change Software, Inc.
+     44					;
+     45					;	Remove Kermit init code and routines like SPAR and RPAR that
+     46					;	are only called once per file transfer.  Placed into overlay
+     47					;	with KRTATR.  This was done to reduce the task size a bit.
+     48
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 2
+
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3						.mcall	.GTIM			; /62/
+      4
+      5
+      6						.macro	$chkb	val ,reg ,?a	; used to check received parameters
+      7						tstb	@reg			; to be sure something is there
+      8						bne	a			; if no default supplied
+      9						movb	val	,@reg		; stuff one in
+     10					a:	inc	reg			; next time, do next one
+     11						.endm	$chkb
+     12
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1
+      2						.sbttl	Misc defaults		; /63/ moved these here from KRTPAK
+      3
+      4		000006 				DEFDLY	=	  6.		; secs delay before SENDing a file
+      5		000005 				IN$TRY	=	  5.		; /BBS/ number of times to retry init
+      6		000020 				MX$TRY	=	 16.		; number of times to retry packet
+      7		000061 				MYCHKT	=	 '1		; normal checksumming
+      8		000015 				MYEOL	=	 cr		; end-of-line
+      9		000043 				MYQUOTE	=	 '#		; control char quoting prefix char
+     10		000000 				MYPAD	=	  0		; no padding
+     11		000000 				MYPCHAR	=	  0		; thus no pad character
+     12		000046 				MYQBIN	=	 '&		; 8-bit quoting prefix char
+     13		000176 				MYREPT	=     tilde		; tilde for repeat quoting
+     14		000012 				MYRTMO	=	 10.		; /62/ RECEIVE default time-out
+     15		000015 				MYSTMO	=	 13.		; /62/ SEND default time-out
+     16
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 8
+Misc defaults		; /63/ moved these here from KRTPAK
+
+      1
+      2						.sbttl	Local data		; /63/ consolidated here..
+      3
+      4	000000					.psect	$pdata
+      5	000000	000012'	000026'	000042'	ini.00:	.word	ini.01	,ini.02	,ini.03	,ini.04	,0 ; /63/ init file name list
+      6	000012	   111 	   116 	   111 	ini.01:	.asciz	"INI:KRT.INI"		; /BBS/ try this logical first
+      7	000026	   113 	   122 	   124 	ini.02:	.asciz	"KRT:KRT.INI"		; /BBS/ then this one, etc..
+      8	000042	   104 	   113 	   072 	ini.03:	.asciz	"DK:KRT.INI"
+      9	000055	   123 	   131 	   072 	ini.04:	.asciz	"SY:KRT.INI"
+     10	000070	   120 	   141 	   153 	ini.05:	.asciz	"Paknum"		; /BBS/ PAK and LEN flipped
+     11	000077	   124 	   171 	   160 	ini.06:	.asciz	"Type"
+     12	000104	   114 	   145 	   156 	ini.07:	.asciz	"Length"
+     13	000113	   040 	   040 	   040 	ini.08:	.asciz	"    "			; /62/ four blanks to indent
+     14	000120	   040 	   102 	   171 	ini.09:	.asciz	" Bytes "
+     15	000130	   054 	   040 	   157 	ini.10:	.asciz	", open file: "		; /62/
+     16	000146	   163 	   145 	   156 	ini.11:	.asciz	"sent"			; /62/
+     17	000153	   162 	   145 	   143 	ini.12:	.asciz	"rec'd"			; /62/
+     18	000161	   054 	   040 	   143 	ini.13:	.asciz	", cur/max blk: "	; /62/
+     19	000201	   122 	   145 	   141 	ini.14:	.asciz	"Reading "		; /BBS/ display this while waiting..
+     20	000212	   040 	   056 	   056 	ini.15:	.asciz	" .."			; /BBS/ ..for the file to load
+     21	000216	   124 	   150 	   145 	prefix:	.asciz	"The other Kermit "
+     22	000240	   163 	   165 	   160 	cando:	.asciz	"supports long packets, which are disabled locally"
+     23	000322	   144 	   157 	   145 	lmsg:	.asciz	"doesn't support or has disabled long packets"
+     24	000377	   105 	   151 	   147 	warn8m:	.asciz	"Eight-bit quoting forced on"
+     25
+     26	000433	   057 	   000 		$delim:	.asciz	"/"			; /63/ display format stuff
+     27	000435	   015 	   033 	   133 	$sendh:	.ascii	<cr><esc>"[2K"
+     28	000442	   120 	   141 	   143 		.asciz	"Packets sent:            Naks:            Time-outs: "
+     29	000530	   015 	   033 	   133 	$rech:	.ascii	<cr><esc>"[2K"
+     30	000535	   120 	   141 	   143 		.asciz	"Packets received:            Naks:            Time-outs: "
+     31	000627	   015 	   033 	   133 	$pos0:	.asciz	<cr><esc>"[15C"		; /BBS/ cursor to column 15.
+     32	000636	   015 	   033 	   133 	$pos1:	.asciz	<cr><esc>"[19C"		; /BBS/ col 19.
+     33	000645	   015 	   033 	   133 	npos:	.asciz	<cr><esc>"[36C"		; /BBS/ col 36.
+     34	000654	   015 	   033 	   133 	npox:	.asciz	<cr><esc>"[32C"		; /BBS/ col 32.
+     35	000663	   015 	   033 	   133 	dpos:	.asciz	<cr><esc>"[58C"		; /BBS/ col 58.
+     36	000672	   015 	   033 	   133 	dpox:	.asciz	<cr><esc>"[54C"		; /BBS/ col 54.
+     37						.even
+     38
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 9
+Local data		; /63/ consolidated here..
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Initialize ourselves	; /62/ rearranged for clarity..
+      4
+      5	000000	012700 	000000G		kerini::mov	#rwdata	,r0		; first of all, clear all read/write
+      6	000004	012701 	000000C			mov	#rwsize/2,r1		; data out please
+      7	000010	005020 			10$:	clr	(r0)+			; for i := 1 to rwdata_size
+      8	000012	077102 				sob	r1	,10$		;  do data[i] := 0
+      9
+     10	000014	010667 	000000G			mov	sp	,doauto		; default to checking file attributes
+     11	000020	012767 	100177 	000000G		mov	#<at.all!at.on>	,doattr	; /63/ and doing all file attributes
+     12	000026	010667 	000000G			mov	sp	,setrpt		; assume we will do repeat counts
+     13	000032	010667 	000000G			mov	sp	,dolong		; /62/ we want long packets if doable
+     14	000036	012767 	000012 	000000G		mov	#myrtmo	,rectim		; /62/ default receive time-out
+     15	000044	012767 	000015 	000000G		mov	#mystmo	,sentim		; /62/ default send time-out
+     16	000052	004767 	000514 			call	rparini			; other Kermit's default sinit params
+     17	000056	004767 	000314 			call	sparini			; initialize my sinit parameters
+     18
+     19	000062	012767 	000001 	000000G		mov	#1	,blip		; assume logging all packets to TT
+     20	000070	004767 	000000G			call	xinit			; /42/ moved call forward, init memory
+     21
+     22	000074	012767 	000001 	000000G		mov	#soh	,recsop		; assume ^A please, for receive SOH
+     23	000102	012767 	000001 	000000G		mov	#soh	,sensop		; ditto for sending..
+     24	000110	012767 	000000G	000000G		mov	#defchk	,chktyp		; set the default checksum type
+     25	000116	012767 	000001 	000000G		mov	#1	,chksiz		; and its size (length in bytes)
+     26	000124	012767 	000000G	000000G		mov	#defchk	,setchkt	; /62/ init the SET BLO type too..
+     27	000132	012767 	000005 	000000G		mov	#in$try	,initry		; /BBS/ init packet retry limit
+     28	000140	012767 	000020 	000000G		mov	#mx$try	,maxtry		; all other packets retry limit
+     29	000146	010667 	000000G			mov	sp	,dowild		; /63/ default to implicit wildcards
+     30	000152	010667 	000000G			mov	sp	,incfile	; /BBS/ discard incomplete files
+     31	000156	012767 	000074 	000000G		mov	#60.	,serwait	; /41/ SET SERVER [NO]WAIT default
+     32	000164	012767 	000006 	000000G		mov	#defdly	,sendly		; init the delay for send command
+     33
+     34	000172	012700 	000000G			mov	#ctlflgs,r0		; /63/ ctrl char processing list top
+     35	000176	012701 	000102 			mov	#<1.+32.+1.+32.>,r1	; /63/ list is this many bytes long
+     36	000202	105220 			20$:	incb	(r0)+			; /63/ init each one as must quote
+     37	000204	077102 				sob	r1	,20$		; /63/
+     38
+     39	000206	010667 	000000G			mov	sp	,infomsg	; /BBS/ default to verbosity
+     40	000212	010667 	000000G			mov	sp	,qu.ini		; /BBS/ save copy of infomsg for reset
+     41	000216	010667 	000000G			mov	sp	,rtvol		; /BBS/ assume volume header checks
+     42	000222	012767 	000034 	000000G		mov	#con$esc,conesc		; /62/ default CONNECT escape char
+     43
+     44	000230	105067 	000000G			clrb	ininam			; /62/ no init file found yet
+     45	000234	012703 	000000'			mov	#ini.00	,r3		; try to open an init file somewhere
+     46	000240	005713 			30$:	tst	@r3			; any more to try?
+     47	000242	001454 				beq	40$			; no
+     48	000244					calls	open	,<(r3)+,#lun.ta,#text> ; ya, see if it's there
+	000244	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000246	012746 	000000 			        mov	#text	,-(sp)	; push it
+	000252	012746 	000000G			        mov	#lun.ta	,-(sp)	; push it
+	000256	012346 				        mov	(r3)+	,-(sp)	; push it
+	000260	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000262	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	000266	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000272	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     49	000274	005700 				tst	r0			; did the open work?
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 9-1
+Initialize ourselves	; /62/ rearranged for clarity..
+
+     50	000276	001360 				bne	30$			; no, just ignore it
+     51	000300	012767 	000000G	000000G		mov	#lun.ta	,cmdlun		; yes, setup for reading from init
+     52	000306	010667 	000000G			mov	sp	,sy.ini		; flag an init file is now open
+     53	000312	005067 	000000G			clr	infomsg			; /BBS/ don't echo init file
+     54	000316					strcpy	#indnam	,-(r3)		; /62/ stash a copy of file name
+	000316	014346 				mov	-(r3)	,-(sp)
+	000320	012746 	000000G			mov	#indnam	,-(sp)
+	000324	004767 	000000G			jsr	pc	,strcpy
+     55	000330					strcpy	#ininam	,(r3)		; /62/ and another for show file
+	000330	011346 				mov	(r3)	,-(sp)
+	000332	012746 	000000G			mov	#ininam	,-(sp)
+	000336	004767 	000000G			jsr	pc	,strcpy
+     56	000342					wrtall	#ini.14			; /63/ "Reading "
+	000342	012746 	000201'			mov	#ini.14	,-(sp)		; pass the address
+	000346	004767 	000000G			call	wrtall			; do it
+     57	000352					wrtall	(r3)			; /BBS/ name of init file
+	000352	011346 				mov	(r3)	,-(sp)		; pass the address
+	000354	004767 	000000G			call	wrtall			; do it
+     58	000360					wrtall	#ini.15			; /63/ tag with " .."
+	000360	012746 	000212'			mov	#ini.15	,-(sp)		; pass the address
+	000364	004767 	000000G			call	wrtall			; do it
+     59	000370	004767 	000000G			call	l$nolf			; /BBS/ just a CR unless TT is NOSCOPE
+     60	000374	000207 			40$:	return
+     61
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 10
+Initialize ourselves	; /62/ rearranged for clarity..
+
+      1
+      2						.sbttl	Setup defaults for our SINIT parameters
+      3
+      4					; NOTE:	the SENPAR and CONPAR buffers are zeroed at the top of KERINI thus
+      5					;	unused bytes here and for RPARINI are assumed to be already cleared
+      6
+      7	000376	012701 	000000G		sparini:mov	#senpar	,r1		; where to put them
+      8	000402	112721 	000136 			movb	#maxpak	,(r1)+		; maximum packet size
+      9	000406	012767 	000136 	000000G		mov	#maxpak	,senlen		; /62/ init SET SEND PAC limit
+     10	000414	112721 	000015 			movb	#mystmo	,(r1)+		; /62/ send time-out default
+     11	000420	112721 	000000 			movb	#mypad	,(r1)+		; how much padding
+     12	000424	112721 	000000 			movb	#mypchar,(r1)+		; whatever I use for padding
+     13	000430	112721 	000015 			movb	#myeol	,(r1)+		; EOL char (not used by this program)
+     14	000434	112721 	000043 			movb	#myquote,(r1)+		; ctrl (<40) char quoting prefix char
+     15	000440	112721 	000131 			movb	#'Y&137	,(r1)+		; do 8-bit quoting if need be..
+     16	000444	112721 	000061 			movb	#mychkt	,(r1)+		; /BBS/ checksum type
+     17
+     18	000450	112711 	000040 			movb	#space	,(r1)		; assume no repeat processing
+     19	000454	005767 	000000G			tst	setrpt			; really do repeat encoding?
+     20	000460	001402 				beq	10$			; no
+     21	000462	112711 	000176 			movb	#myrept	,(r1)		; ya, use this char to prefix it
+     22
+     23	000466	012767 	000011 	000000G	10$:	mov	#11	,sparsz		; /62/ spar packet size up to now..
+     24	000474	016700 	000000G			mov	doattr	,r0		; /62/ if both attributes and
+     25	000500	056700 	000000G			bis	dolong	,r0		; /62/ long-packets are not enabled
+     26	000504	001431 				beq	30$			; /62/ then this is all that's needed
+     27	000506	062767 	000004 	000000G		add	#4	,sparsz		; /62/ more to come, make room for it
+     28
+     29	000514	005201 				inc	r1			; /62/ bump pointer to capas byte
+     30	000516	005767 	000000G			tst	doattr			; /42/ are attributes enabled?
+     31	000522	001402 				beq	20$			; /62/ no
+     32	000524	152711 	000010 			bisb	#capa.a	,(r1)		; /62/ ya, let the other Kermit know
+     33
+     34	000530	005767 	000000G		20$:	tst	dolong			; /42/ long packets enabled?
+     35	000534	001415 				beq	30$			; /62/ no, done
+     36	000536	152721 	000002 			bisb	#capa.l	,(r1)+		; /62/ set long packets support bit
+     37	000542	005201 				inc	r1			; /62/ no window size to send over
+     38	000544	012703 	003600 			mov	#maxlng	,r3		; /62/ use long-packet max length
+     39	000550	005002 				clr	r2			; /42/ break the size
+     40	000552	071227 	000137 			div	#95.	,r2		; /42/ into two bytes
+     41	000556	110221 				movb	r2	,(r1)+		; /42/ p.mxl1 = buffer_size / 95.
+     42	000560	110311 				movb	r3	,(r1)		; /62/ p.mxl2 = buffer_size mod 95.
+     43	000562	012767 	003600 	000000G		mov	#maxlng	,senlen		; /62/ make SET SEND PAC the max too..
+     44	000570	000207 			30$:	return
+     45
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 11
+Setup defaults for our SINIT parameters
+
+      1
+      2						.sbttl	Setup defaults for other Kermit's SINIT parameters
+      3
+      4	000572	012701 	000000G		rparini:mov	#conpar	,r1		; where to put them
+      5	000576	112721 	000136 			movb	#maxpak	,(r1)+		;  0 maximum packet size
+      6	000602	112721 	000012 			movb	#myrtmo	,(r1)+		;  1 /62/ default to receive time-out
+      7	000606	112721 	000000 			movb	#mypad	,(r1)+		;  2 how much padding
+      8	000612	112721 	000000 			movb	#mypchar,(r1)+		;  3 pad char
+      9	000616	112721 	000015 			movb	#myeol	,(r1)+		;  4 EOL char (not used by this pgm)
+     10	000622	112721 	000043 			movb	#myquote,(r1)+		;  5 control (<40) char quoting char
+     11	000626	112721 	000131 			movb	#'Y&137	,(r1)+		;  6 do 8-bit quoting if asked
+     12	000632	112721 	000061 			movb	#mychkt	,(r1)+		;  7 checksum type
+     13	000636	112711 	000040 			movb	#space	,(r1)		; 10 assume no repeat count processing
+     14	000642	000207 				return
+     15
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 12
+Setup defaults for other Kermit's SINIT parameters
+
+      1
+      2						.sbttl	Read other Kermit's SINIT parameters
+      3
+      4					;	input:	 (r5)	= address of packet
+      5					;		2(r5)	= packet length
+      6					;	output:	CONPAR[0..20] list of parameters
+      7
+      8	000644				rpar::	save	<r0,r1,r2,r3,r4>
+	000644	010046 				 mov	r0	,-(sp)
+	000646	010146 				 mov	r1	,-(sp)
+	000650	010246 				 mov	r2	,-(sp)
+	000652	010346 				 mov	r3	,-(sp)
+	000654	010446 				 mov	r4	,-(sp)
+      9	000656	012702 	000000G			mov	#conpar	,r2		; /62/ pointer to conpar buffer
+     10	000662	012700 	000020 			mov	#20	,r0		; /62/ its length
+     11	000666	105022 			10$:	clrb	(r2)+			; /62/ clear out any old data
+     12	000670	077002 				sob	r0	,10$		; /62/ next please
+     13	000672	011501 				mov	@r5	,r1		; incoming packet address
+     14	000674	016500 	000002 			mov	2(r5)	,r0		; and its length
+     15	000700	012702 	000000G			mov	#conpar	,r2		; save other Kermit's params here
+     16	000704	005003 				clr	r3			; /42/ init long-packet length reg
+     17	000706	112762 	000116 	000006 		movb	#'N&137	,p.qbin(r2)	; /58/ assume worst for 8-bit quoting
+     18
+     19	000714					unchar	(r1)+	,(r2)+		; conpar.spsiz
+	000714	005046 				clr	-(sp)
+	000716	152116 				bisb	(r1)+	,@sp
+	000720	162716 	000040 			sub	#40	,@sp
+	000724	112622 				movb	(sp)+	,(r2)+
+     20	000726	005300 				dec	r0			; if no more data
+     21	000730	001515 				beq	20$			; exit
+     22	000732					unchar	(r1)+	,(r2)+		; conpar.time
+	000732	005046 				clr	-(sp)
+	000734	152116 				bisb	(r1)+	,@sp
+	000736	162716 	000040 			sub	#40	,@sp
+	000742	112622 				movb	(sp)+	,(r2)+
+     23	000744	005300 				dec	r0
+     24	000746	001506 				beq	20$
+     25	000750					unchar	(r1)+	,(r2)+		; conpar.npad
+	000750	005046 				clr	-(sp)
+	000752	152116 				bisb	(r1)+	,@sp
+	000754	162716 	000040 			sub	#40	,@sp
+	000760	112622 				movb	(sp)+	,(r2)+
+     26	000762	005300 				dec	r0
+     27	000764	001477 				beq	20$
+     28	000766					ctl	(r1)+	,(r2)+		; conpar.padc
+	000766	005046 				clr	-(sp)
+	000770	152116 				bisb	(r1)+	,@sp
+	000772	004767 	000000G			call	l$xor
+	000776	112622 				movb	(sp)+	,(r2)+
+     29	001000	005300 				dec	r0
+     30	001002	001470 				beq	20$
+     31	001004					unchar	(r1)+	,(r2)+		; conpar.eol
+	001004	005046 				clr	-(sp)
+	001006	152116 				bisb	(r1)+	,@sp
+	001010	162716 	000040 			sub	#40	,@sp
+	001014	112622 				movb	(sp)+	,(r2)+
+     32	001016	005300 				dec	r0
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 12-1
+Read other Kermit's SINIT parameters
+
+     33	001020	001461 				beq	20$
+     34	001022	112122 				movb	(r1)+	,(r2)+		; conpar.qctl
+     35	001024	005300 				dec	r0
+     36	001026	001456 				beq	20$
+     37	001030	112122 				movb	(r1)+	,(r2)+		; conpar.qbin
+     38	001032	005300 				dec	r0
+     39	001034	001453 				beq	20$
+     40	001036	112122 				movb	(r1)+	,(r2)+		; conpar.chkt
+     41	001040	005300 				dec	r0
+     42	001042	001450 				beq	20$
+     43	001044	112122 				movb	(r1)+	,(r2)+		; conpar.rept
+     44	001046	005300 				dec	r0
+     45	001050	001445 				beq	20$
+     46	001052					unchar	(r1)+	,(r2)+		; /62/ conpar.capas
+	001052	005046 				clr	-(sp)
+	001054	152116 				bisb	(r1)+	,@sp
+	001056	162716 	000040 			sub	#40	,@sp
+	001062	112622 				movb	(sp)+	,(r2)+
+     47	001064	005300 				dec	r0
+     48	001066	001436 				beq	20$
+     49	001070					unchar	(r1)+	,(r2)		; /62/ conpar.winds
+	001070	005046 				clr	-(sp)
+	001072	152116 				bisb	(r1)+	,@sp
+	001074	162716 	000040 			sub	#40	,@sp
+	001100	112612 				movb	(sp)+	,(r2)
+     50	001102	112267 	000000G			movb	(r2)+	,senwin		; /62/ save a copy here
+     51	001106	005300 				dec	r0
+     52	001110	001425 				beq	20$
+     53	001112					unchar	(r1)+	,r3		; /42/ conpar.mxl1 (hi word)
+	001112	005046 				clr	-(sp)
+	001114	152116 				bisb	(r1)+	,@sp
+	001116	162716 	000040 			sub	#40	,@sp
+	001122	112603 				movb	(sp)+	,r3
+     54	001124	142703 	000200 			bicb	#200	,r3		; /42/ ensure high bit off
+     55	001130	110322 				movb	r3	,(r2)+		; /62/ copy to the conpar vector
+     56	001132	070327 	000137 			mul	#95.	,r3		; /42/ and save it
+     57	001136	005300 				dec	r0			; /42/ get the next part please
+     58	001140	001411 				beq	20$			; /42/ nothing is left
+     59	001142					unchar	(r1)+	,r4		; /42/ conpar.mxl2 (lo word)
+	001142	005046 				clr	-(sp)
+	001144	152116 				bisb	(r1)+	,@sp
+	001146	162716 	000040 			sub	#40	,@sp
+	001152	112604 				movb	(sp)+	,r4
+     60	001154	142704 	000200 			bicb	#200	,r4		; /42/ ensure high bit off
+     61	001160	110422 				movb	r4	,(r2)+		; /62/ copy to the conpar vector
+     62	001162	060403 				add	r4	,r3		; /42/ add into long-packet length
+     63	001164	105012 			20$:	clrb	(r2)			; /62/ null terminate the conpar data
+     64
+     65	001166	012702 	000000G			mov	#conpar	,r2		; now clear parity please
+     66	001172	012700 	000015 			mov	#15	,r0		; 13. of 'em to do
+     67	001176	142722 	000200 		30$:	bicb	#200	,(r2)+		; simple
+     68	001202	077003 				sob	r0	,30$		; next one
+     69
+     70	001204	012700 	000000G			mov	#conpar	,r0		; /37/ be defensive about the other
+     71	001210					$chkb	#maxpak	,r0		; /37/ guy's parameters please..
+	001210	105710 				tstb	@r0			; to be sure something is there
+	001212	001002 				bne	30000$			; if no default supplied
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 12-2
+Read other Kermit's SINIT parameters
+
+	001214	112710 	000136 			movb	#maxpak	,@r0		; stuff one in
+	001220	005200 			30000$:	inc	r0			; next time, do next one
+     72	001222	005200 				inc	r0			; /62/ allow time-out of zero value
+     73	001224					$chkb	#mypad	,r0
+	001224	105710 				tstb	@r0			; to be sure something is there
+	001226	001002 				bne	30001$			; if no default supplied
+	001230	112710 	000000 			movb	#mypad	,@r0		; stuff one in
+	001234	005200 			30001$:	inc	r0			; next time, do next one
+     74	001236					$chkb	#mypchar,r0
+	001236	105710 				tstb	@r0			; to be sure something is there
+	001240	001002 				bne	30002$			; if no default supplied
+	001242	112710 	000000 			movb	#mypchar	,@r0		; stuff one in
+	001246	005200 			30002$:	inc	r0			; next time, do next one
+     75	001250					$chkb	#myeol	,r0
+	001250	105710 				tstb	@r0			; to be sure something is there
+	001252	001002 				bne	30003$			; if no default supplied
+	001254	112710 	000015 			movb	#myeol	,@r0		; stuff one in
+	001260	005200 			30003$:	inc	r0			; next time, do next one
+     76	001262					$chkb	#myquote,r0
+	001262	105710 				tstb	@r0			; to be sure something is there
+	001264	001002 				bne	30004$			; if no default supplied
+	001266	112710 	000043 			movb	#myquote	,@r0		; stuff one in
+	001272	005200 			30004$:	inc	r0			; next time, do next one
+     77	001274					$chkb	#'Y	,r0
+	001274	105710 				tstb	@r0			; to be sure something is there
+	001276	001002 				bne	30005$			; if no default supplied
+	001300	112710 	000131 			movb	#'Y	,@r0		; stuff one in
+	001304	005200 			30005$:	inc	r0			; next time, do next one
+     78	001306					$chkb	#defchk	,r0		; /62/ always default to type 1
+	001306	105710 				tstb	@r0			; to be sure something is there
+	001310	001002 				bne	30006$			; if no default supplied
+	001312	112710 	000000G			movb	#defchk	,@r0		; stuff one in
+	001316	005200 			30006$:	inc	r0			; next time, do next one
+     79	001320					$chkb	#space	,r0
+	001320	105710 				tstb	@r0			; to be sure something is there
+	001322	001002 				bne	30007$			; if no default supplied
+	001324	112710 	000040 			movb	#space	,@r0		; stuff one in
+	001330	005200 			30007$:	inc	r0			; next time, do next one
+     80
+     81	001332	012700 	000000G			mov	#senpar	,r0		; /43/ check to see if we need to
+     82	001336	012701 	000000G			mov	#conpar	,r1		; override any of the sinit stuff
+     83
+     84	001342	116002 	000002 			movb	p.npad(r0),r2		; /57/ check for SET SEND PADDING
+     85	001346	001405 				beq	40$			; /62/ not set, use rec'd values
+     86	001350	110261 	000002 			movb	r2	,p.npad(r1)	; /57/ set, use that value along
+     87	001354	116061 	000003 	000003 		movb	p.padc(r0),p.padc(r1)	; /62/ with the local pad char
+     88
+     89	001362	116167 	000007 	000007G	40$:	movb	p.chkt(r1),senpar+p.chkt ; setup for type of checksum used
+     90
+     91	001370	016767 	000000G	000000G		mov	snd8bit	,do8bit		; in case spar decided WE need 8-bit
+     92	001376	005067 	000000G			clr	snd8bit			; prefixing to send a file over, but
+     93	001402	126127 	000006 	000131 		cmpb	p.qbin(r1),#'Y&137	; can the other end handle it?
+     94	001410	001004 				bne	50$			; maybe.. go find out
+     95	001412	112767 	000046 	000000G		movb	#myqbin	,ebquot		; yes, use the default "&" prefix and
+     96	001420	000416 				br	70$			; do8bit as possibly set per the above
+     97	001422	126127 	000006 	000116 	50$:	cmpb	p.qbin(r1),#'N&137	; other end require 8-bit quoting?
+     98	001430	001003 				bne	60$			; yes, using its own prefix char
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 12-3
+Read other Kermit's SINIT parameters
+
+     99	001432	005067 	000000G			clr	do8bit			; no, it doesn't want it
+    100	001436	000407 				br	70$
+    101	001440	010667 	000000G		60$:	mov	sp	,do8bit		; set flag for doing 8-bit prefixing
+    102	001444	116167 	000006 	000000G		movb	p.qbin(r1),ebquot	; set the quote character please
+    103	001452	004767 	000220 			call	warn8			; /BBS/ warn 8-bit prefixing forced on
+    104
+    105	001456	005067 	000000G		70$:	clr	senlng			; /42/ clear write long buffer size
+    106	001462	005767 	000000G			tst	dolong			; /42/ really want long-packets today?
+    107	001466	001025 				bne	80$			; /42/ yes
+    108	001470	132761 	000002 	000011 		bitb	#capa.l	,p.capas(r1)	; /BBS/ no, but can other end do them?
+    109	001476	001471 				beq	120$			; /BBS/ no
+    110	001500	005767 	000000G			tst	msgtim			; /BBS/ ya, is this a new transaction?
+    111	001504	001066 				bne	120$			; /62/ no, continue..
+    112	001506					calls	printm	,<#2,#prefix,#cando> ; /BBS/ ya, say it is possible..
+	001506	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001510	012746 	000240'			        mov	#cando	,-(sp)	; push it
+	001514	012746 	000216'			        mov	#prefix	,-(sp)	; push it
+	001520	012746 	000002 			        mov	#2	,-(sp)	; push it
+	001524	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001526	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	001532	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001536	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    113	001540	000446 				br	110$			; /62/ go set msg given flag, continue
+    114
+    115	001542	132761 	000002 	000011 	80$:	bitb	#capa.l	,p.capas(r1)	; /42/ can other end do long packets?
+    116	001550	001416 				beq	100$			; /42/ no
+    117	001552	010367 	000000G			mov	r3	,senlng		; /42/ yes, load its passed pak length
+    118	001556	001003 				bne	90$			; /42/ something was there
+    119	001560	012767 	000136 	000000G		mov	#maxpak	,senlng		; /BBS/ not there, use normal packets
+    120	001566	026727 	000000G	003600 	90$:	cmp	senlng	,#maxlng	; /42/ is this bigger than our buffer?
+    121	001574	003432 				ble	120$			; /42/ no
+    122	001576	012767 	003600 	000000G		mov	#maxlng	,senlng		; /42/ yes, please fix it then
+    123	001604	000426 				br	120$			; /43/ and continue
+    124
+    125	001606	026727 	000000G	000136 	100$:	cmp	reclng	,#maxpak	; /BBS/ is SET REC PAC > 94. here?
+    126	001614	003422 				ble	120$			; /BBS/ no
+    127	001616	005767 	000000G			tst	msgtim			; /43/ ya, say long-packets possible
+    128	001622	001017 				bne	120$			; /43/ but please, NOT for every file
+    129	001624					calls	printm	,<#2,#prefix,#lmsg> ; /BBS/ print a warning message
+	001624	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001626	012746 	000322'			        mov	#lmsg	,-(sp)	; push it
+	001632	012746 	000216'			        mov	#prefix	,-(sp)	; push it
+	001636	012746 	000002 			        mov	#2	,-(sp)	; push it
+	001642	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001644	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	001650	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001654	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    130	001656	010667 	000000G		110$:	mov	sp	,msgtim		; /43/ flag we printed a warning
+    131	001662				120$:	unsave	<r4,r3,r2,r1,r0>
+	001662	012604 				 mov	(sp)+	,r4
+	001664	012603 				 mov	(sp)+	,r3
+	001666	012602 				 mov	(sp)+	,r2
+	001670	012601 				 mov	(sp)+	,r1
+	001672	012600 				 mov	(sp)+	,r0
+    132	001674	000207 				return
+    133
+    134	001676	005767 	000000G		warn8:	tst	warn8done		; /BBS/ done this yet?
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 12-4
+Read other Kermit's SINIT parameters
+
+    135	001702	001014 				bne	10$			; /BBS/ ya
+    136	001704					calls	printm	,<#1,#warn8msg>	; /BBS/ warn 8-bit prefixing forced
+	001704	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001706	012746 	000377'			        mov	#warn8msg	,-(sp)	; push it
+	001712	012746 	000001 			        mov	#1	,-(sp)	; push it
+	001716	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001720	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	001724	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001726	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    137	001730	010667 	000000G			mov	sp	,warn8done	; /BBS/ flag warning has been given
+    138	001734	000207 			10$:	return
+    139
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 13
+Read other Kermit's SINIT parameters
+
+      1
+      2						.sbttl	Fill a buffer with my initialization parameters
+      3
+      4					;	input:	(r5)	= address of buffer to fill
+      5
+      6	001736				spar::	save	<r0,r1,r2>
+	001736	010046 				 mov	r0	,-(sp)
+	001740	010146 				 mov	r1	,-(sp)
+	001742	010246 				 mov	r2	,-(sp)
+      7	001744	011502 				mov	@r5	,r2		; point to the destination
+      8	001746	012701 	000000G			mov	#senpar	,r1		; and our local parameters
+      9
+     10	001752					tochar	(r1)+	,(r2)+		; senpar.spsiz
+	001752	005046 				clr	-(sp)
+	001754	152116 				bisb	(r1)+	,@sp
+	001756	062716 	000040 			add	#40	,@sp
+	001762	112622 				movb	(sp)+	,(r2)+
+     11	001764					tochar	(r1)+	,(r2)+		; senpar.time
+	001764	005046 				clr	-(sp)
+	001766	152116 				bisb	(r1)+	,@sp
+	001770	062716 	000040 			add	#40	,@sp
+	001774	112622 				movb	(sp)+	,(r2)+
+     12	001776					tochar	(r1)+	,(r2)+		; senpar.npad
+	001776	005046 				clr	-(sp)
+	002000	152116 				bisb	(r1)+	,@sp
+	002002	062716 	000040 			add	#40	,@sp
+	002006	112622 				movb	(sp)+	,(r2)+
+     13	002010					ctl	(r1)+	,(r2)+		; senpar.padc
+	002010	005046 				clr	-(sp)
+	002012	152116 				bisb	(r1)+	,@sp
+	002014	004767 	000000G			call	l$xor
+	002020	112622 				movb	(sp)+	,(r2)+
+     14	002022	111167 	000004G			movb	(r1)	,conpar+p.eol	; /62/ in case SET and SENDing first..
+     15	002026					tochar	(r1)+	,(r2)+		; senpar.eol
+	002026	005046 				clr	-(sp)
+	002030	152116 				bisb	(r1)+	,@sp
+	002032	062716 	000040 			add	#40	,@sp
+	002036	112622 				movb	(sp)+	,(r2)+
+     16	002040	112122 				movb	(r1)+	,(r2)+		; senpar.qctl
+     17
+     18	002042	005067 	000000G			clr	snd8bit			; assume we don't need 8-bit quoting
+     19	002046	112711 	000131 			movb	#'Y&137	,(r1)		; /62/ but "if we must, ok"
+     20	002052	116700 	000006G			movb	conpar+p.qbin,r0	; get other Kermit's quote character
+     21	002056	120027 	000116 			cmpb	r0	,#'N&137	; can it do 8-bit quoting?
+     22	002062	001003 				bne	10$			; possibly..
+     23	002064	005067 	000000G			clr	do8bit			; no, don't ever try to do it, but
+     24	002070	000421 				br	30$			; stuff the "Y" in our params anyway
+     25	002072	120027 	000131 		10$:	cmpb	r0	,#'Y&137	; does the other end require quoting?
+     26	002076	001005 				bne	20$			; yes, set the mode up then
+     27	002100	005767 	000000G			tst	parity			; /BBS/ no, but do we need to do it?
+     28	002104	001413 				beq	30$			; no, don't waste the overhead
+     29	002106	112700 	000046 			movb	#myqbin	,r0		; yes, force this to the other side
+     30	002112	010667 	000000G		20$:	mov	sp	,snd8bit	; flag so rpar knows what's up here
+     31	002116	010667 	000000G			mov	sp	,do8bit		; force 8-bit prefixing then
+     32	002122	110067 	000000G			movb	r0	,ebquot		; and set ours to the same please
+     33	002126	110011 				movb	r0	,(r1)		; /62/ update senpar data
+     34	002130	004767 	177542 			call	warn8			; /BBS/ warn 8-bit prefixing forced
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 13-1
+Fill a buffer with my initialization parameters
+
+     35
+     36	002134	112122 			30$:	movb	(r1)+	,(r2)+		; senpar.qbin
+     37	002136	112122 				movb	(r1)+	,(r2)+		; senpar.chkt
+     38	002140	112122 				movb	(r1)+	,(r2)+		; senpar.rept
+     39
+     40	002142	012767 	000011 	000000G		mov	#11	,sparsz		; /62/ spar packet size up to now..
+     41	002150	016700 	000000G			mov	doattr	,r0		; /62/ if both attributes and
+     42	002154	056700 	000000G			bis	dolong	,r0		; /62/ long-packets are not enabled
+     43	002160	001442 				beq	60$			; /62/ then this is all that's needed
+     44	002162	062767 	000004 	000000G		add	#4	,sparsz		; /62/ more to come, make room for it
+     45
+     46	002170	105011 				clrb	(r1)			; /62/ init capas byte
+     47	002172	005767 	000000G			tst	dolong			; /42/ do long packets?
+     48	002176	001402 				beq	40$			; /42/ no
+     49	002200	152711 	000002 			bisb	#capa.l	,@r1		; /42/ ya
+     50	002204	005767 	000000G		40$:	tst	doattr			; /42/ do attributes?
+     51	002210	001402 				beq	50$			; /62/ no
+     52	002212	152711 	000010 			bisb	#capa.a	,@r1		; /62/ ya
+     53
+     54	002216				50$:	tochar	(r1)+	,(r2)+		; senpar.capas
+	002216	005046 				clr	-(sp)
+	002220	152116 				bisb	(r1)+	,@sp
+	002222	062716 	000040 			add	#40	,@sp
+	002226	112622 				movb	(sp)+	,(r2)+
+     55	002230					tochar	(r1)+	,(r2)+		; /42/ senpar.capas+1 (window_size)
+	002230	005046 				clr	-(sp)
+	002232	152116 				bisb	(r1)+	,@sp
+	002234	062716 	000040 			add	#40	,@sp
+	002240	112622 				movb	(sp)+	,(r2)+
+     56	002242					tochar	(r1)+	,(r2)+		; /42/ senpar.capas+2 (maxlen1)
+	002242	005046 				clr	-(sp)
+	002244	152116 				bisb	(r1)+	,@sp
+	002246	062716 	000040 			add	#40	,@sp
+	002252	112622 				movb	(sp)+	,(r2)+
+     57	002254					tochar	(r1)+	,(r2)+		; /42/ senpar.capas+3 (maxlen2)
+	002254	005046 				clr	-(sp)
+	002256	152116 				bisb	(r1)+	,@sp
+	002260	062716 	000040 			add	#40	,@sp
+	002264	112622 				movb	(sp)+	,(r2)+
+     58
+     59	002266	105012 			60$:	clrb	(r2)			; /62/ end, null terminate
+     60	002270					unsave	<r2,r1,r0>
+	002270	012602 				 mov	(sp)+	,r2
+	002272	012601 				 mov	(sp)+	,r1
+	002274	012600 				 mov	(sp)+	,r0
+     61	002276	000207 				return
+     62
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 14
+Fill a buffer with my initialization parameters
+
+      1
+      2						.sbttl	Restore set checksum type and init a few things
+      3
+      4	002300	116767 	000000G	000007G	fixchk::movb	setchkt	,senpar+p.chkt	; /62/ put SET BLO value back
+      5	002306	005067 	000000G			clr	do8bit			; /BBS/ reset the 8-bit quoting flag
+      6	002312	005067 	000000G			clr	warn8done		; /BBS/ allow warn message again
+      7	002316	005067 	000000G			clr	msgtim			; /BBS/ and long packet messages
+      8	002322	112767 	000131 	000006G		movb	#'Y&137	,conpar+p.qbin	; /BBS/ preset normal 8-bit quote bit
+      9	002330	005067 	000000G			clr	incpar			; /BBS/ reset parity warning counter
+     10	002334	000207 				return
+     11
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 15
+Restore set checksum type and init a few things
+
+      1
+      2						.sbttl	Dump a debug packet to disk
+      3
+      4					;	D S K D M P
+      5					;
+      6					;	input:	  (r5)	= function name (RPACK or SPACK)
+      7					;		 2(r5)	= packet number	; /BBS/ number and length flipped
+      8					;		 4(r5)	= packet type
+      9					;		 6(r5)	= packet length
+     10					;		10(r5)	= packet buffer address
+     11
+     12	002336				dskdmp::save				; /42/ save r0-r5
+	002336	010046 				 mov	r0	,-(sp)
+	002340	010146 				 mov	r1	,-(sp)
+	002342	010246 				 mov	r2	,-(sp)
+	002344	010346 				 mov	r3	,-(sp)
+	002346	010446 				 mov	r4	,-(sp)
+	002350	010546 				 mov	r5	,-(sp)
+     13	002352	162706 	000064 			sub	#64	,sp		; /BBS/ allocate a formatting buffer
+     14	002356	010601 				mov	sp	,r1		; point to it
+     15	002360	012700 	000064 			mov	#64	,r0		; number of bytes in the buffer
+     16	002364	112721 	000040 		10$:	movb	#space	,(r1)+		; /BBS/ fill it with blanks
+     17	002370	077003 				sob	r0	,10$		; one byte at a time
+     18	002372	010601 				mov	sp	,r1		; point back to the buffer
+     19	002374	012500 				mov	(r5)+	,r0		; point to the routine name
+     20	002376	004767 	000532 			call	160$			; and copy it
+     21	002402	005301 				dec	r1			; /BBS/ format display
+     22	002404	012700 	000070'			mov	#ini.05	,r0		; /BBS/ and a label, "PAK"
+     23	002410	004767 	000520 			call	160$			; copy it
+     24	002414	005201 				inc	r1			; /BBS/ a space
+     25	002416	012500 				mov	(r5)+	,r0		; /BBS/ deccvt uses r5, so use r0 here
+     26	002420					deccvt	r0	,r1	,#2	; /BBS/ convert to decimal
+	002420	010546 				mov	r5	,-(sp)
+	002422	012746 	000002 			mov	#2	,-(sp)
+	002426	010046 				mov	r0	,-(sp)
+	002430	010146 				mov	r1	,-(sp)
+	002432	010605 				mov	sp	,r5
+	002434	004767 	000000G			call	l$cvtnum
+	002440	062706 	000006 			add	#6	,sp
+	002444	012605 				mov	(sp)+	,r5
+     27	002446	062701 	000006 			add	#6	,r1		; /BBS/ and skip to next position
+     28	002452	012700 	000077'			mov	#ini.06	,r0		; another label, "TYP"
+     29	002456	004767 	000452 			call	160$			; simple
+     30	002462	005201 				inc	r1			; /BBS/ a space
+     31	002464	112511 				movb	(r5)+	,(r1)		; get the packet type
+     32	002466	005205 				inc	r5			; /62/ finish bumping r5 to next arg..
+     33	002470	121127 	000000G			cmpb	(r1)	,#badchk	; /62/ checksum error?
+     34	002474	001003 				bne	20$			; /62/ no
+     35	002476	112711 	000052 			movb	#'*	,(r1)		; /62/ yes, flag it please
+     36	002502	000410 				br	40$			; /62/ and continue
+     37	002504	121127 	000101 		20$:	cmpb	(r1)	,#'A&137	; /62/ smaller than an "A" ?
+     38	002510	002403 				blt	30$			; /62/ ya..
+     39	002512	121127 	000132 			cmpb	(r1)	,#'Z&137	; /62/ bigger than a "Z" ?
+     40	002516	003402 				ble	40$			; /62/ nope
+     41	002520	112711 	000077 		30$:	movb	#'?	,(r1)		; /62/ indicate type is in la-la land
+     42	002524	062701 	000005 		40$:	add	#5	,r1		; /62/ skip to next entry in line
+     43	002530	012700 	000104'			mov	#ini.07	,r0		; and a label, "LEN"
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 15-1
+Dump a debug packet to disk
+
+     44	002534	004767 	000374 			call	160$			; copy it
+     45	002540	005201 				inc	r1			; /BBS/ a space
+     46	002542	012502 				mov	(r5)+	,r2		; /BBS/ save a copy of packet length
+     47	002544					deccvt	r2	,r1	,#4	; /BBS/ and convert to decimal
+	002544	010546 				mov	r5	,-(sp)
+	002546	012746 	000004 			mov	#4	,-(sp)
+	002552	010246 				mov	r2	,-(sp)
+	002554	010146 				mov	r1	,-(sp)
+	002556	010605 				mov	sp	,r5
+	002560	004767 	000000G			call	l$cvtnum
+	002564	062706 	000006 			add	#6	,sp
+	002570	012605 				mov	(sp)+	,r5
+     48	002572	062701 	000004 			add	#4	,r1		; now point to the end
+     49	002576	105011 				clrb	@r1			; make it .asciz
+     50	002600	010601 				mov	sp	,r1		; point back to the start
+     51	002602	032767 	000001 	000000G		bit	#log$pa	,trace		; /BBS/ maybe only doing TT now?
+     52	002610	001470 				beq	100$			; /BBS/ ya..
+     53	002612					strlen	r1			; /BBS/ don't write extra blanks!
+	002612	010100 				mov	r1	,r0
+	002614	004767 	000000G			call	l$len
+     54	002620					calls	putrec	,<r1,r0,#lun.lo> ; and put out to disk now
+	002620	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002622	012746 	000000G			        mov	#lun.lo	,-(sp)	; push it
+	002626	010046 				        mov	r0	,-(sp)	; push it
+	002630	010146 				        mov	r1	,-(sp)	; push it
+	002632	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002634	004767 	000000G			  jsr	pc	,putrec		; and go to the routine
+	002640	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002644	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     55	002646	005700 				tst	r0			; /62/ did it work?
+     56	002650	001403 				beq	50$			; /62/ ya
+     57	002652	004767 	000000G			call	logerr			; /62/ no, handle the error
+     58	002656	000445 				br	100$			; /62/ that's it for this part..
+     59	002660	011503 			50$:	mov	@r5	,r3		; /BBS/ get address of packet buffer
+     60	002662	020227 	003612 			cmp	r2	,#$allsiz-2	; /62/ is this length for real?
+     61	002666	003402 				ble	60$			; /62/ should be..  else truncate to
+     62	002670	012702 	003612 			mov	#$allsiz-2,r2		; /62/ avoid trap to 4 past buff end!!
+     63	002674	010204 			60$:	mov	r2	,r4		; /42/ save the length please
+     64	002676	010400 			70$:	mov	r4	,r0		; /42/ assume a reasonable size
+     65	002700	003434 				ble	100$			; /BBS/ don't write null lines..
+     66	002702	020027 	000110 			cmp	r0	,#72.		; /42/ will the leftovers fit?
+     67	002706	003402 				ble	80$			; /42/ yes
+     68	002710	012700 	000110 			mov	#72.	,r0		; /42/ no
+     69	002714	004767 	000230 		80$:	call	170$			; /62/ indent 4 columns
+     70	002720					calls	putrec	,<r3,r0,#lun.lo> ; /42/ dump a (partial) bufferful
+	002720	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002722	012746 	000000G			        mov	#lun.lo	,-(sp)	; push it
+	002726	010046 				        mov	r0	,-(sp)	; push it
+	002730	010346 				        mov	r3	,-(sp)	; push it
+	002732	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002734	004767 	000000G			  jsr	pc	,putrec		; and go to the routine
+	002740	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002744	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     71	002746	005700 				tst	r0			; /62/ did it work?
+     72	002750	001403 				beq	90$			; /62/ ya
+     73	002752	004767 	000000G			call	logerr			; /62/ no, handle the error
+     74	002756	000405 				br	100$			; /62/ that's it for this part..
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 15-2
+Dump a debug packet to disk
+
+     75	002760	062703 	000110 		90$:	add	#72.	,r3		; /42/ move up to next partial
+     76	002764	162704 	000110 			sub	#72.	,r4		; /42/ and try again
+     77	002770	000742 				br	70$			; /42/ next please
+     78
+     79	002772	032767 	000020 	000000G	100$:	bit	#log$de	,trace		; /62/ should we also dump to TT?
+     80	003000	001444 				beq	150$			; no
+     81	003002					wrtall	r1			; yes, dump the length and type
+	003002	010146 				mov	r1	,-(sp)		; pass the address
+	003004	004767 	000000G			call	wrtall			; do it
+     82	003010					.newline			; and a CR/LF
+	003010	004767 	000000G			call	l$pcrlf
+     83	003014	005702 				tst	r2			; anything in the packet?
+     84	003016	001435 				beq	150$			; no
+     85	003020	005001 				clr	r1			; /BBS/ init a counter for newlines
+     86	003022	011503 				mov	@r5	,r3		; /BBS/ get address of packet buffer
+     87	003024	005767 	000000G		110$:	tst	tsxsav			; /BBS/ running under TSX?
+     88	003030	001403 				beq	120$			; /BBS/ nope
+     89	003032	121367 	000000G			cmpb	@r3	,m.tsxr		; /62/ ya, is this TSLICH?
+     90	003036	001420 				beq	140$			; /BBS/ ya, don't type it to TT
+     91	003040	005701 			120$:	tst	r1			; /62/ at the top of a line (col.1)?
+     92	003042	001004 				bne	130$			; /62/ nope
+     93	003044					wrtall	#ini.08			; /62/ ya, indent 4 columns..
+	003044	012746 	000113'			mov	#ini.08	,-(sp)		; pass the address
+	003050	004767 	000000G			call	wrtall			; do it
+     94	003054	112300 			130$:	movb	(r3)+	,r0		; /BBS/ get a byte
+     95	003056	004767 	000000G			call	writ1char		; /BBS/ send it to TT
+     96	003062	005201 				inc	r1			; /BBS/ increment the byte counter
+     97	003064	020127 	000110 			cmp	r1	,#72.		; /BBS/ done 72. chars yet?
+     98	003070	003403 				ble	140$			; /BBS/ nope
+     99	003072					.newline			; /BBS/ ya, do a <cr><lf>
+	003072	004767 	000000G			call	l$pcrlf
+    100	003076	005001 				clr	r1			; /BBS/ and reset the byte counter
+    101	003100	077227 			140$:	sob	r2	,110$		; /BBS/ continue
+    102	003102	005701 				tst	r1			; /BBS/ need a newline?
+    103	003104	001402 				beq	150$			; /BBS/ nope
+    104	003106					.newline			; /BBS/ ya
+	003106	004767 	000000G			call	l$pcrlf
+    105	003112	062706 	000064 		150$:	add	#64	,sp		; /BBS/ pop the local buffer
+    106	003116					unsave				; /42/ unsave r5-r0
+	003116	012605 				 mov	(sp)+	,r5
+	003120	012604 				 mov	(sp)+	,r4
+	003122	012603 				 mov	(sp)+	,r3
+	003124	012602 				 mov	(sp)+	,r2
+	003126	012601 				 mov	(sp)+	,r1
+	003130	012600 				 mov	(sp)+	,r0
+    107	003132	000207 				return
+    108
+    109	003134	112021 			160$:	movb	(r0)+	,(r1)+		; copy .asciz string to buffer
+    110	003136	001376 				bne	160$			; done yet?
+    111	003140	005301 				dec	r1			; /BBS/ back up to null
+    112	003142	112721 	000040 			movb	#space	,(r1)+		; /BBS/ stuff a space where null was
+    113	003146	000207 				return
+    114
+    115	003150				170$:	save	<r2,r1,r0>		; /62/ added, dump 4 blanks to logfile
+	003150	010246 				 mov	r2	,-(sp)
+	003152	010146 				 mov	r1	,-(sp)
+	003154	010046 				 mov	r0	,-(sp)
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 15-3
+Dump a debug packet to disk
+
+    116	003156	012702 	000004 			mov	#4	,r2		; loop 4 times
+    117	003162	012701 	000000G			mov	#lun.lo	,r1		; write to this channel
+    118	003166	012700 	000040 		180$:	mov	#space	,r0		; space is the char to write
+    119	003172	004767 	000000G			call	putcr0			; do it
+    120	003176	077205 				sob	r2	,180$		; until done
+    121	003200					unsave	<r0,r1,r2>
+	003200	012600 				 mov	(sp)+	,r0
+	003202	012601 				 mov	(sp)+	,r1
+	003204	012602 				 mov	(sp)+	,r2
+    122	003206	000207 				return
+    123
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 16
+Dump a debug packet to disk
+
+      1
+      2						.sbttl	Init stats registers	; /62/ now includes clrsta
+      3
+      4	003210	004767 	000000G		inista::call	dcdtst			; /63/ check DCD, report any change
+      5	003214	012701 	000000G			mov	#pcnt.r	,r1		; packets received
+      6	003220	016702 	000000G			mov	totp.r	,r2		; running count so far
+      7	003224	012700 	000034 			mov	#34	,r0		; number of words to add/clear
+      8	003230	066162 	000002 	000002 	10$:	add	2(r1)	,2(r2)		; /43/ add in the totals
+      9	003236	005512 				adc	(r2)			; /43/ the carryover also
+     10	003240	061122 				add	(r1)	,(r2)+		; /43/ the high order of it
+     11	003242	005722 				tst	(r2)+			; /43/ get to the next one
+     12	003244	005021 				clr	(r1)+			; /43/ clear old stuff out
+     13	003246	005021 				clr	(r1)+			; /43/
+     14	003250	077011 				sob	r0	,10$		; /43/ next please
+     15	003252	012701 	000000G			mov	#pcnt.s	,r1		; now for the packets sent
+     16	003256	016702 	000000G			mov	totp.s	,r2		; where to add them in
+     17	003262	012700 	000034 			mov	#34	,r0		; number of words to do
+     18	003266	066162 	000002 	000002 	20$:	add	2(r1)	,2(r2)		; /43/ add in the totals
+     19	003274	005512 				adc	(r2)			; /43/ the carryover also
+     20	003276	061122 				add	(r1)	,(r2)+		; /43/ the high order of it
+     21	003300	005722 				tst	(r2)+			; /43/ get to the next one
+     22	003302	005021 				clr	(r1)+			; /43/ clear old stuff out
+     23	003304	005021 				clr	(r1)+			; /43/
+     24	003306	077011 				sob	r0	,20$		; /43/ next please
+     25	003310	005067 	000000G			clr	pcnt.n			; NAKs count
+     26	003314	005067 	000002G			clr	pcnt.n+2		; /43/ rest of it
+     27	003320	005067 	000000G			clr	pcnt.t			; /44/ time-outs
+     28	003324	005067 	000002G			clr	pcnt.t+2		; /44/
+     29	003330	005067 	000000G			clr	filein+0		; /43/ file data stats
+     30	003334	005067 	000002G			clr	filein+2		; /43/
+     31	003340	005067 	000000G			clr	fileout+0		; /43/
+     32	003344	005067 	000002G			clr	fileout+2		; /43/
+     33	003350	005067 	000000G			clr	charin+0		; /43/ physical link stats
+     34	003354	005067 	000002G			clr	charin+2		; /43/
+     35	003360	005067 	000000G			clr	charout+0		; /43/
+     36	003364	005067 	000002G			clr	charout+2		; /43/
+     37	003370	005067 	000000G			clr	rdrate+0		; /BBS/ read rate, # chars hi word
+     38	003374	005067 	000002G			clr	rdrate+2		; /BBS/ # chars lo word
+     39	003400	005067 	000004G			clr	rdrate+4		; /BBS/ # of reads
+     40	003404	005067 	000000G			clr	nakrec			; /BBS/ anti-resonating NAK register
+     41	003410					.gtim	#rtwork	,#pkrate	; /62/ start of init packet xmission
+	003410	012700 	000000G			MOV	#rtwork,R0
+	003414	012710 	010400 			MOV	#17.*^O400+0.,@R0
+	003420	012760 	000000G	000002 		MOV	#pkrate,2.(R0)
+	003426	104375 				EMT	^O375
+     42	003430	012767 	177777 	000004G		mov	#-1	,pkrate+4	; /62/ flag this is first time through
+     43	003436	012767 	177777 	000002G		mov	#-1	,pcnt.n+2	; init so next bump makes it zero
+     44	003444	005067 	000000G			clr	pcnt.n+0		; /43/ clear high order bits
+     45	003450	012767 	177777 	000002G		mov	#-1	,pcnt.t+2	; /44/ init time-out counter
+     46	003456	005067 	000000G			clr	pcnt.t+0		; /44/ 32. bits here too
+     47	003462					.br	incsta			; /63/
+     48
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 17
+Init stats registers	; /62/ now includes clrsta
+
+      1
+      2						.sbttl	Increment stats
+      3
+      4	003462	024646 			incsta::cmp	-(sp)	,-(sp)		; allocate two word buffer
+      5	003464	010603 				mov	sp	,r3		; and point to the small buffer
+      6	003466					.gtim	#rtwork	,r3		; get ticks past midnite
+	003466	012700 	000000G			MOV	#rtwork,R0
+	003472	012710 	010400 			MOV	#17.*^O400+0.,@R0
+	003476	010360 	000002 			MOV	r3,2.(R0)
+	003502	104375 				EMT	^O375
+      7	003504	012300 				mov	(r3)+	,r0		; load time hi word and
+      8	003506	011301 				mov	(r3)	,r1		; low word for double precision divide
+      9	003510	022626 				cmp	(sp)+	,(sp)+		; pop the tiny buffer
+     10	003512	012703 	000040 			mov	#40	,r3		; set iteration count in r3 (32. bits)
+     11	003516	016746 	000000G			mov	clkflg	,-(sp)		; put divisor on the stack
+     12	003522	005002 				clr	r2			; set the remainder to zero
+     13	003524	006301 			10$:	asl	r1			; shift the entire dividend
+     14	003526	006100 				rol	r0			; ...
+     15	003530	006102 				rol	r2			; ... to left and into remainder
+     16	003532	020216 				cmp	r2	,(sp)		; is remainder greater than divisor
+     17	003534	103402 				blo	20$			; no, skip to iteration control
+     18	003536	161602 				sub	(sp)	,r2		; yes, subtract divisor out please
+     19	003540	005201 				inc	r1			; increment the quotient
+     20	003542	005303 			20$:	dec	r3			; repeat please
+     21	003544	003367 				bgt	10$			; not done	r0=hiword secs>midnite
+     22	003546	005726 				tst	(sp)+			; pop divisor	r1=loword secs>midnite
+     23	003550	012702 	000004G			mov	#times+4,r2		; /43/ midnight, moving old times
+     24	003554	010022 				mov	r0	,(r2)+		; /43/ insert new times first
+     25	003556	010112 				mov	r1	,(r2)		; /43/ then subtract off the old
+     26	003560	166712 	000002G			sub	times+2	,(r2)		; /43/ times from it
+     27	003564	005642 				sbc	-(r2)			; /43/ ditto for the carry
+     28	003566	166712 	000000G			sub	times+0	,(r2)		; /43/ incremental is in times+4..>>
+     29	003572	002007 				bge	30$			; /BBS/ didn't cross midnight
+     30	003574	012702 	000006G			mov	#times+6,r2		; /BBS/ did cross, add 24 hours to fix
+     31	003600	062712 	050600 			add	#20864.	,(r2)		; /BBS/ low word of # secs in 24 hours
+     32	003604	005542 				adc	-(r2)			; /BBS/ add carry to 32-bit hi word
+     33	003606	062712 	000001 			add	#1.	,(r2)		; /BBS/ hi word of # secs in 24 hours
+     34	003612	010167 	000002G		30$:	mov	r1	,times+2	; /43/ <<..and times+6, new time is in
+     35	003616	010067 	000000G			mov	r0	,times+0	; /43/ times+0 and times+2
+     36	003622	000207 				return				; /43/
+     37
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 18
+Increment stats
+
+      1
+      2						.sbttl	Initialize repeat count for sending packets
+      3
+      4	003624				inirep::save	<r0>
+	003624	010046 				 mov	r0	,-(sp)
+      5	003626	005067 	000000G			clr	dorpt			; assume not doing repeat things
+      6	003632	005767 	000000G			tst	setrpt			; repeat count processing disabled?
+      7	003636	001430 				beq	10$			; yes
+      8	003640	122727 	000176 	000040 		cmpb	#myrept	,#space		; am I doing it?
+      9	003646	001424 				beq	10$			; no, just exit then
+     10	003650	005067 	000000G			clr	rptcount		; size of repeat if zero
+     11	003654	005067 	000000G			clr	rptlast			; no last character please (a null)
+     12	003660	012767 	177777 	000000G		mov	#-1	,rptinit	; need to prime the pump please
+     13	003666	116700 	000010G			movb	conpar+p.rept,r0	; check for doing so
+     14	003672	001412 				beq	10$			; no
+     15	003674	120027 	000040 			cmpb	r0	,#space		; a space also?
+     16	003700	001407 				beq	10$			; yes
+     17	003702	120067 	000010G			cmpb	r0	,senpar+p.rept	; same?
+     18	003706	001004 				bne	10$			; no
+     19	003710	110067 	000000G			movb	r0	,rptquo		; yes, save it and
+     20	003714	010667 	000000G			mov	sp	,dorpt		; /62/ we are indeed doing this
+     21	003720				10$:	unsave	<r0>
+	003720	012600 				 mov	(sp)+	,r0
+     22	003722	000207 				return
+     23
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 19
+Initialize repeat count for sending packets
+
+      1
+      2						.sbttl	Decide what to do about displaying packet counts
+      3
+      4	003724	004767 	000000G		dolog:	call	dcdtst			; /62/ check DCD, report any change
+      5	003730	005767 	000000G			tst	blip			; display at every "blip" # of counts
+      6	003734	001421 				beq	10$			; do not do this at all
+      7	003736	005767 	000000G			tst	infomsg			; /51/ if SET TT QUIET
+      8	003742	001416 				beq	10$			; /51/ don't do this
+      9	003744	005767 	000000G			tst	remote			; a server?
+     10	003750	001013 				bne	10$			; could be
+     11	003752	005767 	000000G			tst	xmode			; extended reply?  also clears carry..
+     12	003756	001010 				bne	10$			; yes
+     13	003760	032767 	000020 	000000G		bit	#log$de	,trace		; /62/ debugging to TT?
+     14	003766	001004 				bne	10$			; /BBS/ ya, stop headers + etc..
+     15	003770	032767 	000004 	000000G		bit	#log$rp	,trace		; /BBS/ this also writes to TT
+     16	003776	001401 				beq	20$			; /BBS/ except when equal to zero
+     17	004000	000261 			10$:	sec				; flag to skip stats display
+     18	004002	000207 			20$:	return				; /63/ or carry cleared by above tests
+     19
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 20
+Decide what to do about displaying packet counts
+
+      1
+      2						.sbttl	Display received packets stats
+      3
+      4	004004				reclog::save	<r1>
+	004004	010146 				 mov	r1	,-(sp)
+      5	004006	004767 	177712 			call	dolog			; decide what to do
+      6	004012	103414 				bcs	10$			; do nothing
+      7	004014	016701 	000002G			mov	pcnt.r+2,r1		; check for modulo on screen updates
+      8	004020	005000 				clr	r0			; setup for the divide
+      9	004022	071067 	000000G			div	blip	,r0		; do it
+     10	004026	005701 				tst	r1			; any remainder left over?
+     11	004030	001005 				bne	10$			; yes, simply exit
+     12	004032	016700 	000000G			mov	vttype	,r0		; no, dispatch to the correct routine
+     13	004036	006300 				asl	r0			; it's word indexing
+     14	004040	004770 	000702'			jsr	pc	,@recdsp(r0)	; dispatch
+     15	004044				10$:	unsave	<r1>
+	004044	012601 				 mov	(sp)+	,r1
+     16	004046	000207 				return
+     17
+     18						.save
+     19	000702					.psect	$pdata
+     20	000702	004050'	004050'	004130'	recdsp:	.word	rectty	,rectty	,recvt1	,recvt1	,recvt1
+     21	004050					.restore
+     22
+     23	004050	012701 	000000G		rectty:	mov	#pcnt.r	,r1		; /43/ pass address in r1
+     24	004054	004767 	000742 			call	numout			; write the number to the terminal
+     25	004060					wrtall	#$delim			; a "/" delimiter
+	004060	012746 	000433'			mov	#$delim	,-(sp)		; pass the address
+	004064	004767 	000000G			call	wrtall			; do it
+     26	004070	012701 	000070G			mov	#pcnt.s+<4*<<'N&137>-100>>,r1 ; /43/ 32. bits this time
+     27	004074	026167 	000002 	000002G		cmp	2(r1)	,pcnt.n+2	; /43/ unlikely that the NAK
+     28	004102	001403 				beq	10$			; /43/ count would ever be > 65535.
+     29	004104	016167 	000002 	000002G		mov	2(r1)	,pcnt.n+2	; /43/ use low order 16 bits
+     30	004112	004767 	000704 		10$:	call	numout			; /BBS/ always refresh display
+     31	004116	004767 	000000G			call	l$nolf			; just a CR, unless TT is NOSCOPE
+     32	004122	010667 	000000G			mov	sp	,logini		; /BBS/ flag this line has been used
+     33	004126	000207 				return
+     34
+     35	004130	005767 	000000G		recvt1:	tst	logini			; need the header?
+     36	004134	001022 				bne	20$			; no
+     37	004136	005767 	000002G			tst	pcnt.r+2		; /62/ ya, but sent any packets yet?
+     38	004142	001003 				bne	10$			; /62/ ya
+     39	004144	005767 	000000G			tst	pcnt.r+0		; /62/ check hi word just in case
+     40	004150	001464 				beq	50$			; /62/ nothing to do yet
+     41	004152				10$:	wrtall	#$rech			; /62/ initial header please
+	004152	012746 	000530'			mov	#$rech	,-(sp)		; pass the address
+	004156	004767 	000000G			call	wrtall			; do it
+     42	004162	012767 	177777 	000002G		mov	#-1	,pcnt.n+2	; /62/ force redisplay of NAKs
+     43	004170	012767 	177777 	000002G		mov	#-1	,pcnt.t+2	; /62/ and time-outs
+     44	004176	010667 	000000G			mov	sp	,logini		; /62/ flag it has been done
+     45	004202				20$:	wrtall	#$pos1			; position the cursor
+	004202	012746 	000636'			mov	#$pos1	,-(sp)		; pass the address
+	004206	004767 	000000G			call	wrtall			; do it
+     46	004212	012701 	000000G			mov	#pcnt.r	,r1		; /43/ received packet count
+     47	004216	004767 	000600 			call	numout			; dump it
+     48	004222	012701 	000070G			mov	#pcnt.s+<4*<<'N&137>-100>>,r1 ; /43/ get the sent NAK count
+     49	004226	026167 	000002 	000002G		cmp	2(r1)	,pcnt.n+2	; /43/ really need to update NAKs?
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 20-1
+Display received packets stats
+
+     50	004234	001411 				beq	30$			; no
+     51	004236	016167 	000002 	000002G		mov	2(r1)	,pcnt.n+2	; /43/ stuff low order 16 bits
+     52	004244					wrtall	#npos			; /62/ put cursor where NAK count goes
+	004244	012746 	000645'			mov	#npos	,-(sp)		; pass the address
+	004250	004767 	000000G			call	wrtall			; do it
+     53	004254	004767 	000542 			call	numout			; print the NAK count
+     54	004260				30$:	; /BBS/ dotmo moved here
+     55	004260	012701 	000120G			mov	#pcnt.r+<4*<<'T&137>-100>>,r1 ; /44/ get time-out count
+     56	004264	026167 	000002 	000002G		cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
+     57	004272	001411 				beq	40$			; /44/ no, just exit
+     58	004274	016167 	000002 	000002G		mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter
+     59	004302					wrtall	#dpos			; /44/ position cursor
+	004302	012746 	000663'			mov	#dpos	,-(sp)		; pass the address
+	004306	004767 	000000G			call	wrtall			; do it
+     60	004312	004767 	000504 			call	numout			; /44/ dump the number to TT please
+     61	004316	004767 	000000G		40$:	call	l$nolf
+     62	004322	000207 			50$:	return
+     63
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 21
+Display received packets stats
+
+      1
+      2						.sbttl	Display sent packets stats
+      3
+      4	004324				senlog::save	<r1>
+	004324	010146 				 mov	r1	,-(sp)
+      5	004326	004767 	177372 			call	dolog			; decide what to do
+      6	004332	103414 				bcs	10$			; don't do anything
+      7	004334	016701 	000002G			mov	pcnt.s+2,r1		; check for modulo on screen updates
+      8	004340	005000 				clr	r0			; setup for the divide
+      9	004342	071067 	000000G			div	blip	,r0		; do it
+     10	004346	005701 				tst	r1			; any remainder left over?
+     11	004350	001005 				bne	10$			; yes, simply exit
+     12	004352	016700 	000000G			mov	vttype	,r0		; recover terminal type
+     13	004356	006300 				asl	r0			; word indexing here
+     14	004360	004770 	000714'			jsr	pc	,@sendsp(r0)	; dispatch based on terminal type
+     15	004364				10$:	unsave	<r1>
+	004364	012601 				 mov	(sp)+	,r1
+     16	004366	000207 				return
+     17
+     18						.save
+     19	000714					.psect	$pdata
+     20	000714	004370'	004370'	004450'	sendsp:	.word	sentty	,sentty	,senvt1	,senvt1	,senvt1
+     21	004370					.restore
+     22
+     23	004370	012701 	000000G		sentty:	mov	#pcnt.s	,r1		; /43/ 32. bits now
+     24	004374	004767 	000422 			call	numout			; write the number to the terminal
+     25	004400					wrtall	#$delim			; a "/" delimiter
+	004400	012746 	000433'			mov	#$delim	,-(sp)		; pass the address
+	004404	004767 	000000G			call	wrtall			; do it
+     26	004410	012701 	000070G			mov	#pcnt.r+<4*<<'N&137>-100>>,r1 ; get the sent NAK count
+     27	004414	026167 	000002 	000002G		cmp	2(r1)	,pcnt.n+2	; any change in count?
+     28	004422	001403 				beq	10$			; no
+     29	004424	016167 	000002 	000002G		mov	2(r1)	,pcnt.n+2	; ya, update it
+     30	004432	004767 	000364 		10$:	call	numout			; /BBS/ always refresh display
+     31	004436	004767 	000000G			call	l$nolf			; just a CR, unless TT is NOSCOPE
+     32	004442	010667 	000000G			mov	sp	,logini		; /BBS/ flag this line has been used
+     33	004446	000207 				return
+     34
+     35	004450	005767 	000000G		senvt1:	tst	logini			; need the header?
+     36	004454	001022 				bne	20$			; no
+     37	004456	005767 	000002G			tst	pcnt.r+2		; /62/ ya, but sent any packets yet?
+     38	004462	001003 				bne	10$			; /62/ ya
+     39	004464	005767 	000000G			tst	pcnt.r+0		; /62/ check hi word just in case
+     40	004470	001464 				beq	50$			; /62/ nothing to do yet
+     41	004472				10$:	wrtall	#$sendh			; /62/ ya, dump it to TT
+	004472	012746 	000435'			mov	#$sendh	,-(sp)		; pass the address
+	004476	004767 	000000G			call	wrtall			; do it
+     42	004502	012767 	177777 	000002G		mov	#-1	,pcnt.n+2	; /62/ force redisplay of NAKs
+     43	004510	012767 	177777 	000002G		mov	#-1	,pcnt.t+2	; /62/ and time-outs
+     44	004516	010667 	000000G			mov	sp	,logini		; /62/ flag header now exists
+     45	004522				20$:	wrtall	#$pos0			; /BBS/ position the cursor
+	004522	012746 	000627'			mov	#$pos0	,-(sp)		; pass the address
+	004526	004767 	000000G			call	wrtall			; do it
+     46	004532	012701 	000000G			mov	#pcnt.s	,r1		; /43/ 32. bits now
+     47	004536	004767 	000260 			call	numout			; write number on terminal
+     48	004542	012701 	000070G			mov	#pcnt.r+<4*<<'N&137>-100>>,r1 ; get the sent NAK count
+     49	004546	026167 	000002 	000002G		cmp	2(r1)	,pcnt.n+2	; any change in count?
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 21-1
+Display sent packets stats
+
+     50	004554	001411 				beq	30$			; no
+     51	004556	016167 	000002 	000002G		mov	2(r1)	,pcnt.n+2	; ya, update it
+     52	004564					wrtall	#npox			; /62/ for shortened send logging
+	004564	012746 	000654'			mov	#npox	,-(sp)		; pass the address
+	004570	004767 	000000G			call	wrtall			; do it
+     53	004574	004767 	000222 			call	numout			; write number on terminal
+     54	004600				30$:	; /BBS/ dotmo moved here
+     55	004600	012701 	000120G			mov	#pcnt.r+<4*<<'T&137>-100>>,r1 ; /44/ get time-out count
+     56	004604	026167 	000002 	000002G		cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
+     57	004612	001411 				beq	40$			; /44/ no, just exit
+     58	004614	016167 	000002 	000002G		mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter
+     59	004622					wrtall	#dpox			; /BBS/ position cursor for send
+	004622	012746 	000672'			mov	#dpox	,-(sp)		; pass the address
+	004626	004767 	000000G			call	wrtall			; do it
+     60	004632	004767 	000164 			call	numout			; /44/ dump the number to TT please
+     61	004636	004767 	000000G		40$:	call	l$nolf			; just a CR, unless TT is NOSCOPE
+     62	004642	000207 			50$:	return
+     63
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 22
+Display sent packets stats
+
+      1
+      2						.sbttl	Display packet stats via ^A	; 9-Dec-86 07:46:02
+      3
+      4					; /56/	This is similar to the VMS Kermit's ^A status line, which is just like
+      5					; that in FTP.  Under KRT as it currently is however, the only time this test
+      6					; can be done is just after receiving a data packet, and there may be some lag
+      7					; until that occurs, especially when using long packets over a slow link.
+      8
+      9	004644	012700 	000153'		cs$in::	mov	#ini.12	,r0		; pass to common code
+     10	004650	012701 	000000G			mov	#filein	,r1		; address of data to print
+     11	004654	012746 	000000G			mov	#lun.ou	,-(sp)		; /62/ save for blocks display
+     12	004660	000406 				br	cs.com			; /63/
+     13
+     14	004662	012700 	000146'		cs$out::mov	#ini.11	,r0		; pass to common code
+     15	004666	012701 	000000G			mov	#fileout,r1		; address of data to print
+     16	004672	012746 	000000G			mov	#lun.in	,-(sp)		; /62/ save for blocks display
+     17	004676	004767 	000000G		cs.com:	call	l$nolf			; /62/ ensure stats are in the clear
+     18	004702	004767 	000114 			call	numout			; dump char count @r1
+     19	004706					wrtall	#ini.09			; /62/ some text
+	004706	012746 	000120'			mov	#ini.09	,-(sp)		; pass the address
+	004712	004767 	000000G			call	wrtall			; do it
+     20	004716					wrtall	r0			; send or receive?
+	004716	010046 				mov	r0	,-(sp)		; pass the address
+	004720	004767 	000000G			call	wrtall			; do it
+     21	004724					wrtall	#ini.10			; /62/ some more text
+	004724	012746 	000130'			mov	#ini.10	,-(sp)		; pass the address
+	004730	004767 	000000G			call	wrtall			; do it
+     22	004734					wrtall	#filnam			; name of the file
+	004734	012746 	000000G			mov	#filnam	,-(sp)		; pass the address
+	004740	004767 	000000G			call	wrtall			; do it
+     23	004744					wrtall	#ini.13			; /62/ "curblk/maxblk"
+	004744	012746 	000161'			mov	#ini.13	,-(sp)		; pass the address
+	004750	004767 	000000G			call	wrtall			; do it
+     24	004754	012601 				mov	(sp)+	,r1		; /62/ recover file's lun
+     25	004756	006301 				asl	r1			; /62/ word indexing here..
+     26	004760	016100 	000000G			mov	blknum(r1),r0		; /62/ current block number
+     27	004764	004767 	000000G			call	L10266			; /62/ display it
+     28	004770	012700 	000057 			mov	#'/	,r0		; /62/ a slash
+     29	004774	004767 	000000G			call	writ1char		; /62/ display it
+     30	005000	016100 	000000G			mov	sizof(r1),r0		; /62/ this is how big file is
+     31	005004	004767 	000000G			call	L10266			; /62/ display it
+     32	005010					.newline			; /62/ done
+	005010	004767 	000000G			call	l$pcrlf
+     33	005014	005067 	000000G			clr	logini			; retype the display header
+     34	005020	000207 				return
+     35
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 23
+Display packet stats via ^A	; 9-Dec-86 07:46:02
+
+      1
+      2						.sbttl	Display a 32-bit number	; /43/
+      3
+      4	005022				numout:	save	<r0,r1,r2>
+	005022	010046 				 mov	r0	,-(sp)
+	005024	010146 				 mov	r1	,-(sp)
+	005026	010246 				 mov	r2	,-(sp)
+      5	005030	162706 	000020 			sub	#20	,sp		; allocate a buffer please
+      6	005034	010600 				mov	sp	,r0		; point to buffer for $cddmg
+      7	005036	005002 				clr	r2			; kill leading zero and spaces
+      8	005040	004767 	000000G			call	$cddmg			; convert to ascii
+      9	005044	105010 				clrb	@r0			; make it .asciz
+     10	005046	010600 				mov	sp	,r0		; reset pointer
+     11	005050					wrtall	r0			; dump the string
+	005050	010046 				mov	r0	,-(sp)		; pass the address
+	005052	004767 	000000G			call	wrtall			; do it
+     12	005056	062706 	000020 			add	#20	,sp
+     13	005062					unsave	<r2,r1,r0>
+	005062	012602 				 mov	(sp)+	,r2
+	005064	012601 				 mov	(sp)+	,r1
+	005066	012600 				 mov	(sp)+	,r0
+     14	005070	000207 				return
+     15
+     16		000001 				.end
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 23-1
+Symbol table
+
+ALSIZE= 002000   	DORPT = ****** GX	LOGERR= ****** GX	PKRATE= ****** GX	SERWAI= ****** GX
+AT.ALL  000177   	DOT   = 000056   	LOGINI= ****** GX	PREFIX  000216R     003	SETCHK= ****** GX
+AT.CDT  000001   	DOWILD= ****** GX	LOG$AL= 000003   	PRINTM= ****** GX	SETRPT= ****** GX
+AT.INF  000002   	DO8BIT= ****** GX	LOG$CO= 000002   	PUTCR0= ****** GX	SEVER$= 000010
+AT.LEN  000004   	DPOS    000663R     003	LOG$DE= 000020   	PUTREC= ****** GX	SIZOF = ****** GX
+AT.ON   100000   	DPOX    000672R     003	LOG$IO= 000010   	P.CAPA= 000011   	SND8BI= ****** GX
+AT.PRO  000010   	DSKDMP  002336RG    002	LOG$ON= 040000   	P.CHKT= 000007   	SOH   = 000001
+AT.SYS  000020   	EBQUOT= ****** GX	LOG$OP= 100000   	P.EOL = 000004   	SPACE = 000040
+AT.TYP  000040   	ERBFSI= 000170   	LOG$PA= 000001   	P.MXL1= 000013   	SPAR    001736RG    002
+AT.XLE  000100   	ERRBYT= 000052   	LOG$RP= 000004   	P.MXL2= 000014   	SPARIN  000376R     002
+BADCHK= ****** GX	ERROR$= 000004   	LUN.IN= ****** GX	P.NPAD= 000002   	SPARSZ= ****** GX
+BELL  = 000007   	ESC   = 000033   	LUN.LO= ****** GX	P.PADC= 000003   	STRCPY= ****** GX
+BINARY  000001   	FATAL$= 000020   	LUN.OU= ****** GX	P.QBIN= 000006   	SUCCS$= 000001
+BLIP  = ****** GX	FF    = 000014   	LUN.TA= ****** GX	P.QCTL= 000005   	SY.INI= ****** GX
+BLKNUM= ****** GX	FILEIN= ****** GX	L$CVTN= ****** GX	P.REPT= 000010   	TAB   = 000011
+BS    = 000010   	FILEOU= ****** GX	L$LEN = ****** GX	P.SPSI= 000000   	TERMIN  177777
+CANDO   000240R     003	FILNAM= ****** GX	L$NOLF= ****** GX	P.TIME= 000001   	TEXT    000000
+CAPA.A= 000010   	FIXCHK  002300RG    002	L$PCRL= ****** GX	P.VEND= 000017   	TILDE = 000176
+CAPA.L= 000002   	INCFIL= ****** GX	L$XOR = ****** GX	P.WIND= 000012   	TIMES = ****** GX
+CAPA.S= 000004   	INCPAR= ****** GX	L10266= ****** GX	QU.INI= ****** GX	TOTP.R= ****** GX
+CHARIN= ****** GX	INCSTA  003462RG    002	MAXLNG= 003600   	RDRATE= ****** GX	TOTP.S= ****** GX
+CHAROU= ****** GX	INDNAM= ****** GX	MAXPAK  000136   	RECDSP  000702R     003	TRACE = ****** GX
+CHKSIZ= ****** GX	INFOMS= ****** GX	MAXTRY= ****** GX	RECLNG= ****** GX	TSXSAV= ****** GX
+CHKTYP= ****** GX	ININAM= ****** GX	MSGTIM= ****** GX	RECLOG  004004RG    002	TTY   = 000001
+CLKFLG= ****** GX	INIREP  003624RG    002	MX$TRY= 000020   	RECSOP= ****** GX	USERRB= 000053
+CMDLUN= ****** GX	INISTA  003210RG    002	MYCHKT= 000061   	RECTIM= ****** GX	VTTYPE= ****** GX
+COMMA = 000054   	INITRY= ****** GX	MYEOL = 000015   	RECTTY  004050R     002	VT100 = 000002
+CONESC= ****** GX	INI.00  000000R     003	MYPAD = 000000   	RECVT1  004130R     002	VT200 = 000003
+CONPAR= ****** GX	INI.01  000012R     003	MYPCHA= 000000   	REMOTE= ****** GX	WARN$ = 000002
+CON$ES= 000034   	INI.02  000026R     003	MYQBIN= 000046   	RPAR    000644RG    002	WARN8   001676R     002
+CR    = 000015   	INI.03  000042R     003	MYQUOT= 000043   	RPARIN  000572R     002	WARN8D= ****** GX
+CS$IN   004644RG    002	INI.04  000055R     003	MYREPT= 000176   	RPTCOU= ****** GX	WARN8M  000377R     003
+CS$OUT  004662RG    002	INI.05  000070R     003	MYRTMO= 000012   	RPTINI= ****** GX	WRIT1C= ****** GX
+CS.COM  004676R     002	INI.06  000077R     003	MYSTMO= 000015   	RPTLAS= ****** GX	WRTALL= ****** GX
+CTLFLG= ****** GX	INI.07  000104R     003	M.TSXR= ****** GX	RPTQUO= ****** GX	XINIT = ****** GX
+CTRL$N= 000016   	INI.08  000113R     003	NAKREC= ****** GX	RTVOL = ****** GX	XMODE = ****** GX
+CTRL$O= 000017   	INI.09  000120R     003	NOSCOP= 000000   	RTWORK= ****** GX	XOFF  = 000023
+C.CRLF= 000004   	INI.10  000130R     003	NPOS    000645R     003	RWDATA= ****** GX	XON   = 000021
+C.LCUC= 000040   	INI.11  000146R     003	NPOX    000654R     003	RWSIZE= ****** GX	$ALLSI= 003614
+C.LSPA= 000010   	INI.12  000153R     003	NUMOUT  005022R     002	SCOLON= 000073   	$CDDMG= ****** GX
+C.SSPA= 000020   	INI.13  000161R     003	OPEN  = ****** GX	SENDLY= ****** GX	$DELIM  000433R     003
+C.TSPA= 000200   	INI.14  000201R     003	PARITY= ****** GX	SENDSP  000714R     003	$POS0   000627R     003
+DCDTST= ****** GX	INI.15  000212R     003	PAR$EV  000002   	SENLEN= ****** GX	$POS1   000636R     003
+DECNAT  000002   	IN$TRY= 000005   	PAR$MA  000003   	SENLNG= ****** GX	$RECH   000530R     003
+DEFCHK= ****** GX	JSW   = 000044   	PAR$NO  000000   	SENLOG  004324RG    002	$SENDH  000435R     003
+DEFDLY= 000006   	KERINI  000000RG    002	PAR$OD  000001   	SENPAR= ****** GX	$$    = 000003
+DEL   = 000177   	KRTINC= 000001   	PAR$SP  000004   	SENSOP= ****** GX	$$1   = 000001
+DOATTR= ****** GX	LF    = 000012   	PCNT.N= ****** GX	SENTIM= ****** GX	$$2   = 000000
+DOAUTO= ****** GX	LMSG    000322R     003	PCNT.R= ****** GX	SENTTY  004370R     002	$$5   = 000003
+DOLOG   003724R     002	LN$CNT= 000012   	PCNT.S= ****** GX	SENVT1  004450R     002	...V1 = 000003
+DOLONG= ****** GX	LN$MAX= 000204   	PCNT.T= ****** GX	SENWIN= ****** GX
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	005072    002	(RO,I,LCL,REL,CON)
+$PDATA	000726    003	(RO,D,LCL,REL,CON)
+Errors detected:  0
+KRTINI	Initialization and rare	MACRO V05.03b  00:01  Page 23-2
+Symbol table
+
+
+*** Assembler statistics
+
+
+Work  file  reads: 9
+Work  file writes: 10
+Size of work file: 12992 Words  ( 51 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.31
+KRTINI,KRTINI=KRTINI

@@ -1,0 +1,2021 @@
+KRTREC	Receive file processing	MACRO V05.03b  00:01
+Table of contents
+
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    7-   1	KRTDEF	Packet types (edited from VMS Kermit)
+    7-  11	Protocol V1.0 message types
+    7-  22	Protocol V2.0 message types
+    7-  29	Protocol V4.0 message types
+    7-  35	Generic Kermit commands
+    7-  57	Acknowledgment modifiers (V4.0)
+    7-  63	End of file packet modifier
+    7-  67	Send/receive states
+    9-   2	Local data
+   10-   3	Receive file(s)		; /62/ moved this here..
+   11-   2	State controller for receive file processing
+   12-   2	State routines for RECSW
+   13-   2	Received bad ACK/NAK and error handling
+   14-   2	Receive debugging and logging	; /62/ major revision..
+   15-   2	Receive file initialization
+   16-   2	Process response to RINIT
+   17-   2	Receive file header
+   18-   2	Process response to RFILE
+   19-   2	Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+   23-   2	Receive file data
+   24-   2	Process response to RDATA
+   28-   2	Dump a buffer out to disk	; /62/ moved this here..
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTREC	Receive file processing
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	support gets to LP
+      7					;	display file size in "created file" messages
+      8					;	fix unpopped stack on error exit from bufemp
+      9					;	display file type in file create message
+     10					;	display file name sent back by remote Kermit
+     11
+     12					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     13					;
+     14					;	dump FILLOG, as PRINTM now does this
+     15					;	use log$packets for state logging
+     16					;	provide for logfile errors
+     17					;	modify to not NAK unknown packets (noise)
+     18					;	display any possible contents of "X" packet, for Unix and C-Kermit
+     19
+     20					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     21					;
+     22					;	rfil.x: put "Remote server response:" here so it displays even
+     23					;	when blo <>1.  also set image=binary here so typing 8-bit
+     24					;	files doesn't die on checksum error when clrpar hoses hi bits
+     25					;
+     26					;	rfil.f: check asname here (instead of rfil.d), also fixed so
+     27					;	VMS filespecs longer than 66. bytes don't write past end of the
+     28					;	scratch buffer.  also namcvt strips VMS node::dev:[dir] here..
+     29					;
+     30					;	kill debug to TT if not running as a local Kermit
+     31					;	add support for INCOMPLETE-FILE-DISPOSITION
+     32
+     33					;	13-Oct-84  14:06:43  Brian Nelson
+     34					;
+     35					;	Copyright 1983,1984  Change Software, Inc.
+     36					;
+     37					;	This software is furnished under a license and may
+     38					;	be  used  and  copied  only in accordance with the
+     39					;	terms of such license and with  the  inclusion  of
+     40					;	the  above copyright notice.  This software or any
+     41					;	other copies thereof may not be provided or other-
+     42					;	wise made available to any other person.  No title
+     43					;	to and ownership of the software is hereby  trans-
+     44					;	ferred.
+     45					;
+     46					;	The information in this  software  is  subject  to
+     47					;	change  without notice and should not be construed
+     48					;	as a commitment by the author.
+     49
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 2
+
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2						.include "IN:KRTDEF.MAC"
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 7
+KRTDEF	Packet types (edited from VMS Kermit)
+
+      1						.sbttl	KRTDEF	Packet types (edited from VMS Kermit)
+      2					;	.ident	"V03.63"	; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7
+      8					;	Note the use of the "=:" direct assignment ensures these
+      9					;	rather long names are unique in the first 6 characters.
+     10
+     11						.sbttl	Protocol V1.0 message types
+     12
+     13		000131 			MSG$ACK		=: 'Y&137	; acknowledgment (ACK)
+     14		000102 			MSG$BREAK	=: 'B&137	; break transmission (EOT)
+     15		000104 			MSG$DATA	=: 'D&137	; data packet
+     16		000132 			MSG$EOF		=: 'Z&137	; end of file (EOF)
+     17		000105 			MSG$ERROR	=: 'E&137	; error
+     18		000106 			MSG$FILE	=: 'F&137	; file header
+     19		000116 			MSG$NAK		=: 'N&137	; negative acknowledgment (NAK)
+     20		000123 			MSG$SND		=: 'S&137	; send initiate
+     21
+     22						.sbttl	Protocol V2.0 message types
+     23
+     24		000103 			MSG$COMMAND	=: 'C&137	; host command
+     25		000107 			MSG$GENERIC	=: 'G&137	; generic Kermit command
+     26		000113 			MSG$KERMIT	=: 'K&137	; perform Kermit command (text)
+     27		000122 			MSG$RCV		=: 'R&137	; receive initiate
+     28
+     29						.sbttl	Protocol V4.0 message types
+     30
+     31		000101 			MSG$ATR		=: 'A&137	; attribute packet
+     32		000111 			MSG$SER		=: 'I&137	; server initialization
+     33		000130 			MSG$TEXT	=: 'X&137	; text header message
+     34
+     35						.sbttl	Generic Kermit commands
+     36
+     37		000114 			GN$BYE		=: 'L&137	; logout
+     38		000103 			GN$CONNECT	=: 'C&137	; connect to a directory
+     39		000113 			GN$COPY		=: 'K&137	; copy file
+     40		000105 			GN$DELETE	=: 'E&137	; delete a file
+     41		000104 			GN$DIRECTORY	=: 'D&137	; directory
+     42		000125 			GN$DISK		=: 'U&137	; disk usage
+     43		000106 			GN$EXIT		=: 'F&137	; finish (stop the server)
+     44		000110 			GN$HELP		=: 'H&137	; help
+     45		000112 			GN$JOURNAL	=: 'J&137	; perform journal functions
+     46		000111 			GN$LOGIN	=: 'I&137	; login
+     47		000120 			GN$PRINT	=: 'P&137	; print
+     48		000120 			GN$PROGRAM	=: 'P&137	; run program and pass data
+     49		000121 			GN$QUERY	=: 'Q&137	; query status
+     50		000122 			GN$RENAME	=: 'R&137	; rename file
+     51		000115 			GN$SEND		=: 'M&137	; send a message to a user
+     52		000123 			GN$SUBMIT	=: 'S&137	; submit
+     53		000124 			GN$TYPE		=: 'T&137	; type a file specification
+     54		000126 			GN$VARIABLE	=: 'V&137	; return/set variable state
+     55		000127 			GN$WHO		=: 'W&137	; who's logged in?
+     56
+     57						.sbttl	Acknowledgment modifiers (V4.0)
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 7-1
+Acknowledgment modifiers (V4.0)
+
+     58
+     59		000132 			ABT$ALL		=: 'Z&137	; abort entire stream of files
+     60		000130 			ABT$CUR		=: 'X&137	; abort current file
+     61		000105 			ABT$ERROR	=: 'E&137	; abort because an error occured
+     62
+     63						.sbttl	End of file packet modifier
+     64
+     65		000104 			EOF$DISCARD	=: 'D&137	; discard data from previous file
+     66
+     67						.sbttl	Send/receive states
+     68
+     69		000100 			STA.CCA		=:  100		; ^C from keyboard abort
+     70		000101 			STA.ABO		=: 'A&137	; abort
+     71		000110 			STA.ATR		=: 'H&137	; send attributes
+     72		000102 			STA.BRK		=: 'B&137	; break link
+     73		000103 			STA.COM		=: 'C&137	; transaction complete
+     74		000104 			STA.DAT		=: 'D&137	; data
+     75		000132 			STA.EOF		=: 'Z&137	; end of file or reply
+     76		000106 			STA.FIL		=: 'F&137	; file name header
+     77		000111 			STA.INI		=: 'I&137	; init
+     78		000122 			STA.RIN		=: 'R&137	; receive init
+     79		000123 			STA.SIN		=: 'S&137	; send init
+     80		000130 			STA.TYP		=: 'X&137	; extended reply
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 8
+Send/receive states
+
+      1						.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+      2
+      3						.mcall	.PURGE			; /62/ hose dir search chan on error
+      4
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 9
+Send/receive states
+
+      1
+      2						.sbttl	Local data
+      3
+      4	000000					.psect	$pdata			; /62/ consolidated this stuff here..
+      5	000000	000006'	000031'	000054'	fillst:	.word	10$	,20$	,30$	; /63/
+      6	000006	   101 	   123 	   103 	 10$:	.asciz	"ASCII (7-bit text)"	; /63/
+      7	000031	   102 	   111 	   116 	 20$:	.asciz	"BINARY (fixed 512)"	; /63/
+      8	000054	   104 	   105 	   103 	 30$:	.asciz	"DEC-Multinational (8-bit text)" ; /63/
+      9	000113	   104 	   165 	   160 	dejavu:	.asciz	"Duplicate packet received" ; /63/
+     10	000145	   054 	   040 	   160 	dejatag:.asciz	", paknum: "
+     11	000160	   113 	   122 	   124 	get2lp:	.asciz	"KRTGET.OUT"		; /63/ need a name to output to LP
+     12	000173	   111 	   147 	   156 	nojavu:	.asciz	"Ignoring invalid response" ; /63/
+     13	000225	   122 	   145 	   155 	rec.01:	.asciz 	"Remote server response:"<cr><lf><cr><lf> ; /63/
+     14	000261	   007 	   122 	   145 	rec.02:	.asciz	<bell>"Receive completed"
+     15	000304	   007 	   122 	   145 	rec.03:	.asciz	<bell>"Receive failed"
+     16	000324	   130 	   000 		rec.04:	.byte	abt$cur	,0
+     17	000326	   132 	   000 		rec.05:	.byte	abt$all	,0
+     18	000330	   103 	   162 	   145 	rec.06:	.asciz	"Created "
+     19	000341	   040 	   146 	   151 	rec.07:	.asciz	" file - "		; /63/
+     20	000352	   131 	   157 	   165 	rec.08:	.asciz	"You have SET FILE PROTECT thus "
+     21	000412	   040 	   143 	   141 	rec.09:	.asciz	" can't be overwritten"
+     22	000440	   115 	   151 	   163 	rec.10:	.asciz	"Missing length attribute or "	; /63/
+     23	000475	   040 	   151 	   163 	rec.11:	.asciz	" is empty"			; /63/
+     24	000507	   122 	   145 	   143 	rec.12:	.asciz	"Received file name - "		; /63/
+     25	000535	   127 	   141 	   162 	rec.13:	.asciz	"Warning: "			; /63/
+     26	000547	   122 	   105 	   103 	rec.14:	.asciz	"REC.SW"
+     27	000556	   120 	   141 	   162 	rec.15:	.asciz	"Parity found in SOH byte"
+     28	000607	   040 	   162 	   145 	rec.16:	.asciz	" renamed to "
+     29						.even
+     30
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 10
+Local data
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Receive file(s)		; /62/ moved this here..
+      4
+      5	000000	004767 	000000G		c$rec::	call	opentt			; initialize the link device
+      6	000004	005700 				tst	r0			; /BBS/ did it work?
+      7	000006	001042 				bne	20$			; /BBS/ no
+      8	000010	005767 	000000G			tst	outopn			; is an output file already open?
+      9	000014	001410 				beq	10$			; no
+     10	000016					calls	close	,<#lun.ou>	; yes, close it up please
+	000016	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000020	012746 	000000G			  mov	#lun.ou	,-(sp)		; doing it thusly generates less code
+	000024	010605 				  mov	sp	,r5		; set pointer to argument list
+	000026	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	000032	005726 				  tst	(sp)+			; pop parameter list from stack
+	000034	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	000036	010667 	000000G		10$:	mov	sp	,inprogress	; /BBS/ packets are being exchanged
+     12	000042					calls	recsw	,<#sta.rin>	; get the file
+	000042	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000044	012746 	000122 			  mov	#sta.rin	,-(sp)		; doing it thusly generates less code
+	000050	010605 				  mov	sp	,r5		; set pointer to argument list
+	000052	004767 	000076 			  jsr	pc	,recsw		; call the subroutine
+	000056	005726 				  tst	(sp)+			; pop parameter list from stack
+	000060	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13	000062	005700 				tst	r0			; did it work?
+     14	000064	001013 				bne	20$			; no
+     15	000066					calls	printm	,<#1,#rec.02>	; /62/ yes, say so if we are local
+	000066	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000070	012746 	000261'			        mov	#rec.02	,-(sp)	; push it
+	000074	012746 	000001 			        mov	#1	,-(sp)	; push it
+	000100	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000102	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	000106	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000110	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     16	000112	000414 				br	30$
+     17	000114				20$:	calls	printm	,<#1,#rec.03>	; /62/ it failed, say so if local
+	000114	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000116	012746 	000304'			        mov	#rec.03	,-(sp)	; push it
+	000122	012746 	000001 			        mov	#1	,-(sp)	; push it
+	000126	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000130	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	000134	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000136	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     18	000140	005267 	000000G			inc	status			; /45/ flag for batch exit
+     19	000144	004767 	000000G		30$:	call	clostt			; release the terminal
+     20	000150	000167 	000000G			jmp	clrcns			; /62/ flush TT input, clear r0
+     21
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 11
+Receive file(s)		; /62/ moved this here..
+
+      1
+      2						.sbttl	State controller for receive file processing
+      3						.enabl	lsb
+      4
+      5	000154	005067 	000000G		recsw::	clr	paknum			; packet_number := 0
+      6	000160	111567 	000000G		rec.sw::movb	@r5	,state		; load passed state
+      7	000164	005067 	000000G			clr	cccnt			; no ^Cs typed yet
+      8	000170	016767 	000000G	000000G		mov	$image	,image		; ensure correct default for mode
+      9	000176	112767 	000000G	000000G		movb	#defchk	,chktyp		; reset checksum type to default
+     10	000204	012767 	000001 	000000G		mov	#1	,chksiz		; size of default checksum
+     11	000212	005067 	000000G			clr	numtry			; number_trys := 0
+     12	000216	005067 	000000G			clr	outopn			; say nothing is open now
+     13	000222	005067 	000000G			clr	logini			; /62/ force display stats header
+     14	000226	004767 	000000G			call	inista			; /63/ init packet stats
+     15	000232	116767 	000000G	000001G		movb	rectim	,senpar+p.time	; /62/ load RECEIVE time-out value
+     16
+     17	000240	004767 	000564 		10$:	call	recdeb			; perhaps debugging should be done
+     18	000244	004767 	000000G			call	reclog			; /62/ update transfer stats display
+     19	000250	026727 	000000G	000001 		cmp	incpar	,#1		; /56/ is it possible that parity
+     20	000256	001017 				bne	20$			; /56/ is messed up?
+     21	000260					calls	printm,<#2,#rec.13,#rec.15> ; /63/ warn, but only once
+	000260	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000262	012746 	000556'			        mov	#rec.15	,-(sp)	; push it
+	000266	012746 	000535'			        mov	#rec.13	,-(sp)	; push it
+	000272	012746 	000002 			        mov	#2	,-(sp)	; push it
+	000276	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000300	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	000304	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000310	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     22	000312	005267 	000000G			inc	incpar			; /BBS/ be sure it is only once!
+     23	000316	005767 	000000G		20$:	tst	remote			; /43/ running as a server?
+     24	000322	001006 				bne	30$			; /43/ yep, ignore random noise
+     25	000324	005767 	000000G			tst	cccnt			; /36/ ^C abort?
+     26	000330	001403 				beq	30$			; /36/ no
+     27	000332	112767 	000100 	000000G		movb	#sta.cca,state		; /36/ yes, enter abort state
+     28	000340				30$:	scan	state	,#50$		; now dispatch
+	000340	012746 	000624'			mov	#50$	,-(sp)
+	000344	005046 				clr	-(sp)
+	000346	156716 	000000G			bisb	state	,@sp
+	000352	004767 	000000G			call	scanch
+     29	000356	006300 				asl	r0			; based on current
+     30	000360	004770 	000634'			jsr	pc	,@60$(r0)	; state
+     31	000364	103325 				bcc	10$			; continue whilst carry remains clear
+     32
+     33	000366	112767 	000000G	000000G		movb	#defchk	,chktyp		; reset type of checksum to 1
+     34	000374	012767 	000001 	000000G		mov	#1	,chksiz		; the above checksum uses 1 byte
+     35	000402					save	<r0>			; save exit status
+	000402	010046 				 mov	r0	,-(sp)
+     36	000404	005767 	000000G			tst	outopn			; file open from a failure?
+     37	000410	100010 				bpl	40$			; no
+     38	000412					calls	close	,<#lun.ou>	; ensure that it's closed
+	000412	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000414	012746 	000000G			  mov	#lun.ou	,-(sp)		; doing it thusly generates less code
+	000420	010605 				  mov	sp	,r5		; set pointer to argument list
+	000422	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	000426	005726 				  tst	(sp)+			; pop parameter list from stack
+	000430	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 11-1
+State controller for receive file processing
+
+     39	000432	005067 	000000G		40$:	clr	outopn			; clear this flag to say it is..
+     40	000436					.purge	#lun.sr			; /62/ close dir search channel
+	000436	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	000442	104374 				EMT	^O374
+     41	000444	004767 	000000G			call	incsta			; /43/ init timer stats
+     42	000450					unsave	<r0>			; pop exit status code please
+	000450	012600 				 mov	(sp)+	,r0
+     43	000452	000207 				return
+     44
+     45						.save
+     46	000624					.psect	$pdata
+     47	000624	   101 	   103 	   104 	50$:	.byte	sta.abo	,sta.com,sta.dat,sta.fil,sta.rin,sta.cca
+     48	000632	   000 				.byte	0
+     49						.even
+     50	000634	000532'			60$:	.word	recs.$
+     51	000636	000512'	000540'	000546'		.word	recs$$	,recs.c	,recs.d	,recs.f	,recs.r	,ccabort ; /62/
+     52	000454					.restore
+     53
+     54						.dsabl	lsb
+     55
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 12
+State controller for receive file processing
+
+      1
+      2						.sbttl	State routines for RECSW
+      3						.enabl	lsb			; /62/
+      4
+      5	000454				ccabort:spack	#msg$err,paknum		; /36/ break out the sender
+	000454	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000456	012746 	000000G			        mov	#null	,-(sp)	; push it
+	000462	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000466	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	000472	012746 	000105 			        mov	#msg$err	,-(sp)	; push it
+	000476	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000500	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	000504	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000510	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      6	000512	005767 	000000G		recs$$:	tst	outopn			; /62/ is an output file open?
+      7	000516	002003 				bge	10$			; /BBS/ no..
+      8	000520	016767 	000000G	000000G		mov	incfile	,skipfile	; /BBS/ ya, disposition to file closer
+      9	000526	010600 			10$:	mov	sp	,r0		; abort
+     10	000530	000404 				br	20$
+     11
+     12	000532	004767 	000142 		recs.$:	call	recx.$			; /62/ report invalid packet type
+     13	000536	000413 				br	30$			; /62/ then go back and try it again
+     14
+     15	000540	005000 			recs.c:	clr	r0			; complete
+     16	000542	000261 			20$:	sec				; force exit from recsw loop
+     17	000544	000207 				return
+     18
+     19	000546	004767 	002346 		recs.d:	call	rdata			; receive_data
+     20	000552	000405 				br	30$			; /62/ pass state, keep recsw running
+     21
+     22	000554	004767 	000660 		recs.f:	call	rfile			; receive_file
+     23	000560	000402 				br	30$			; /62/ pass state, keep recsw running
+     24
+     25	000562	004767 	000412 		recs.r:	call	rinit			; receive_init
+     26	000566	110167 	000000G		30$:	movb	r1	,state		; pass returned state
+     27	000572	000241 				clc				; keep recsw running
+     28	000574	000207 				return
+     29
+     30						.dsabl	lsb			; /62/
+     31
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 13
+State routines for RECSW
+
+      1
+      2						.sbttl	Received bad ACK/NAK and error handling
+      3						.enabl	lsb			; /62/ all new..
+      4
+      5	000576				recx.e:	calls	prerrp	,<#packet>	; received error packet, display it
+	000576	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000600	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	000604	010605 				  mov	sp	,r5		; set pointer to argument list
+	000606	004767 	000000G			  jsr	pc	,prerrp		; call the subroutine
+	000612	005726 				  tst	(sp)+			; pop parameter list from stack
+	000614	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      6	000616	000405 				br	rabort
+      7	000620	004767 	000000G		r$sync:	call	m$sync			; packets out of sync error
+      8	000624	000402 				br	rabort
+      9	000626	004767 	000000G		r$retry:call	m$retry			; too many retries error
+     10	000632	112701 	000101 		rabort:	movb	#sta.abo,r1		; exit please
+     11	000636	000207 				return
+     12
+     13	000640				recx$$:	spack	#msg$nak,paknum		; NAK a time-out or bad checksum
+	000640	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000642	012746 	000000G			        mov	#null	,-(sp)	; push it
+	000646	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000652	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	000656	012746 	000116 			        mov	#msg$nak	,-(sp)	; push it
+	000662	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000664	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	000670	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000674	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	000676	000451 				br	20$
+     15	000700	012703 	000173'		recx.$:	mov	#nojavu	,r3		; ignore an invalid packet type
+     16	000704	000420 				br	10$
+     17	000706				deja$vu:spack	#msg$ack,r3		; ACK the last packet again
+	000706	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000710	012746 	000000G			        mov	#null	,-(sp)	; push it
+	000714	012746 	000000 			        mov	#0	,-(sp)	; push it
+	000720	010346 				        mov	r3	,-(sp)	; push it
+	000722	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	000726	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000730	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	000734	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000740	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     18	000742	012703 	000113'		deja$$:	mov	#dejavu	,r3		; dupe packet received
+     19	000746	012701 	000000G		10$:	mov	#pcnt.r	,r1		; packet number
+     20	000752	012700 	000000G			mov	#spare1	,r0		; where to write ascii output
+     21	000756	005002 				clr	r2			; kill leading zero and spaces
+     22	000760	004767 	000000G			call	$cddmg			; convert 32-bit # to ascii
+     23	000764	105010 				clrb	@r0			; make it .asciz
+     24	000766					calls	printm	,<#3,r3,#dejatag,#spare1> ; say what's up
+	000766	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000770	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	000774	012746 	000145'			        mov	#dejatag	,-(sp)	; push it
+	001000	010346 				        mov	r3	,-(sp)	; push it
+	001002	012746 	000003 			        mov	#3	,-(sp)	; push it
+	001006	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001010	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	001014	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001020	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 13-1
+Received bad ACK/NAK and error handling
+
+     25	001022	116701 	000000G		20$:	movb	state	,r1		; stay in the same state, try again
+     26	001026	000207 				return
+     27
+     28						.dsabl	lsb
+     29
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 14
+Received bad ACK/NAK and error handling
+
+      1
+      2						.sbttl	Receive debugging and logging	; /62/ major revision..
+      3
+      4	001030	016700 	000000G		recdeb:	mov	trace	,r0		; copy of debug status word
+      5	001034	042700 	177756 			bic	#^c<log$pa!log$de>,r0	; need to do this?
+      6	001040	001456 				beq	30$			; nope
+      7	001042					save	<r1,r2>
+	001042	010146 				 mov	r1	,-(sp)
+	001044	010246 				 mov	r2	,-(sp)
+      8	001046	162706 	000144 			sub	#100.	,sp		; allocate a small buffer
+      9	001052	010601 				mov	sp	,r1		; point to it
+     10	001054	012702 	000547'			mov	#rec.14	,r2		; /62/ point to "REC.SW"
+     11	001060	004767 	000000G			call	paksta			; get elapsed time of last transaction
+     12	001064	160601 				sub	sp	,r1		; get the record length
+     13	001066	010602 				mov	sp	,r2		; and point back to the record
+     14	001070	032767 	000001 	000000G		bit	#log$pa	,trace		; debugging for recsw?
+     15	001076	001417 				beq	10$			; not on
+     16	001100					calls	putrec	,<r2,r1,#lun.lo> ; it is on, dump it
+	001100	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001102	012746 	000000G			        mov	#lun.lo	,-(sp)	; push it
+	001106	010146 				        mov	r1	,-(sp)	; push it
+	001110	010246 				        mov	r2	,-(sp)	; push it
+	001112	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001114	004767 	000000G			  jsr	pc	,putrec		; and go to the routine
+	001120	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001124	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     17	001126	005700 				tst	r0			; did it work?
+     18	001130	001402 				beq	10$			; ya
+     19	001132	004767 	000000G			call	logerr			; no, handle the error
+     20	001136	005767 	000000G		10$:	tst	remote			; running locally? /BBS/ moved here
+     21	001142	001011 				bne	20$			; no
+     22	001144	032767 	000020 	000000G		bit	#log$de	,trace		; ya, is terminal debugging on?
+     23	001152	001405 				beq	20$			; no
+     24	001154					wrtall	r2			; ya, print it
+	001154	010246 				mov	r2	,-(sp)		; pass the address
+	001156	004767 	000000G			call	wrtall			; do it
+     25	001162					.newline
+	001162	004767 	000000G			call	l$pcrlf
+     26	001166	062706 	000144 		20$:	add	#100.	,sp		; pop local buffer
+     27	001172					unsave	<r2,r1>
+	001172	012602 				 mov	(sp)+	,r2
+	001174	012601 				 mov	(sp)+	,r1
+     28	001176	000207 			30$:	return
+     29
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 15
+Receive debugging and logging	; /62/ major revision..
+
+      1
+      2						.sbttl	Receive file initialization
+      3						.enabl	lsb
+      4
+      5	001200	005267 	000000G		rinit:	inc	numtry			; check for retry count
+      6	001204	026767 	000000G	000000G		cmp	numtry	,initry		; been here too often?
+      7	001212	101402 				blos	10$			; no
+      8	001214	000167 	177406 			 jmp	r$retry			; /62/ log/send the reason for abort
+      9
+     10	001220				10$:	rpack	r2 ,r3	,#packet,#maxlng ; /62/ get the next packet please
+	001220	162706 	000010 			sub	#10	,sp
+	001224	010601 				mov	sp	,r1
+	001226	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001230	012746 	003600 			        mov	#maxlng	,-(sp)	; push it
+	001234	010146 				        mov	r1	,-(sp)	; push it
+	001236	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001242	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001244	004767 	000000G			  jsr	pc	,rpack$		; and go to the routine
+	001250	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001254	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	001256	012102 				mov	(r1)+	,r2
+	001260	012103 				mov	(r1)+	,r3
+	001262	011101 				mov	@r1	,r1
+	001264	062706 	000010 			add	#10	,sp
+     11	001270					scan	r1	,#20$		; look for the packet type
+	001270	012746 	000652'			mov	#20$	,-(sp)
+	001274	005046 				clr	-(sp)
+	001276	150116 				bisb	r1	,@sp
+	001300	004767 	000000G			call	scanch
+     12	001304	006300 				asl	r0			; word indexing
+     13	001306	000170 	000660'			jmp	@30$(r0)		; /62/ dispatch to it
+     14
+     15						.save
+     16	000652					.psect	$pdata
+     17	000652	   105 	   123 	   000G	20$:	.byte	msg$err	,msg$snd,timout	,badchk
+     18	000656	   000 				.byte	0
+     19						.even
+     20	000660	000700'			30$:	.word	recx.$				; /62/
+     21	000662	000576'	001312'	000640'		.word	recx.e	,rini.s	,recx$$	,recx$$	; /62/
+     22	001312					.restore
+     23
+     24						.dsabl	lsb
+     25
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 16
+Receive file initialization
+
+      1
+      2						.sbttl	Process response to RINIT
+      3
+      4	001312				rini.s:	calls	rpar	,<#packet,r2>	; send_init  get other side's init
+	001312	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001314	010246 				        mov	r2	,-(sp)	; push it
+	001316	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001322	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001324	004767 	000000G			  jsr	pc	,rpar		; and go to the routine
+	001330	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001332	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      5	001334					calls	spar	,<#packet>	; parameters, then fill with ours
+	001334	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001336	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	001342	010605 				  mov	sp	,r5		; set pointer to argument list
+	001344	004767 	000000G			  jsr	pc	,spar		; call the subroutine
+	001350	005726 				  tst	(sp)+			; pop parameter list from stack
+	001352	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      6	001354					spack	#msg$ack,paknum,sparsz,#packet ; and ship that back to sender
+	001354	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001356	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001362	016746 	000000G			        mov	sparsz	,-(sp)	; push it
+	001366	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	001372	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	001376	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001400	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	001404	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001410	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	001412	005067 	000000G			clr	numtry			; retry_count := 0
+      8	001416					incm64	paknum			; paknum := (paknum+1) mod 64
+	001416	005267 	000000G			inc	paknum
+	001422	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+      9	001430	112701 	000106 			movb	#sta.fil,r1		; state := file_receive
+     10	001434	000167 	000000G			jmp	inirepeat		; /62/ initialize repeat processing
+     11
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 17
+Process response to RINIT
+
+      1
+      2						.sbttl	Receive file header
+      3						.enabl	lsb
+      4
+      5	001440	005267 	000000G		rfile:	inc	numtry			; check for retry count
+      6	001444	026767 	000000G	000000G		cmp	numtry	,maxtry		; been here too often?
+      7	001452	101402 				blos	10$			; no
+      8	001454	000167 	177146 			 jmp	r$retry			; /62/ log why we aborted please
+      9
+     10	001460	004767 	000000G		10$:	call	clratr			; ensure attribute stuff is cleared
+     11	001464	116767 	000007G	000000G		movb	conpar+p.chkt,chktyp	; time to use new checksum
+     12	001472	116767 	000000G	000000G		movb	chktyp	,chksiz		; compute the checksum size also
+     13	001500	162767 	000060 	000000G		sub	#'0	,chksiz		; simple
+     14	001506	016767 	000000G	000000G		mov	$image	,image		; ensure correct default for mode
+     15	001514	005767 	000000G			tst	xgottn			; already get the "X" packet?
+     16	001520	001403 				beq	20$			; no
+     17	001522	112701 	000130 			movb	#sta.typ,r1		; yes, fake that we already got it
+     18	001526	000424 				br	30$
+     19	001530				20$:	rpack	r2 ,r3	,#packet,#maxlng ; /62/ get the next packet please
+	001530	162706 	000010 			sub	#10	,sp
+	001534	010601 				mov	sp	,r1
+	001536	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001540	012746 	003600 			        mov	#maxlng	,-(sp)	; push it
+	001544	010146 				        mov	r1	,-(sp)	; push it
+	001546	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001552	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001554	004767 	000000G			  jsr	pc	,rpack$		; and go to the routine
+	001560	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001564	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	001566	012102 				mov	(r1)+	,r2
+	001570	012103 				mov	(r1)+	,r3
+	001572	011101 				mov	@r1	,r1
+	001574	062706 	000010 			add	#10	,sp
+     20	001600				30$:	scan	r1	,#40$		; look for the packet type
+	001600	012746 	000672'			mov	#40$	,-(sp)
+	001604	005046 				clr	-(sp)
+	001606	150116 				bisb	r1	,@sp
+	001610	004767 	000000G			call	scanch
+     21	001614	006300 				asl	r0			; word indexing
+     22	001616	000170 	000704'			jmp	@50$(r0)		; /62/ and dispatch to it
+     23
+     24						.save
+     25	000672					.psect	$pdata
+     26	000672	   102 	   105 	   106 	40$:	.byte	msg$bre	,msg$err,msg$fil,msg$snd,msg$tex,msg$eof
+     27	000700	   000G	   000G			.byte	timout	,badchk
+     28	000702	   000 				.byte	0
+     29						.even
+     30	000704	000700'			50$:	.word	recx.$						; /62/
+     31	000706	001622'	000576'	001700'		.word	rfil.b	,recx.e	,rfil.f	,rfil.s	,rfil.x	,rfil.z	; /62/
+     32	000722	000640'	000640'			.word	recx$$	,recx$$					; /62/
+     33	001622					.restore
+     34
+     35						.dsabl	lsb
+     36
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 18
+Receive file header
+
+      1
+      2						.sbttl	Process response to RFILE
+      3
+      4	001622	020367 	000000G		rfil.b:	cmp	r3	,paknum		; break_transmission (EOT)
+      5	001626	001402 				beq	10$			; ensure break is for current packet
+      6	001630	000167 	176764 			 jmp	r$sync			; /62/ it's not, we are out of sync
+      7
+      8	001634				10$:	spack	#msg$ack,paknum		; ACK the break
+	001634	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001636	012746 	000000G			        mov	#null	,-(sp)	; push it
+	001642	012746 	000000 			        mov	#0	,-(sp)	; push it
+	001646	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	001652	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	001656	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001660	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	001664	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001670	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	001672	112701 	000103 			movb	#sta.com,r1		; and return state as complete
+     10	001676	000207 				return
+     11
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 19
+Process response to RFILE
+
+      1
+      2						.sbttl	Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+      3
+      4					;	Move the actual file create to RDATA so we can create
+      5					;	the output file after all attribute packets have come.
+      6					;	Thus, when we get the first DATA packet is when we go
+      7					;	and create the file.
+      8
+      9	001700	020367 	000000G		rfil.f:	cmp	r3	,paknum		; file name
+     10	001704	001402 				beq	10$			; ensure correct packet number
+     11	001706	000167 	176706 			 jmp	r$sync			; /62/ log the reason for this abort
+     12
+     13	001712				10$:	calls	bufunp	,<#packet,#spare1> ; /BBS/ use buff that's long enough
+	001712	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001714	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	001720	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001724	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001726	004767 	000000G			  jsr	pc	,bufunp		; and go to the routine
+	001732	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001734	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	001736					calls	printm	,<#2,#rec.12,#spare1> ; /63/ display remote file name
+	001736	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001740	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	001744	012746 	000507'			        mov	#rec.12	,-(sp)	; push it
+	001750	012746 	000002 			        mov	#2	,-(sp)	; push it
+	001754	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001756	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	001762	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001766	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	001770					calls	namcvt	,<#spare1,#packet> ; /BBS/ maybe strip node::dev:[dir]
+	001770	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001772	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	001776	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	002002	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002004	004767 	000000G			  jsr	pc	,namcvt		; and go to the routine
+	002010	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002012	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     16	002014					calls	fixfil	,<#packet,#srcnam> ; fix invalid chars/trunc for RT-11
+	002014	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002016	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	002022	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	002026	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002030	004767 	000000G			  jsr	pc	,fixfil		; and go to the routine
+	002034	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002036	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     17	002040	012701 	000000G			mov	#asname	,r1		; /62/ point to possible new name
+     18	002044	105711 				tstb	(r1)			; /62/ renaming this time?
+     19	002046	001005 				bne	20$			; /62/ ya, go say so..
+     20	002050	012701 	000000G			mov	#srcnam	,r1		; /62/ no, point to old file name
+     21	002054	005700 				tst	r0			; was the old file name ok?
+     22	002056	001443 				beq	40$			; /62/ yes
+     23	002060	000424 				br	30$			; /63/ no, display change/truncation
+     24
+     25	002062				20$:	upcase	r1			; /63/ leaves copy of ptr in r0
+	002062	010100 				mov	r1	,r0
+	002064	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     26	002070	122720 	000114 			cmpb	#'L&137	,(r0)+		; /63/ is first byte an "L" ?
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 19-1
+Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+
+     27	002074	001016 				bne	30$			; /63/ nope..
+     28	002076	122720 	000120 			cmpb	#'P&137	,(r0)+		; /63/ is second byte a "P" ?
+     29	002102	001013 				bne	30$			; /63/ nope..
+     30	002104	122720 	000072 			cmpb	#':	,(r0)+		; /63/ is "LP" followed by a colon?
+     31	002110	001010 				bne	30$			; /63/ no
+     32	002112	105710 				tstb	(r0)			; /63/ ya, but is it null terminated?
+     33	002114	001006 				bne	30$			; /63/ no, user supplied a file name
+     34	002116					strcat	#asname	,#get2lp	; /63/ ya, a name is required here
+	002116	012746 	000160'			mov	#get2lp	,-(sp)
+	002122	012746 	000000G			mov	#asname	,-(sp)
+	002126	004767 	000000G			jsr	pc	,strcat
+     35	002132				30$:	calls	printm	,<#3,#packet,#rec.16,r1> ; /63/ no, display the change
+	002132	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002134	010146 				        mov	r1	,-(sp)	; push it
+	002136	012746 	000607'			        mov	#rec.16	,-(sp)	; push it
+	002142	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	002146	012746 	000003 			        mov	#3	,-(sp)	; push it
+	002152	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002154	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	002160	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002164	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     36
+     37	002166				40$:	upcase	r1			; /BBS/ be sure it's ok for RT-11
+	002166	010100 				mov	r1	,r0
+	002170	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     38	002174					calls	fparse	,<r1,#filnam>	; /BBS/ parse and fill in defaults
+	002174	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002176	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	002202	010146 				        mov	r1	,-(sp)	; push it
+	002204	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002206	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	002212	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002214	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     39	002216	105067 	000000G			clrb	asname			; /BBS/ one shot for alternate name
+     40	002222	005700 				tst	r0			; /42/ successful parse?
+     41	002224	001046 				bne	60$			; /42/ no
+     42	002226	005767 	000000G			tst	outopn			; output already open as if from
+     43	002232	100010 				bpl	50$			; a NAK or something?
+     44	002234					calls	close	,<#lun.ou>	; yes, close it please
+	002234	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002236	012746 	000000G			  mov	#lun.ou	,-(sp)		; doing it thusly generates less code
+	002242	010605 				  mov	sp	,r5		; set pointer to argument list
+	002244	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	002250	005726 				  tst	(sp)+			; pop parameter list from stack
+	002252	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     45	002254	005067 	000000G		50$:	clr	outopn			; flag it's closed
+     46	002260					spack	#msg$ack,paknum		; please ACK the file header packet
+	002260	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002262	012746 	000000G			        mov	#null	,-(sp)	; push it
+	002266	012746 	000000 			        mov	#0	,-(sp)	; push it
+	002272	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	002276	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	002302	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002304	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	002310	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002314	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     47	002316	005067 	000000G			clr	numtry			; and init the current retry count
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 19-2
+Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+
+     48	002322					incm64	paknum			; paknum := (paknum+1) mod 64
+	002322	005267 	000000G			inc	paknum
+	002326	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+     49	002334	112701 	000104 			movb	#sta.dat,r1		; return data
+     50	002340	000207 				return
+     51
+     52	002342				60$:	calls	syserr	,<r0,#errtxt>	; /42/ no, get the system error text
+	002342	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002344	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	002350	010046 				        mov	r0	,-(sp)	; push it
+	002352	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002354	004767 	000000G			  jsr	pc	,syserr		; and go to the routine
+	002360	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002362	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     53	002364					calls	error	,<#3,#errtxt,#aspace,r1> ; /BBS/ include bad name
+	002364	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002366	010146 				        mov	r1	,-(sp)	; push it
+	002370	012746 	000000G			        mov	#aspace	,-(sp)	; push it
+	002374	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	002400	012746 	000003 			        mov	#3	,-(sp)	; push it
+	002404	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002406	004767 	000000G			  jsr	pc	,error		; and go to the routine
+	002412	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002416	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     54	002420	000167 	176206 			jmp	rabort			; /62/ abort
+     55
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 20
+Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+
+      1
+      2	002424	005267 	000000G		rfil.s:	inc	numtry			; send_init, must have lost ours
+      3	002430	026767 	000000G	000000G		cmp	numtry	,maxtry		; tried this too many times?
+      4	002436	101402 				blos	10$			; no
+      5	002440	000167 	176162 			 jmp	r$retry			; /62/ log the reason for the abort
+      6
+      7	002444	016701 	000000G		10$:	mov	paknum	,r1		; does this packet=(paknum+63) mod 64?
+      8	002450	005301 				dec	r1			; /62/ if this packet was the one sent
+      9	002452	002002 				bge	20$			; /62/ the last time, we must reACK
+     10	002454	012701 	000063 			mov	#63	,r1		; /62/ that packet and remain
+     11	002460	020301 			20$:	cmp	r3	,r1		; /62/ in the current state
+     12	002462	001030 				bne	30$			; no
+     13	002464					 calls	spar	,<#packet>	; ya, reload parameters and
+	002464	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002466	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	002472	010605 				  mov	sp	,r5		; set pointer to argument list
+	002474	004767 	000000G			  jsr	pc	,spar		; call the subroutine
+	002500	005726 				  tst	(sp)+			; pop parameter list from stack
+	002502	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	002504					 spack	#msg$ack,r3,sparsz,#packet ; resend our send_init stuff
+	002504	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002506	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	002512	016746 	000000G			        mov	sparsz	,-(sp)	; push it
+	002516	010346 				        mov	r3	,-(sp)	; push it
+	002520	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	002524	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002526	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	002532	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002536	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	002540	000167 	176176 			 jmp	deja$$			; /62/ warn dupe packet occurred
+     16
+     17	002544	000167 	176050 		30$:	 jmp	r$sync			; /62/ log reason for this event
+     18
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 21
+Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+
+      1
+      2	002550	020367 	000000G		rfil.x:	cmp	r3	,paknum		; "X" packets come here for processing
+      3	002554	001402 				beq	10$			; ensure correct packet number
+      4	002556	000167 	176050 			 jmp	rabort			; /62/ it wasn't, abort
+      5
+      6	002562	010667 	000000G		10$:	mov	sp	,xmode		; flag this is an extended reply
+      7	002566					wrtall	#rec.01			; /63/ do here instead of rem.x
+	002566	012746 	000225'			mov	#rec.01	,-(sp)		; pass the address
+	002572	004767 	000000G			call	wrtall			; do it
+      8	002576	005067 	000000G			clr	outlun			; /63/ not real file, output is to TT
+      9	002602	005067 	000000G			clr	outopn			; /63/ nothing is open for output
+     10	002606					calls	open	,<#0,#lun.kb,#text> ; /63/ init TT output buffer
+	002606	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002610	012746 	000000 			        mov	#text	,-(sp)	; push it
+	002614	012746 	000000G			        mov	#lun.kb	,-(sp)	; push it
+	002620	012746 	000000 			        mov	#0	,-(sp)	; push it
+	002624	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002626	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	002632	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002636	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	002640	012767 	000001 	000000G		mov	#binary	,image		; /63/ force 8-bit for remote type..
+     12	002646	005702 				tst	r2			; /62/ length of data in packet buffer
+     13	002650	001446 				beq	20$			; /62/ nothing there
+     14	002652					calls	bufemp	,<#packet,r2>	; /63/ unpack repeat encoded chars
+	002652	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002654	010246 				        mov	r2	,-(sp)	; push it
+	002656	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	002662	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002664	004767 	002314 			  jsr	pc	,bufemp		; and go to the routine
+	002670	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002672	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	002674	012700 	000015 			mov	#cr	,r0		; /63/ add in a return
+     16	002700	004767 	000000G			call	putcr0			; /63/
+     17	002704	012700 	000012 			mov	#lf	,r0		; /63/ and a line feed
+     18	002710	004767 	000000G			call	putcr0			; /63/
+     19	002714					calls	close	,<#lun.kb>	; /63/ this and the next line are
+	002714	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002716	012746 	000000G			  mov	#lun.kb	,-(sp)		; doing it thusly generates less code
+	002722	010605 				  mov	sp	,r5		; set pointer to argument list
+	002724	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	002730	005726 				  tst	(sp)+			; pop parameter list from stack
+	002732	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     20	002734					calls	open	,<#0,#lun.kb,#text> ; /63/ for display pacing..
+	002734	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002736	012746 	000000 			        mov	#text	,-(sp)	; push it
+	002742	012746 	000000G			        mov	#lun.kb	,-(sp)	; push it
+	002746	012746 	000000 			        mov	#0	,-(sp)	; push it
+	002752	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002754	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	002760	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002764	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     21	002766				20$:	spack	#msg$ack,paknum		; ACK the file name
+	002766	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002770	012746 	000000G			        mov	#null	,-(sp)	; push it
+	002774	012746 	000000 			        mov	#0	,-(sp)	; push it
+	003000	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	003004	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 21-1
+Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+
+	003010	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003012	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	003016	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003022	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     22	003024	005067 	000000G			clr	numtry			; and init the current retry count
+     23	003030					incm64	paknum			; paknum := (paknum+1) mod 64
+	003030	005267 	000000G			inc	paknum
+	003034	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+     24	003042	112701 	000104 			movb	#sta.dat,r1		; return data
+     25	003046	000207 				return
+     26
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 22
+Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+
+      1
+      2	003050	005267 	000000G		rfil.z:	inc	numtry			; end-of-file?
+      3	003054	026767 	000000G	000000G		cmp	numtry	,maxtry		; tried this too many times?
+      4	003062	101402 				blos	10$			; no
+      5	003064	000167 	175536 			 jmp	r$retry			; /62/ log the reason for this event
+      6
+      7	003070	016701 	000000G		10$:	mov	paknum	,r1		; does this packet=(paknum+63) mod 64?
+      8	003074	005301 				dec	r1			; /62/ if this packet was the one sent
+      9	003076	002002 				bge	20$			; /62/ the last time, we must reACK
+     10	003100	012701 	000063 			mov	#63	,r1		; /62/ that packet and remain
+     11	003104	020301 			20$:	cmp	r3	,r1		; /62/ in the current state
+     12	003106	001002 				bne	30$			; not the last one after all
+     13	003110	000167 	175572 			 jmp	deja$vu			; /62/ reACK, warn dupe pkt occurred
+     14
+     15	003114	000167 	175506 		30$:	 jmp	r$retry			; /62/ log the reason for this please
+     16
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 23
+Receive file name	; 18-Apr-84 10:24:45  Brian Nelson
+
+      1
+      2						.sbttl	Receive file data
+      3						.enabl	lsb
+      4
+      5					;	R D A T A
+      6					;
+      7					;	output:	paknum	= packet number
+      8					;		packet	= data just received
+      9					;		 r1	= returned state
+     10
+     11	003120	005267 	000000G		rdata:	inc	numtry			; abort of retry count is too large
+     12	003124	026767 	000000G	000000G		cmp	numtry	,maxtry		; been here too many times?
+     13	003132	101402 				blos	10$			; no
+     14	003134	000167 	175466 			 jmp	r$retry			; /62/ log/send error message about it
+     15
+     16	003140				10$:	rpack	r2 ,r3  ,#packet,#maxlng ; /62/ get the next incoming packet
+	003140	162706 	000010 			sub	#10	,sp
+	003144	010601 				mov	sp	,r1
+	003146	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003150	012746 	003600 			        mov	#maxlng	,-(sp)	; push it
+	003154	010146 				        mov	r1	,-(sp)	; push it
+	003156	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	003162	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003164	004767 	000000G			  jsr	pc	,rpack$		; and go to the routine
+	003170	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003174	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+	003176	012102 				mov	(r1)+	,r2
+	003200	012103 				mov	(r1)+	,r3
+	003202	011101 				mov	@r1	,r1
+	003204	062706 	000010 			add	#10	,sp
+     17	003210					scan	r1	,#20$		; look for the packet type & dispatch
+	003210	012746 	000726'			mov	#20$	,-(sp)
+	003214	005046 				clr	-(sp)
+	003216	150116 				bisb	r1	,@sp
+	003220	004767 	000000G			call	scanch
+     18	003224	006300 				asl	r0			; to the correct routine, ie, a crude
+     19	003226	000170 	000740'			jmp	@30$(r0)		; /62/ case statement
+     20
+     21						.save
+     22	000726					.psect	$pdata
+     23	000726	   101 	   104 	   105 	20$:	.byte	msg$atr	,msg$dat,msg$err,msg$fil,msg$tex,msg$eof
+     24	000734	   000G	   000G			.byte	timout	,badchk
+     25	000736	   000 				.byte	0
+     26						.even
+     27	000740	000700'			30$:	.word	recx.$						; /62/
+     28	000742	003232'	003474'	000576'		.word	rdat.a	,rdat.d	,recx.e	,rdat.f	,rdat.x	,rdat.z	; /62/
+     29	000756	000640'	000640'			.word	recx$$	,recx$$					; /62/
+     30	003232					.restore
+     31
+     32						.dsabl	lsb
+     33
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 24
+Receive file data
+
+      1
+      2						.sbttl	Process response to RDATA
+      3
+      4	003232	020367 	000000G		rdat.a:	cmp	r3	,paknum		; case "A"
+      5	003236	001424 				beq	40$			; correct packet number?
+      6	003240	005267 	000000G			inc	numtry			; no, see if retry limit expired
+      7	003244	026767 	000000G	000000G		cmp	numtry	,maxtry		; if so, return abort
+      8	003252	101402 				blos	10$			; no
+      9	003254	000167 	175346 			 jmp	r$retry			; /62/ yes, log/send the reason
+     10
+     11	003260	016701 	000000G		10$:	mov	paknum	,r1		; does this packet=(paknum+63) mod 64?
+     12	003264	005301 				dec	r1			; /62/ if this packet was the one sent
+     13	003266	002002 				bge	20$			; /62/ the last time, we must reACK
+     14	003270	012701 	000063 			mov	#63	,r1		; /62/ that packet and remain
+     15	003274	020301 			20$:	cmp	r3	,r1		; /62/ in the current state
+     16	003276	001002 				bne	30$			; not the last packet
+     17	003300	000167 	175402 			 jmp	deja$vu			; /62/ reACK, warn dupe pkt occurred
+     18
+     19	003304	000167 	175322 		30$:	 jmp	rabort			; /62/ abort, must be way out of sync
+     20
+     21	003310				40$:	calls	r$attr	,<#packet>	; process the received attributes
+	003310	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003312	012746 	000000G			  mov	#packet	,-(sp)		; doing it thusly generates less code
+	003316	010605 				  mov	sp	,r5		; set pointer to argument list
+	003320	004767 	000000G			  jsr	pc	,r$attr		; call the subroutine
+	003324	005726 				  tst	(sp)+			; pop parameter list from stack
+	003326	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     22	003330	005700 				tst	r0			; was this successful?
+     23	003332	001364 				bne	30$			; /62/ no, bail out
+     24	003334					spack	#msg$ack,paknum		; ya, ACK it
+	003334	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003336	012746 	000000G			        mov	#null	,-(sp)	; push it
+	003342	012746 	000000 			        mov	#0	,-(sp)	; push it
+	003346	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	003352	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	003356	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003360	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	003364	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003370	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     25	003372	005067 	000000G			clr	numtry			; numtry := 0
+     26	003376					incm64	paknum			; increment packet number mod 64
+	003376	005267 	000000G			inc	paknum
+	003402	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+     27	003410	005767 	000000G			tst	xmode			; /63/ doing file I/O?
+     28	003414	001024 				bne	50$			; /63/ no
+     29	003416	005767 	000000G			tst	at$len			; /63/ ya, is file possibly empty?
+     30	003422	001021 				bne	50$			; /63/ no
+     31	003424					calls	printm	,<#4,#rec.13,#rec.10,#filnam,#rec.11> ; /63/ yes
+	003424	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003426	012746 	000475'			        mov	#rec.11	,-(sp)	; push it
+	003432	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	003436	012746 	000440'			        mov	#rec.10	,-(sp)	; push it
+	003442	012746 	000535'			        mov	#rec.13	,-(sp)	; push it
+	003446	012746 	000004 			        mov	#4	,-(sp)	; push it
+	003452	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003454	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	003460	062706 	000012 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 24-1
+Process response to RDATA
+
+	003464	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     32	003466	116701 	000000G		50$:	movb	state	,r1		; retain current state
+     33	003472	000207 				return
+     34
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 25
+Process response to RDATA
+
+      1
+      2	003474	005767 	000000G		rdat.d:	tst	xmode			; do we need to create the file
+      3	003500	001115 				bne	20$			; no
+      4	003502	005767 	000000G			tst	outopn			; did we already open the file?
+      5	003506	001112 				bne	20$			; yes, please don't try again then
+      6	003510	005767 	000000G			tst	filprot			; protect existing files?
+      7	003514	001510 				beq	30$			; no
+      8	003516	012700 	000000G			mov	#filnam	,r0		; /63/ pointer to what we'll open
+      9	003522	122720 	000114 			cmpb	#'L&137	,(r0)+		; /63/ is first byte an "L" ?
+     10	003526	001006 				bne	10$			; /63/ nope..
+     11	003530	122720 	000120 			cmpb	#'P&137	,(r0)+		; /63/ is second byte a "P" ?
+     12	003534	001003 				bne	10$			; /63/ nope..
+     13	003536	122710 	000072 			cmpb	#':	,(r0)		; /63/ is "LP" followed by a colon?
+     14	003542	001475 				beq	30$			; /63/ ya, a lookup to LP will hang..
+     15	003544	005067 	000000G		10$:	clr	index			; /62/ reset lookup's file counter
+     16	003550					calls	lookup,<#filnam,#srcnam> ; /62/ does file exist already?
+	003550	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003552	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	003556	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	003562	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003564	004767 	000000G			  jsr	pc	,lookup		; and go to the routine
+	003570	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003572	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     17	003574	005700 				tst	r0			; /62/ well?
+     18	003576	001057 				bne	30$			; /62/ no
+     19	003600					.purge	#lun.sr			; /62/ ya, hose dir search channel
+	003600	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	003604	104374 				EMT	^O374
+     20	003606					calls	printm	,<#3,#rec.08,#filnam,#rec.09> ; /62/ ya, say so..
+	003606	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003610	012746 	000412'			        mov	#rec.09	,-(sp)	; push it
+	003614	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	003620	012746 	000352'			        mov	#rec.08	,-(sp)	; push it
+	003624	012746 	000003 			        mov	#3	,-(sp)	; push it
+	003630	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003632	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	003636	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003642	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     21	003644					spack	#msg$ack,paknum,#1,#rec.04 ; /62/ send an ACK with "X" in data
+	003644	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003646	012746 	000324'			        mov	#rec.04	,-(sp)	; push it
+	003652	012746 	000001 			        mov	#1	,-(sp)	; push it
+	003656	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	003662	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	003666	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003670	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	003674	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003700	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     22	003702					incm64	paknum			; increment packet number mod 64
+	003702	005267 	000000G			inc	paknum
+	003706	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+     23	003714	005067 	000000G			clr	numtry			; /48/
+     24	003720	012767 	000001 	000000G		mov	#1	,outopn		; never really opened it up
+     25	003726	112701 	000104 			movb	#sta.dat,r1		; switch to data state
+     26	003732	000207 				return
+     27
+     28	003734	000524 			20$:	br	50$			; 50$ is otherwise too far away..
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 25-1
+Process response to RDATA
+
+     29
+     30	003736	012704 	000000G		30$:	mov	#filnam	,r4		; /36/ setup address of file
+     31	003742					calls	create	,<r4,#lun.ou,image> ; /36/ now create it
+	003742	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003744	016746 	000000G			        mov	image	,-(sp)	; push it
+	003750	012746 	000000G			        mov	#lun.ou	,-(sp)	; push it
+	003754	010446 				        mov	r4	,-(sp)	; push it
+	003756	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003760	004767 	000000G			  jsr	pc	,create		; and go to the routine
+	003764	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003770	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     32	003772	012767 	000000G	000000G		mov	#lun.ou	,outlun		; set a real lun for output
+     33	004000	005700 				tst	r0			; did the file create work?
+     34	004002	001431 				beq	40$			; yes
+     35	004004					calls	syserr	,<r0,#errtxt>	; no, get the system error text
+	004004	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004006	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	004012	010046 				        mov	r0	,-(sp)	; push it
+	004014	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004016	004767 	000000G			  jsr	pc	,syserr		; and go to the routine
+	004022	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004024	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     36	004026					calls	error	,<#3,#errtxt,#aspace,r4> ; /BBS/ add space here
+	004026	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004030	010446 				        mov	r4	,-(sp)	; push it
+	004032	012746 	000000G			        mov	#aspace	,-(sp)	; push it
+	004036	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	004042	012746 	000003 			        mov	#3	,-(sp)	; push it
+	004046	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004050	004767 	000000G			  jsr	pc	,error		; and go to the routine
+	004054	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004060	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	004062	000167 	174544 			jmp	rabort			; /62/ abort
+     38
+     39	004066	112767 	000133 	000000G	40$:	movb	#'[	,errtxt		; /63/ a leading bracket
+     40	004074	012700 	000000G			mov	#lun.ou	,r0		; /63/ the LUN in use here
+     41	004100	006300 				asl	r0			; /63/ word indexing
+     42	004102	016000 	000000G			mov	sizof(r0),r0		; /63/ recover the file size
+     43	004106	012701 	000001G			mov	#errtxt+1,r1		; /63/ start writing size here
+     44	004112	004767 	000000G			call	L10012			; /63/ convert size to ascii
+     45	004116	112721 	000135 			movb	#']	,(r1)+		; /63/ a terminating bracket
+     46	004122	105011 				clrb	(r1)			; /63/ terminate the size string
+     47	004124	016701 	000000G			mov	image	,r1		; /63/ recover current file-type
+     48	004130	006301 				asl	r1			; /63/ word indexing
+     49	004132	016101 	000000'			mov	fillst(r1),r1		; /63/ point to its description
+     50	004136					calls	printm	,<#5,#rec.06,r1,#rec.07,r4,#errtxt> ; /63/ log to term
+	004136	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004140	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	004144	010446 				        mov	r4	,-(sp)	; push it
+	004146	012746 	000341'			        mov	#rec.07	,-(sp)	; push it
+	004152	010146 				        mov	r1	,-(sp)	; push it
+	004154	012746 	000330'			        mov	#rec.06	,-(sp)	; push it
+	004160	012746 	000005 			        mov	#5	,-(sp)	; push it
+	004164	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004166	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	004172	062706 	000014 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004176	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 25-2
+Process response to RDATA
+
+     51	004200	012767 	177777 	000000G		mov	#-1	,outopn		; flag output as being open
+     52
+     53	004206	020367 	000000G		50$:	cmp	r3	,paknum		; case "D"
+     54	004212	001424 				beq	90$			; correct packet number?
+     55	004214	005267 	000000G			inc	numtry			; no, see if retry limit expired
+     56	004220	026767 	000000G	000000G		cmp	numtry	,maxtry		; if so, return abort
+     57	004226	101402 				blos	60$			; no
+     58	004230	000167 	174372 			 jmp	r$retry			; /62/ log/send notice of error
+     59
+     60	004234	016701 	000000G		60$:	mov	paknum	,r1		; does this packet=(paknum+63) mod 64?
+     61	004240	005301 				dec	r1			; /62/ if this packet was the one sent
+     62	004242	002002 				bge	70$			; /62/ the last time, we must reACK
+     63	004244	012701 	000063 			mov	#63	,r1		; /62/ that packet and remain
+     64	004250	020301 			70$:	cmp	r3	,r1		; /62/ in the current state
+     65	004252	001002 				bne	80$			; not the last packet
+     66	004254	000167 	174426 			 jmp	deja$vu			; /62/ reACK, warn dupe pkt occurred
+     67
+     68	004260	000167 	174334 		80$:	 jmp	r$sync			; /62/ log/send the reason for abort
+     69
+     70	004264	060267 	000002G		90$:	add	r2	,charin+2	; /43/ stats
+     71	004270	005567 	000000G			adc	charin+0		; /43/ in 32. bits please
+     72	004274					calls	bufemp	,<#packet,r2>	; correct packet, get the data out
+	004274	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004276	010246 				        mov	r2	,-(sp)	; push it
+	004300	012746 	000000G			        mov	#packet	,-(sp)	; push it
+	004304	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004306	004767 	000672 			  jsr	pc	,bufemp		; and go to the routine
+	004312	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004314	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     73	004316	005700 				tst	r0			; did bufemp return any errors?
+     74	004320	001425 				beq	100$			; no
+     75	004322					calls	syserr	,<r0,#errtxt>	; ya, lookup error msg text
+	004322	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004324	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	004330	010046 				        mov	r0	,-(sp)	; push it
+	004332	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004334	004767 	000000G			  jsr	pc	,syserr		; and go to the routine
+	004340	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004342	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     76	004344					calls	error	,<#1,#errtxt>	; send error packet or display err msg
+	004344	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004346	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	004352	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004356	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004360	004767 	000000G			  jsr	pc	,error		; and go to the routine
+	004364	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004366	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     77	004370	000167 	000350 			jmp	180$			; /62/ take the abort exit please
+     78
+     79	004374	005767 	000000G		100$:	tst	xmode			; /62/ amidst an extended reply?
+     80	004400	001407 				beq	110$			; /62/ no
+     81	004402	016701 	000000G			mov	trace	,r1		; /62/ copy of debug status word
+     82	004406	042701 	177753 			bic	#^c<log$de!log$rp>,r1	; /62/ hose all except TT options
+     83	004412	001402 				beq	110$			; /62/ not now debugging to terminal
+     84	004414					.newline			; /62/ using TT, put next in the clear
+	004414	004767 	000000G			call	l$pcrlf
+     85	004420	005767 	000000G		110$:	tst	remote			; are we a local Kermit today?
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 25-3
+Process response to RDATA
+
+     86	004424	001075 				bne	150$			; no, just ACK normally
+     87	004426	005767 	000000G			tst	cccnt			; we are local. check for control
+     88	004432	001123 				bne	170$			; c abort for this file please
+     89	004434	004767 	000000G			call	chkabo			; check for abort via ^X and ^Z
+     90	004440	120027 	000005 			cmpb	r0	,#abt$err&37	; ^E aborts NOW
+     91	004444	001516 				beq	170$			; yes, abort please
+     92	004446	120027 	000032 			cmpb	r0	,#abt$all&37	; did the user type a ^Z?
+     93	004452	001434 				beq	130$			; yes
+     94	004454	120027 	000030 			cmpb	r0	,#abt$cur&37	; no, what about a ^X then?
+     95	004460	001411 				beq	120$			; /56/ yes
+     96	004462	120027 	000001 			cmpb	r0	,#'A&37		; /56/ ^A stats?
+     97	004466	001054 				bne	150$			; /56/ no
+     98	004470	005767 	000000G			tst	xmode			; /BBS/ don't do this
+     99	004474	001051 				bne	150$			; /BBS/ within an extended reply
+    100	004476	004767 	000000G			call	cs$in			; /56/ yes, print stats
+    101	004502	000446 				br	150$			; /56/ and exit
+    102
+    103	004504				120$:	spack	#msg$ack,paknum,#1,#rec.04 ; /62/ ^X typed, send "X" in data
+	004504	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004506	012746 	000324'			        mov	#rec.04	,-(sp)	; push it
+	004512	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004516	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	004522	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	004526	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004530	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	004534	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004540	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    104	004542	000417 				br	140$
+    105	004544				130$:	spack	#msg$ack,paknum,#1,#rec.05 ; /62/ ^Z typed, ACK with "Z" data
+	004544	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004546	012746 	000326'			        mov	#rec.05	,-(sp)	; push it
+	004552	012746 	000001 			        mov	#1	,-(sp)	; push it
+	004556	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	004562	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	004566	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004570	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	004574	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004600	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    106	004602	005767 	000000G		140$:	tst	xmode			; /BBS/ is an output file open?
+    107	004606	001023 				bne	160$			; /BBS/ no..
+    108	004610	016767 	000000G	000000G		mov	incfile	,skipfile	; /BBS/ pass desired incomplete file
+    109	004616	000417 				br	160$			; /BBS/ disposition to file closer
+    110
+    111	004620				150$:	spack	#msg$ack,paknum		; ACK it
+	004620	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004622	012746 	000000G			        mov	#null	,-(sp)	; push it
+	004626	012746 	000000 			        mov	#0	,-(sp)	; push it
+	004632	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	004636	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	004642	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004644	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	004650	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004654	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    112	004656	005067 	000000G		160$:	clr	numtry			; numtry := 0
+    113	004662					incm64	paknum			; increment packet number mod 64
+	004662	005267 	000000G			inc	paknum
+	004666	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 25-4
+Process response to RDATA
+
+    114	004674	112701 	000104 			movb	#sta.dat,r1		; switch to data state
+    115	004700	000207 				return
+    116
+    117	004702				170$:	spack	#msg$err,paknum		; break the sender out please
+	004702	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004704	012746 	000000G			        mov	#null	,-(sp)	; push it
+	004710	012746 	000000 			        mov	#0	,-(sp)	; push it
+	004714	016746 	000000G			        mov	paknum	,-(sp)	; push it
+	004720	012746 	000105 			        mov	#msg$err	,-(sp)	; push it
+	004724	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004726	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	004732	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004736	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    118	004740	005067 	000000G			clr	cccnt			; /36/ clear ^C flag
+    119	004744	012701 	000101 		180$:	mov	#sta.abo,r1		; abort for some reason
+    120	004750	000207 				return
+    121
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 26
+Process response to RDATA
+
+      1
+      2	004752				rdat.f:					; "F", got a file header
+      3	004752				rdat.x:					; "X", also handle extended reply
+      4	004752	005267 	000000G			inc	numtry			; see if retry limit expired
+      5	004756	026767 	000000G	000000G		cmp	numtry	,maxtry		; if so, return abort
+      6	004764	101402 				blos	10$			; no
+      7	004766	000167 	173634 			 jmp	r$retry			; /62/ yes, log/send the reason
+      8
+      9	004772	016701 	000000G		10$:	mov	paknum	,r1		; does this packet=(paknum+63) mod 64?
+     10	004776	005301 				dec	r1			; /62/ if this packet was the one sent
+     11	005000	002002 				bge	20$			; /62/ the last time, we must reACK
+     12	005002	012701 	000063 			mov	#63	,r1		; /62/ that packet and remain
+     13	005006	020301 			20$:	cmp	r3	,r1		; /62/ in the current state
+     14	005010	001002 				bne	30$			; not the last packet
+     15	005012	000167 	173670 			 jmp	deja$vu			; /62/ reACK, warn dupe pack occurred
+     16
+     17	005016	000167 	173576 		30$:	 jmp	r$sync			; /62/ log/send the reason for abort
+     18
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 27
+Process response to RDATA
+
+      1
+      2	005022	026703 	000000G		rdat.z:	cmp	paknum	,r3		; end-of-file
+      3	005026	001402 				beq	10$			; if not correct packet return abort
+      4	005030	000167 	173564 			 jmp	r$sync			; /62/ log/send the reason for abort
+      5
+      6	005034	012702 	000000G		10$:	mov	#lun.ou	,r2		; assume that we close a disk file
+      7	005040	005767 	000000G			tst	outopn			; real output or to the terminal
+      8	005044	001411 				beq	20$			; /BBS/ must be the terminal
+      9	005046	003020 				bgt	40$			; open was aborted via fileprotection
+     10
+     11	005050	122767 	000104 	000000G		cmpb	#eof$dis,packet		; /BBS/ real file, other side discard?
+     12	005056	001005 				bne	30$			; /BBS/ no
+     13	005060	016767 	000000G	000000G		mov	incfile	,skipfile	; /BBS/ ya, keep or dump it as is SET
+     14	005066	000401 				br	30$
+     15
+     16	005070	005002 			20$:	clr	r2			; it's the console terminal
+     17	005072				30$:	calls	close	,<r2>		; do the close now
+	005072	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005074	010246 				  mov	r2	,-(sp)		; doing it thusly generates less code
+	005076	010605 				  mov	sp	,r5		; set pointer to argument list
+	005100	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	005104	005726 				  tst	(sp)+			; pop parameter list from stack
+	005106	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     18	005110	004767 	000000G		40$:	call	clratr			; attributes no longer valid
+     19	005114	005067 	000000G			clr	outopn			; flag it
+     20	005120					spack	#msg$ack,r3		; ACK the EOF packet
+	005120	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005122	012746 	000000G			        mov	#null	,-(sp)	; push it
+	005126	012746 	000000 			        mov	#0	,-(sp)	; push it
+	005132	010346 				        mov	r3	,-(sp)	; push it
+	005134	012746 	000131 			        mov	#msg$ack	,-(sp)	; push it
+	005140	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005142	004767 	000000G			  jsr	pc	,spack$		; and go to the routine
+	005146	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005152	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     21	005154	005067 	000000G			clr	numtry			; /48/ then re-init retry counter
+     22	005160					incm64	paknum			; paknum := (paknum+1) mod 64
+	005160	005267 	000000G			inc	paknum
+	005164	042767 	177700 	000000G		bic	#^c<77>	,paknum		; /62/ faster
+     23	005172	112701 	000106 			movb	#sta.fil,r1		; back to receive file state
+     24	005176	005067 	000000G			clr	xgottn			; don't have an X packet anymore
+     25	005202	000207 				return
+     26
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 28
+Process response to RDATA
+
+      1
+      2						.sbttl	Dump a buffer out to disk	; /62/ moved this here..
+      3
+      4					;	B U F E M P
+      5					;
+      6					;	input:	  (r5)	= buffer address
+      7					;		 2(r5)	= length
+      8					;	output:	   r0	= if <>, error code
+      9					;
+     10					; /63/	NOTE:  This routine can, as it now exists, can process all unprefixed
+     11					;	control chars as C-Kermit 5A(189) might emit if given the command SET
+     12					;	CONTROL UNPREFIX ALL.  The NULL char is used as the record terminator
+     13					;	here and thus MUST be prefixed.  Kermit always prefixes nulls.
+     14
+     15	005204	011502 			bufemp:	mov	@r5	,r2		; input record address
+     16	005206	016503 	000002 			mov	2(r5)	,r3		; string length
+     17	005212	005000 				clr	r0			; ensure no error for a null packet
+     18
+     19	005214	005703 			10$:	tst	r3			; anything left in the record?
+     20	005216	003540 				ble	100$			; no
+     21	005220	005000 				clr	r0			; get the next character
+     22	005222	152200 				bisb	(r2)+	,r0		; into a convenient place
+     23	005224	005303 				dec	r3			; chcount--
+     24
+     25	005226	012704 	000001 			mov	#1	,r4		; repeat_count = 1
+     26	005232	005767 	000000G			tst	dorpt			; are we doing repeat count stuff?
+     27	005236	001423 				beq	20$			; no
+     28	005240	120067 	000000G			cmpb	r0	,rptquo		; yes, is it the agreed upon prefix?
+     29	005244	001020 				bne	20$			; no
+     30	005246	112204 				movb	(r2)+	,r4		; /63/ yes, get next character
+     31	005250	005303 				dec	r3			; chcount--
+     32	005252	042704 	177600 			bic	#^c<177>,r4		; hose possible parity and sxt bits
+     33	005256					unchar	r4	,r4		; decode it into a number
+	005256	005046 				clr	-(sp)
+	005260	150416 				bisb	r4	,@sp
+	005262	162716 	000040 			sub	#40	,@sp
+	005266	112604 				movb	(sp)+	,r4
+     34	005270	005000 				clr	r0			; now prime with the next character
+     35	005272	152200 				bisb	(r2)+	,r0		; so we can check for other types of
+     36	005274	005303 				dec	r3			; quoting to be done
+     37	005276	005704 				tst	r4			; ensure the count is legitimate
+     38	005300	003002 				bgt	20$			; it's ok
+     39	005302	012704 	000001 			mov	#1	,r4		; it's fubar, fix it (more or less..)
+     40
+     41	005306	005067 	000000G		20$:	clr	set8bit			; assume we don't have to set bit 7
+     42	005312	005767 	000000G			tst	do8bit			; must we do 8-bit unprefixing?
+     43	005316	001410 				beq	30$			; no
+     44	005320	120067 	000000G			cmpb	r0	,ebquot		; yes, is this the 8-bit prefix?
+     45	005324	001005 				bne	30$			; no
+     46	005326	010667 	000000G			mov	sp	,set8bit	; yes, send a flag to set the bit
+     47	005332	005000 				clr	r0			; and get the next character
+     48	005334	152200 				bisb	(r2)+	,r0		; without sign extension
+     49	005336	005303 				dec	r3			; one less character left in buffer
+     50
+     51	005340	120067 	000005G		30$:	cmpb	r0	,conpar+p.qctl	; is this a quoted control character?
+     52	005344	001024 				bne	40$			; no
+     53	005346	005000 				clr	r0			; yes, get the next character
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 28-1
+Dump a buffer out to disk	; /62/ moved this here..
+
+     54	005350	152200 				bisb	(r2)+	,r0		; must be one you know
+     55	005352	005303 				dec	r3			; chcount := pred(chcount)
+     56	005354	010001 				mov	r0	,r1		; /63/ copy to check against quote ch
+     57	005356	042701 	177600 			bic	#^c<177>,r1		; must avoid sxt here, drop bits 7..15
+     58	005362	120167 	000005G			cmpb	r1	,conpar+p.qctl	; if ch <> myquote
+     59	005366	001413 				beq	40$			;  then
+     60	005370	120127 	000077 			cmpb	r1	,#77		;   if   (ch & 177) >= ctl(del)
+     61	005374	103410 				blo	40$			;    and (ch & 177) <= ctl(del)+40
+     62	005376	120127 	000137 			cmpb	r1	,#137		;	then
+     63	005402	101005 				bhi	40$			;	  ch = ctl(ch)
+     64	005404					ctl	r0	,r0
+	005404	005046 				clr	-(sp)
+	005406	150016 				bisb	r0	,@sp
+	005410	004767 	000000G		2	012701 	000000G		60$:	mov	#lun.ou	,r1		; channel_number := lun.out
+     71	005436	005767 	000000G			tst	outopn			; is there really something open?
+     72	005442	001007 				bne	70$			; yes, put the data to it
+     73	005444	005001 				clr	r1			; no, direct the output to a terminal
+     74	005446	005767 	000000G			tst	tsxsav			; running under TSX?
+     75	005452	001403 				beq	70$			; no
+     76	005454	121667 	000000G			cmpb	@sp	,m.tsxr		; ya, is it TSX lead-in char?
+     77	005460	001407 				beq	80$			; ya, don't output to TT
+     78	005462	011600 			70$:	mov	@sp	,r0		; restore the character to write out
+     79	005464	004767 	000000G			call	putcr0			; and do it
+     80	005470	005700 				tst	r0			; /62/ did it work?
+     81	005472	001402 				beq	80$			; /63/ yes
+     82	005474	005003 				clr	r3			; /63/ no, fake end of string to force
+     83	005476	000406 				br	90$			; /63/ exit and bail out of this loop
+     84	005500	062767 	000001 	000002G	80$:	add	#1	,filein+2	; stats /62/ r0 is clear in case end..
+     85	005506	005567 	000000G			adc	filein+0		; 32. bits worth
+     86	005512	077431 				sob	r4	,60$		; duplicate the character if need be
+     87	005514	005726 			90$:	tst	(sp)+			; pop the stack where we saved char
+     88	005516	000636 				br	10$			; next character please
+     89
+     90	005520	000207 			100$:	return
+     91
+     92		000001 				.end
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 28-2
+Symbol table
+
+ABT$AL  000132   	DOT   = 000056   	LOG$IO= 000010   	P.CHKT= 000007   	RINIT   001200R     002
+ABT$CU  000130   	DO8BIT= ****** GX	LOG$ON= 040000   	P.EOL = 000004   	RINI.S  001312R     002
+ABT$ER  000105   	EBQUOT= ****** GX	LOG$OP= 100000   	P.MXL1= 000013   	RPACK$= ****** GX
+ALSIZE= 002000   	EOF$DI  000104   	LOG$PA= 000001   	P.MXL2= 000014   	RPAR  = ****** GX
+ASNAME= ****** GX	ERBFSI= 000170   	LOG$RP= 000004   	P.NPAD= 000002   	RPTQUO= ****** GX
+ASPACE= ****** GX	ERRBYT= 000052   	LOOKUP= ****** GX	P.PADC= 000003   	R$ATTR= ****** GX
+AT$LEN= ****** GX	ERROR = ****** GX	LUN.KB= ****** GX	P.QBIN= 000006   	R$RETR  000626R     002
+AT.ALL  000177   	ERROR$= 000004   	LUN.LO= ****** GX	P.QCTL= 000005   	R$SYNC  000620R     002
+AT.CDT  000001   	ERRTXT= ****** GX	LUN.OU= ****** GX	P.REPT= 000010   	SCANCH= ****** GX
+AT.INF  000002   	ESC   = 000033   	LUN.SR= ****** GX	P.SPSI= 000000   	SCOLON= 000073
+AT.LEN  000004   	FATAL$= 000020   	L$PCRL= ****** GX	P.TIME= 000001   	SENPAR= ****** GX
+AT.ON   100000   	FF    = 000014   	L$XOR = ****** GX	P.VEND= 000017   	SET8BI= ****** GX
+AT.PRO  000010   	FILEIN= ****** GX	L10012= ****** GX	P.WIND= 000012   	SEVER$= 000010
+AT.SYS  000020   	FILLST  000000R     003	MAXLNG= 003600   	RABORT  000632R     002	SIZOF = ****** GX
+AT.TYP  000040   	FILNAM= ****** GX	MAXPAK  000136   	RDATA   003120R     002	SKIPFI= ****** GX
+AT.XLE  000100   	FILPRO= ****** GX	MAXTRY= ****** GX	RDAT.A  003232R     002	SOH   = 000001
+BADCHK= ****** GX	FIXFIL= ****** GX	MSG$AC  000131   	RDAT.D  003474R     002	SPACE = 000040
+BELL  = 000007   	FPARSE= ****** GX	MSG$AT  000101   	RDAT.F  004752R     002	SPACK$= ****** GX
+BINARY  000001   	GET2LP  000160R     003	MSG$BR  000102   	RDAT.X  004752R     002	SPAR  = ****** GX
+BS    = 000010   	GN$BYE  000114   	MSG$CO  000103   	RDAT.Z  005022R     002	SPARE1= ****** GX
+BUFEMP  005204R     002	GN$CON  000103   	MSG$DA  000104   	RECDEB  001030R     002	SPARSZ= ****** GX
+BUFUNP= ****** GX	GN$COP  000113   	MSG$EO  000132   	RECLOG= ****** GX	SRCNAM= ****** GX
+CAPA.A= 000010   	GN$DEL  000105   	MSG$ER  000105   	RECSW   000154RG    002	STATE = ****** GX
+CAPA.L= 000002   	GN$DIR  000104   	MSG$FI  000106   	RECS$$  000512R     002	STATUS= ****** GX
+CAPA.S= 000004   	GN$DIS  000125   	MSG$GE  000107   	RECS.C  000540R     002	STA.AB  000101
+CCABOR  000454R     002	GN$EXI  000106   	MSG$KE  000113   	RECS.D  000546R     002	STA.AT  000110
+CCCNT = ****** GX	GN$HEL  000110   	MSG$NA  000116   	RECS.F  000554R     002	STA.BR  000102
+CHARIN= ****** GX	GN$JOU  000112   	MSG$RC  000122   	RECS.R  000562R     002	STA.CC  000100
+CHKABO= ****** GX	GN$LOG  000111   	MSG$SE  000111   	RECS.$  000532R     002	STA.CO  000103
+CHKSIZ= ****** GX	GN$PRI  000120   	MSG$SN  000123   	RECTIM= ****** GX	STA.DA  000104
+CHKTYP= ****** GX	GN$PRO  000120   	MSG$TE  000130   	RECX$$  000640R     002	STA.EO  000132
+CLOSE = ****** GX	GN$QUE  000121   	M$RETR= ****** GX	RECX.E  000576R     002	STA.FI  000106
+CLOSTT= ****** GX	GN$REN  000122   	M$SYNC= ****** GX	RECX.$  000700R     002	STA.IN  000111
+CLRATR= ****** GX	GN$SEN  000115   	M.TSXR= ****** GX	REC.SW  000160RG    002	STA.RI  000122
+CLRCNS= ****** GX	GN$SUB  000123   	NAMCVT= ****** GX	REC.01  000225R     003	STA.SI  000123
+COMMA = 000054   	GN$TYP  000124   	NOJAVU  000173R     003	REC.02  000261R     003	STA.TY  000130
+CONPAR= ****** GX	GN$VAR  000126   	NOSCOP= 000000   	REC.03  000304R     003	STRCAT= ****** GX
+CON$ES= 000034   	GN$WHO  000127   	NULL  = ****** GX	REC.04  000324R     003	SUCCS$= 000001
+CR    = 000015   	IMAGE = ****** GX	NUMTRY= ****** GX	REC.05  000326R     003	SYSERR= ****** GX
+CREATE= ****** GX	INCFIL= ****** GX	OPEN  = ****** GX	REC.06  000330R     003	TAB   = 000011
+CS$IN = ****** GX	INCPAR= ****** GX	OPENTT= ****** GX	REC.07  000341R     003	TERMIN  177777
+CTRL$N= 000016   	INCSTA= ****** GX	OUTLUN= ****** GX	REC.08  000352R     003	TEXT    000000
+CTRL$O= 000017   	INDEX = ****** GX	OUTOPN= ****** GX	REC.09  000412R     003	TILDE = 000176
+C$REC   000000RG    002	INIREP= ****** GX	PACKET= ****** GX	REC.10  000440R     003	TIMOUT= ****** GX
+C.CRLF= 000004   	INISTA= ****** GX	PAKNUM= ****** GX	REC.11  000475R     003	TRACE = ****** GX
+C.LCUC= 000040   	INITRY= ****** GX	PAKSTA= ****** GX	REC.12  000507R     003	TSXSAV= ****** GX
+C.LSPA= 000010   	INPROG= ****** GX	PAR$EV  000002   	REC.13  000535R     003	TTY   = 000001
+C.SSPA= 000020   	JSW   = 000044   	PAR$MA  000003   	REC.14  000547R     003	UPCASE= ****** GX
+C.TSPA= 000200   	KRTINC= 000001   	PAR$NO  000000   	REC.15  000556R     003	USERRB= 000053
+DECNAT  000002   	LF    = 000012   	PAR$OD  000001   	REC.16  000607R     003	VT100 = 000002
+DEFCHK= ****** GX	LN$CNT= 000012   	PAR$SP  000004   	REMOTE= ****** GX	VT200 = 000003
+DEJATA  000145R     003	LN$MAX= 000204   	PCNT.R= ****** GX	RFILE   001440R     002	WARN$ = 000002
+DEJAVU  000113R     003	LOGERR= ****** GX	PRERRP= ****** GX	RFIL.B  001622R     002	WRTALL= ****** GX
+DEJA$V  000706R     002	LOGINI= ****** GX	PRINTM= ****** GX	RFIL.F  001700R     002	XGOTTN= ****** GX
+DEJA$$  000742R     002	LOG$AL= 000003   	PUTCR0= ****** GX	RFIL.S  002424R     002	XMODE = ****** GX
+DEL   = 000177   	LOG$CO= 000002   	PUTREC= ****** GX	RFIL.X  002550R     002	XOFF  = 000023
+DORPT = ****** GX	LOG$DE= 000020   	P.CAPA= 000011   	RFIL.Z  003050R     002	XON   = 000021
+KRTREC	Receive file processing	MACRO V05.03b  00:01  Page 28-3
+Symbol table
+
+$ALLSI= 003614   	$IMAGE= ****** GX	$$1   = 000001   	$$5   = 000027   	...V2 = 000027
+$CDDMG= ****** GX	$$    = 000004   	$$2   = 000000   	...V1 = 000003
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	005522    002	(RO,I,LCL,REL,CON)
+$PDATA	000762    003	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 2
+Work  file writes: 3
+Size of work file: 12536 Words  ( 49 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:01.11
+KRTREC,KRTREC=KRTREC

@@ -1,0 +1,1922 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    7-   6	Local data		; /63/ consolidated here..
+    8-   3	The SET command		; /BBS/ just about all new..
+    9-   2	SET CLn LINE x		; /BBS/ this is all new..
+   10-   2	SET CL LINE * processor
+   11-   2	The CONNECT command	; /BBS/ heavily modified
+   12-   2	The TAKE command	; /BBS/ heavily hacked ..
+   13-   2	Local DIRECTORY and SPACE commands  ; /BBS/ modified a bit
+   14-   2	MOUNT, DISMOUNT a logical disk  (TSX+ only)  ; /BBS/ all new
+   15-   2	The local TYPE command	; /BBS/ heavily hacked..
+   16-   2	SHOW LINE		; /BBS/ moved here, added defterm
+   17-   2	Cleanup before exiting to monitor	; /BBS/ enhanced
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTCM1	Misc commands overlay
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	moved sph$xmode after set$modem so it will prevail..
+      7					;	fixed problem caused by using errtxt buffer to store desired xmode
+      8					;	where a "?" in a error message acted like SET PHONE XMODE ?
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	make type append a LF to CR if CR not followed by one
+     13					;	hose hi bit and type anyway for VT100 and below in c$type
+     14
+     15					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     16					;
+     17					;	c$type defaults to .LST, error handling improved, does wildcards
+     18					;	also sped up, types any size record, binary file filtering added
+     19					;
+     20					;	c$set - error handling fixed
+     21					;	c$pwd, c$cls, c$clx, c$xmodem added..
+     22					;	c$take parses file name, checks for/disallows wildcards, etc.
+     23					;	c$conn - disallow connect to TT (since one is there already..)
+     24					;	mount/dismount logical disks command interface, calls TSX emts
+     25					;	added RT-11 style assign default device, for DK only
+     26					;	remote disk_usage passes optional device argument
+     27					;	reinit modem when exiting if DTR dropped during CONNECT
+     28					;	added SET CLn LINE x support for TSX-Plus
+     29					;	added search path for take files
+     30					;	move sho$line here, added modem type, TSX line # and DCD status
+     31					;	added call to c$idle in c$exit to reset modem on exit to monitor
+     32					;	c$set now does multiple args, separated by commas
+     33
+     34					;	Copyright 1983,1984 Change Software, Inc.
+     35					;
+     36					;	Creation: 16-Oct-84  15:38:44  Brian Nelson
+     37					;
+     38					;	This software is furnished under a license and may
+     39					;	be  used  and  copied  only in accordance with the
+     40					;	terms of such license and with  the  inclusion  of
+     41					;	the  above copyright notice.  This software or any
+     42					;	other copies thereof may not be provided or other-
+     43					;	wise made available to any other person.  No title
+     44					;	to and ownership of the software is hereby  trans-
+     45					;	ferred.
+     46					;
+     47					;	The information in this  software  is  subject  to
+     48					;	change  without notice and should not be construed
+     49					;	as a commitment by the author.
+     50					;
+     51					;	12-Sep-86  10:39:27 BDN Convert for I/D space
+     52
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3						.mcall	.PURGE	,.SPFUN		; /62/
+      4
+      5
+      6						.sbttl	Local data		; /63/ consolidated here..
+      7
+      8	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+      9	000000	000000 			crflag:	.word	0			; /62/ TYPE uses to add LF to lone CR
+     10	000002	000000 			itsmine:.word	0			; device is already allocated flag
+     11	000004	000030'	000051'	000072'	tk.0:	.word	T10$ ,T30$ ,T50$ ,T70$ ,0	; addresses of names to try
+     12	000016	000034'	000055'	000075'	tk.1:	.word	T20$ ,T40$ ,T60$ ,T80$ ,0	; put actual file name here
+     13	000030	   124 	   101 	   113 	 T10$:	.ascii	"TAK:"				; this is the take file
+     14	000034	   040 	   040 	   040 	 T20$:	.asciz	"            "			; search path..
+     15	000051	   113 	   122 	   124 	 T30$:	.ascii	"KRT:"
+     16	000055	   040 	   040 	   040 	 T40$:	.asciz	"            "
+     17	000072	   104 	   113 	   072 	 T50$:	.ascii	"DK:"
+     18	000075	   040 	   040 	   040 	 T60$:	.asciz	"            "
+     19	000112	   123 	   131 	   072 	 T70$:	.ascii	"SY:"
+     20	000115	   040 	   040 	   040 	 T80$:	.asciz	"            "
+     21	000132	   103 	   114 	   156 	cl.nam:	.asciz	"CLn:"			; ascii copy of CL name with unit #
+     22						.even
+     23
+     24	000000					.psect	$pdata
+     25	000000	000012'	000017'	000023'	parlst:	.word	P00$ ,P10$ ,P20$ ,P30$ ,P40$	; parity display in SHOW LINE
+     26	000012	   116 	   117 	   116 	 P00$:	.asciz	"NONE"
+     27	000017	   117 	   104 	   104 	 P10$:	.asciz	"ODD"
+     28	000023	   105 	   126 	   105 	 P20$:	.asciz	"EVEN"
+     29	000030	   115 	   101 	   122 	 P30$:	.asciz	"MARK"
+     30	000035	   123 	   120 	   101 	 P40$:	.asciz	"SPACE"
+     31	000043	   040 	   143 	   154 	cm1.01:	.asciz	" closed"<cr><lf>	; shared string: TAKE, defterm
+     32	000055	   040 	   157 	   160 	cm1.02:	.asciz	" opened"<cr><lf>
+     33	000067	   040 	   106 	   151 	cm1.03:	.asciz	" Files copied:"<cr><lf>
+     34	000110	   077 	   124 	   131 	cm1.04:	.asciz	"?TYPE-W-Binary file filter enabled"<cr><lf>
+     35	000155	   040 	   164 	   157 	cm1.05:	.asciz	" to TT:"<cr><lf>
+     36	000167	   114 	   151 	   156 	cm1.06:	.asciz	"Link device is "
+     37	000207	   124 	   124 	   072 	cm1.07:	.asciz	"TT:   "
+     38	000216	   040 	   166 	   151 	cm1.08:	.asciz	" via Line #"
+     39	000232	   040 	   040 	   040 	cm1.09:	.asciz	"   Priority: "
+     40	000250	   040 	   040 	   040 	cm1.10:	.asciz	"   Speed: "
+     41	000263	   116 	   057 	   101 	cm1.11:	.asciz	"N/A"
+     42	000267	   057 	   000 		cm1.12:	.asciz	"/"
+     43	000271	   040 	   155 	   157 	cm1.13:	.asciz	" modem is on-line   "
+     44	000316	   104 	   124 	   122 	cm1.14:	.asciz	"DTR: "
+     45	000324	   040 	   040 	   040 	cm1.15:	.asciz	"   DCD: "
+     46	000335	   040 	   040 	   040 	cm1.16:	.asciz	"   RTS: "
+     47	000346	   040 	   040 	   040 	cm1.17:	.asciz	"   CTS: "
+     48	000357	   106 	   154 	   157 	cm1.18:	.asciz	"Flow-Control: "
+     49	000376	   130 	   117 	   106 	cm1.19:	.asciz	"XOFF/XON   "
+     50	000412	   122 	   124 	   123 	cm1.20:	.asciz	"RTS/CTS    "
+     51	000426	   123 	   057 	   127 	cm1.21:	.asciz	"S/W Parity: "
+     52	000443	   154 	   157 	   167 	li.lo:	.asciz	"low"
+     53	000447	   110 	   111 	   107 	li.hi:	.asciz	"HIGH"
+     54	000454	   056 	   103 	   117 	takdef::.asciz	".COM"			; default take file extent, patchable
+     55	000461	   056 	   114 	   123 	typdef:	.asciz	".LST"			; default extent for type
+     56						.even
+     57
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 8
+Local data		; /63/ consolidated here..
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	The SET command		; /BBS/ just about all new..
+      4
+      5	000000				c$set::	upone	argbuf			; upper case just next arg
+	000000	016700 	000000G			mov	argbuf	,r0
+	000004	004767 	000000G			call	upone			; /BBS/ upcase only to next delimiter
+      6	000010	004767 	000000G			call	loaset			; load the set commands overlay
+      7	000014					calls	getcm0	,<argbuf,r0>	; lookup address of desired command
+	000014	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000016	010046 				        mov	r0	,-(sp)	; push it
+	000020	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	000024	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000026	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	000032	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000034	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      8	000036	010002 				mov	r0	,r2		; save a copy of it
+      9	000040	100505 				bmi	60$			; some sort of error occurred
+     10	000042	005767 	000000G			tst	wasnul			; were commands listed via "?"
+     11	000046	001137 				bne	110$			; ya
+     12	000050	004767 	000000G			call	loaset			; reload set commands overlay
+     13	000054					calls	getcm1	,<argbuf,r0,r2>	; check possible argument to command
+	000054	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000056	010246 				        mov	r2	,-(sp)	; push it
+	000060	010046 				        mov	r0	,-(sp)	; push it
+	000062	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	000066	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000070	004767 	000000G			  jsr	pc	,getcm1		; and go to the routine
+	000074	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000100	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	000102	005700 				tst	r0			; well?
+     15	000104	100463 				bmi	60$			; bad arg..
+     16
+     17	000106				10$:	scan	#comma	,argbuf		; look for a comma indicating
+	000106	016746 	000000G			mov	argbuf	,-(sp)
+	000112	005046 				clr	-(sp)
+	000114	152716 	000054 			bisb	#comma	,@sp
+	000120	004767 	000000G			call	scanch
+     18	000124	010067 	000000G			mov	r0	,restof		; stash pointer to remaining arg(s)
+     19	000130	001410 				beq	20$			; no comma found
+     20	000132	066767 	000000G	000000G		add	argbuf	,restof		; convert offset to address
+     21	000140	016700 	000000G			mov	restof	,r0		; get pointer to put a null..
+     22	000144	105040 				clrb	-(r0)			; ..where the comma was
+     23	000146	010167 	000000G			mov	r1	,lastcmd	; save to dispatch when looping back
+     24
+     25	000152	004711 			20$:	jsr	pc	,@r1		; dispatch to command starting address
+     26	000154	005700 				tst	r0			; did that succeed?
+     27	000156	001021 				bne	40$			; nope..
+     28	000160	016700 	000000G			mov	restof	,r0		; ya, any more arguments to process?
+     29	000164	001470 				beq	110$			; nope..  note r0 is clear here too
+     30	000166	122027 	000040 		30$:	cmpb	(r0)+	,#space		; is first byte a blank?
+     31	000172	001775 				beq	30$			; ya, skip past it
+     32	000174	005300 				dec	r0			; back up to first non-blank char
+     33	000176					copyz	r0  ,argbuf  ,#ln$max	; restore remaining as yet unused args
+	000176	012746 	000120 			mov	#ln$max	,-(sp)
+	000202	010046 				mov	r0	,-(sp)
+	000204	016746 	000000G			mov	argbuf	,-(sp)
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 8-1
+The SET command		; /BBS/ just about all new..
+
+	000210	004767 	000000G			call	copyz$
+     34	000214	016701 	000000G			mov	lastcmd	,r1		; recover dispatch address pointer
+     35	000220	000732 				br	10$			; loop back for more
+     36
+     37	000222	020027 	000000G		40$:	cmp	r0	,#cmd$un	; /62/ which kind of error occurred?
+     38	000226	002436 				blt	80$			; it's not a cmd$.. error
+     39	000230	003003 				bgt	50$			; not ambiguous either
+     40	000232	012700 	000000G			mov	#er$aop	,r0		; it was an ambiguous option or value
+     41	000236	000432 				br	80$
+     42	000240	020027 	000000G		50$:	cmp	r0	,#cmd$bad	; bad option or value?
+     43	000244	001003 				bne	60$			; no, it's some other cmd$.. error
+     44	000246	012700 	000000G			mov	#er$bad	,r0		; ya, say so
+     45	000252	000424 				br	80$
+     46
+     47	000254	020027 	000000G		60$:	cmp	r0	,#cmd$ab	; ^C typed?
+     48	000260	001430 				beq	100$			; /62/ ya
+     49	000262	020027 	000000G			cmp	r0	,#cmd$nx	; /62/ ^Z but keep program running?
+     50	000266	001425 				beq	100$			; /62/ ya
+     51	000270	020027 	000000G			cmp	r0	,#cmd$ex	; a real ^Z?
+     52	000274	001422 				beq	100$			; /62/ ya
+     53	000276	020027 	000000G			cmp	r0	,#cmd$un	; ambiguous?
+     54	000302	001003 				bne	70$			; nope
+     55	000304	012700 	000000G			mov	#er$sam	,r0		; ya, make it an ambiguous SET command
+     56	000310	000411 				br	90$
+     57	000312	020027 	000000G		70$:	cmp	r0	,#cmd$bad	; bad command?
+     58	000316	001002 				bne	80$			; no
+     59	000320	012700 	000000G			mov	#er$sun	,r0		; it's an unrecognizable SET command
+     60
+     61	000324				80$:
+     62	000324	004767 	000072 			call	isitcl			; check for possible SET CLn
+     63	000330	005700 				tst	r0			; was that it?
+     64	000332	001405 				beq	110$			; ya
+     65	000334				90$:	direrr	r0			; no.. _ALL_ KRTST0/1 errors come here
+	000334	010046 				mov	r0	,-(sp)
+	000336	004767 	000000G			call	direr$
+     66	000342	004767 	000000G		100$:	call	incsts			; set the global error flag
+     67	000346	000207 			110$:	return
+     68
+     69	000350	005767 	000000G		skipit::tst	restof			; was a comma in the arg string?
+     70	000354	001421 				beq	120$			; no
+     71	000356					strlen	argbuf			; ya, get length of part-one
+	000356	016700 	000000G			mov	argbuf	,r0
+	000362	004767 	000000G			call	l$len
+     72	000366	066700 	000000G			add	argbuf	,r0		; point to its end
+     73	000372	112720 	000054 			movb	#comma	,(r0)+		; stuff the comma back in !!
+     74	000376					copyz	restof	,r0  ,#ln$max	; add in rest of original line and
+	000376	012746 	000120 			mov	#ln$max	,-(sp)
+	000402	016746 	000000G			mov	restof	,-(sp)
+	000406	010046 				mov	r0	,-(sp)
+	000410	004767 	000000G			call	copyz$
+     75	000414	005067 	000000G			clr	restof			; indicate it has been used here
+     76	000420	000207 			120$:	return
+     77
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 9
+The SET command		; /BBS/ just about all new..
+
+      1
+      2						.sbttl	SET CLn LINE x		; /BBS/ this is all new..
+      3
+      4					;	input:	entire command argbuf, .asciz
+      5
+      6	000422	010004 			isitcl:	mov	r0	,r4		; save incoming error
+      7	000424	020027 	000000G			cmp	r0	,#er$pri	; error from SET CL PRIORITY?
+      8	000430	001473 				beq	60$			; /BBS/ ya, bail out
+      9	000432					upcase	argbuf			; make sure the whole buffer is ok
+	000432	016700 	000000G			mov	argbuf	,r0
+	000436	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     10
+     11	000442				10$:	scan	#'=	,argbuf		; /62/ look for an equals sign
+	000442	016746 	000000G			mov	argbuf	,-(sp)
+	000446	005046 				clr	-(sp)
+	000450	152716 	000075 			bisb	#'=	,@sp
+	000454	004767 	000000G			call	scanch
+     12	000460	005700 				tst	r0			; /62/ well?
+     13	000462	001405 				beq	20$			; /62/ not there
+     14	000464	066700 	000000G			add	argbuf	,r0		; /62/ found one, get pointer
+     15	000470	112740 	000040 			movb	#space	,-(r0)		; /62/ and swap in a space for it
+     16	000474	000762 				br	10$			; /62/ check for another "="
+     17
+     18	000476	016702 	000000G		20$:	mov	argbuf	,r2		; pointer to CLn:
+     19	000502	001446 				beq	60$			; not there..
+     20	000504	122722 	000103 			cmpb	#'C	,(r2)+		; is first byte a "C" ?
+     21	000510	001043 				bne	60$			; nope..
+     22	000512	122722 	000114 			cmpb	#'L	,(r2)+		; is second byte an "L" ?
+     23	000516	001040 				bne	60$			; nope..
+     24
+     25	000520	121227 	000072 			cmpb	(r2)	,#':		; is there a colon after CL?
+     26	000524	001412 				beq	30$			; ya
+     27	000526	121227 	000040 			cmpb	(r2)	,#space		; is there a space delimiter?
+     28	000532	001407 				beq	30$			; ya
+     29
+     30	000534	112200 				movb	(r2)+	,r0		; get unit #, sign bit should be zero
+     31	000536	162700 	000070 			sub	#'7+1	,r0		; check unit is 0 - 7 only, and..
+     32	000542	062700 	000010 			add	#7+1	,r0		; ..turn ascii into integer
+     33	000546	103402 				bcs	40$			; good number crosses 0
+     34	000550	000423 				br	60$			; bad number, bail out
+     35
+     36	000552	005000 			30$:	clr	r0			; set CL unit number to 0
+     37	000554	010067 	000000G		40$:	mov	r0	,cl.unit	; save CL unit number
+     38
+     39	000560	012767 	012276 	000000G		mov	#^rCL0	,cl.r50		; rad50 name of "base" CL device
+     40	000566	060067 	000000G			add	r0	,cl.r50		; make it the device at hand..
+     41
+     42	000572	062700 	000060 			add	#'0	,r0		; now bump it up into an ascii digit
+     43	000576	110067 	000134'			movb	r0	,cl.nam+2	; and stick that into "CLn:"
+     44
+     45	000602	121227 	000072 			cmpb	(r2)	,#':		; is there a colon after CLn ?
+     46	000606	001001 				bne	50$			; no
+     47	000610	005202 				inc	r2			; ya, bump past it..
+     48	000612	122227 	000040 		50$:	cmpb	(r2)+	,#space		; is there a space delimiter?
+     49	000616	001402 				beq	70$			; ya
+     50
+     51	000620	010400 			60$:	mov	r4	,r0		; no, revert to incoming err
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 9-1
+SET CLn LINE x		; /BBS/ this is all new..
+
+     52	000622	000434 				br	100$
+     53
+     54	000624	122227 	000114 		70$:	cmpb	(r2)+	,#'L		; must be an "L"
+     55	000630	001027 				bne	90$			; nope..
+     56	000632	121227 	000111 			cmpb	(r2)	,#'I		; /62/ is this an "I" ?
+     57	000636	001011 				bne	80$			; /62/ no
+     58	000640	005202 				inc	r2			; /62/ ya, bump to next char
+     59	000642	121227 	000116 			cmpb	(r2)	,#'N		; /62/ an "N" ?
+     60	000646	001005 				bne	80$			; /62/ no
+     61	000650	005202 				inc	r2			; /62/ ya, bump to next char
+     62	000652	121227 	000105 			cmpb	(r2)	,#'E		; /62/ an "E" ?
+     63	000656	001001 				bne	80$			; /62/ no
+     64	000660	005202 				inc	r2			; /62/ ya, bump to next char
+     65	000662	122227 	000040 		80$:	cmpb	(r2)+	,#space		; /62/ a space?
+     66	000666	001010 				bne	90$			; /62/ no, command is no good
+     67	000670	105712 				tstb	@r2			; anything left?
+     68	000672	001406 				beq	90$			; no, command is no good
+     69	000674	005767 	000000G			tst	tsxsave			; running under TSX?
+     70	000700	001007 				bne	110$			; ya
+     71	000702	012700 	000000G			mov	#er$tsx	,r0		; no, load appropriate error
+     72	000706	000402 				br	100$			; exit
+     73
+     74	000710	012700 	000000G		90$:	mov	#er$bad	,r0		; "bad option or value"
+     75	000714	000167 	000374 		100$:	jmp	260$			; goto the end, currently just return
+     76
+     77	000720	121227 	000052 		110$:	cmpb	(r2)	,#'*		; auto-assign?
+     78	000724	001002 				bne	120$			; no
+     79	000726	000167 	000364 			jmp	cl.wild			; ya
+     80
+     81	000732	005003 			120$:	clr	r3			; init a reg to hold line number
+     82	000734	112200 			130$:	movb	(r2)+	,r0		; next char
+     83	000736	162700 	000072 			sub	#'9+1	,r0		; convert decimal ascii to integer
+     84	000742	062700 	000012 			add	#9.+1	,r0		; whilst ensuring it's a valid digit
+     85	000746	103010 				bcc	140$			; not a number, thus at end of digits
+     86	000750					mul	#10.	,r3		; bump accumulator by 10s
+	000750	012746 	000012 			mov	#10.	,-(sp)		; pass multiplier to p$mul
+	000754	010346 				mov	r3	,-(sp)		; pass multiplicand too
+	000756	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	000762	012603 				.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     87	000764	060003 				add	r0	,r3		; add current digit to the answer
+     88	000766	000762 				br	130$			; try for another numeric byte
+     89
+     90	000770	005067 	000002'		140$:	clr	itsmine			; init already allocated device flag
+     91	000774	005703 				tst	r3			; assign or deassign?
+     92	000776	001025 				bne	160$			; it's an assign
+     93	001000	026767 	000000G	000000G		cmp	cl.r50	,r50dev		; dump it, if program owns it, that is
+     94	001006	001407 				beq	150$			; only allow this on current dev
+     95	001010	016700 	000000G			mov	cl.r50	,r0		; if .ne.
+     96	001014	162700 	000036 			sub	#36	,r0		; try making possible "0" unit a space
+     97	001020	020067 	000000G			cmp	r0	,r50dev		; and check it again
+     98	001024	001106 				bne	220$			; /63/ not the same
+     99	001026	016700 	000000G		150$:	mov	argbuf	,r0		; copy pointer
+    100	001032	112720 	000124 			movb	#'T&137	,(r0)+		; load argument to
+    101	001036	112720 	000124 			movb	#'T&137	,(r0)+		; drop the CL
+    102	001042	105010 				clrb	(r0)			; assign via
+    103	001044	004767 	000000G			call	set$line		; "SET LINE TT"
+    104	001050	000467 				br	200$			; no error possible here
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 9-2
+SET CLn LINE x		; /BBS/ this is all new..
+
+    105
+    106	001052	005767 	000000G		160$:	tst	r50dev			; is a link now in use?
+    107	001056	001066 				bne	210$			; ya
+    108	001060	012701 	000000G			mov	#alloerr,r1		; no, preser error allocate mapping
+    109	001064	112767 	000002 	000000G		movb	#2	,d.allo		; prep to
+    110	001072	012700 	000000G			mov	#d.allo	,r0		; check device
+    111	001076	104375 				emt	375			; for activity
+    112	001100	103474 				bcs	240$			; someone else has it
+    113	001102	005700 				tst	r0			; or, perhaps you do on another line
+    114	001104	001410 				beq	180$			; nope..
+    115	001106	020067 	000000G			cmp	r0	,tsxsav		; check against current job # too
+    116	001112	001403 				beq	170$			; ok  (same line #)
+    117	001114	012700 	000000G			mov	#er$137	,r0		; not ok, in use by you on another job
+    118	001120	000475 				br	260$			; bail out
+    119
+    120	001122	010667 	000002'		170$:	mov	sp	,itsmine	; allocate, except if already owned..
+    121	001126	012701 	000000G		180$:	mov	#atterr	,r1		; "attach" error mapping
+    122	001132	010367 	000000G			mov	r3	,cl.line	; save the desired line number
+    123	001136	012700 	000000G			mov	#attcl	,r0		; try to
+    124	001142	104375 				emt	375			; attach it
+    125	001144	103452 				bcs	240$			; didn't work
+    126	001146	010667 	000000G			mov	sp	,z.atch		; ok, flag it was done from this pgm
+    127	001152	005767 	000002'			tst	itsmine			; need to allocate the device?
+    128	001156	001010 				bne	190$			; no, you already have it
+    129	001160	012701 	000000G			mov	#alloerr,r1		; error mapping for allocate
+    130	001164	105067 	000000G			clrb	d.allo			; make it ALLOCATE
+    131	001170	012700 	000000G			mov	#d.allo	,r0		; try to
+    132	001174	104375 				emt	375			; allocate the device
+    133	001176	103424 				bcs	230$			; didn't work
+    134
+    135	001200				190$:	strcpy	argbuf	,#cl.nam	; /62/ give SET LINE CL unit's name
+	001200	012746 	000132'			mov	#cl.nam	,-(sp)
+	001204	016746 	000000G			mov	argbuf	,-(sp)
+	001210	004767 	000000G			jsr	pc	,strcpy
+    136	001214	004767 	000000G			call	set$line		; same as "Kermit-11>SET LINE CLn"
+    137	001220	103003 				bcc	200$			; it worked
+    138	001222	004767 	000000G			call	cl.dump			; didn't work, clean up..
+    139	001226	000432 				br	260$			; exit with error in r0
+    140
+    141	001230	005000 			200$:	clr	r0			; success
+    142	001232	000430 				br	260$
+    143	001234	012700 	000000G		210$:	mov	#er$140	,r0		; must drop current assign first
+    144	001240	000425 				br	260$
+    145	001242	012700 	000000G		220$:	mov	#er$own	,r0		; CL line not owned by this job
+    146	001246	000422 				br	260$
+    147	001250	113702 	000052 		230$:	movb	@#errbyt,r2		; ya, save error
+    148	001254	005067 	000000G			clr	cl.line			; prep to
+    149	001260	012700 	000000G			mov	#attcl	,r0		; dump lingering
+    150	001264	104375 				emt	375			; CL to term assign
+    151	001266	110237 	000052 			movb	r2	,@#errbyt	; recover error
+    152	001272	113700 	000052 		240$:	movb	@#errbyt,r0		; get the error code
+    153	001276	100003 				bpl	250$			; normal error
+    154	001300	005100 				com	r0			; hard error code
+    155	001302	012701 	000000G			mov	#faterr	,r1		; map into the hard errors
+    156	001306	006300 			250$:	asl	r0			; word addressing
+    157	001310	060001 				add	r0	,r1		; map the error
+    158	001312	011100 				mov	(r1)	,r0		; and return its address to caller
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 9-3
+SET CLn LINE x		; /BBS/ this is all new..
+
+    159	001314	000207 			260$:	return
+    160
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 10
+SET CLn LINE x		; /BBS/ this is all new..
+
+      1
+      2						.sbttl	SET CL LINE * processor
+      3
+      4	001316	005767 	000000G		cl.wild:tst	r50dev			; is there now a link device?
+      5	001322	001152 				bne	80$			; ya, it has to go first..
+      6	001324	105767 	000000G			tstb	ports			; any ports data supplied?
+      7	001330	001552 				beq	90$			; no, can't do this
+      8	001332	105767 	000000G			tstb	units			; any CL units specified?
+      9	001336	001547 				beq	90$			; no, can't do this
+     10	001340	012702 	000000G			mov	#units	,r2		; pointer to string of CL units
+     11	001344	000403 				br	20$
+     12
+     13	001346	122227 	000040 		10$:	cmpb	(r2)+	,#space		; must be a space delimiter
+     14	001352	001144 				bne	100$			; wasn't, no specified CL unit is free
+     15
+     16	001354	112200 			20$:	movb	(r2)+	,r0		; get unit #
+     17	001356	162700 	000070 			sub	#'7+1	,r0		; check unit is 0 - 7 only, and..
+     18	001362	062700 	000010 			add	#7+1	,r0		; ..turn ascii into integer
+     19	001366	103136 				bcc	100$			; not a number
+     20	001370	010067 	000000G			mov	r0	,cl.unit	; save CL unit number
+     21	001374	012767 	012276 	000000G		mov	#^rCL0	,cl.r50		; rad50 name of "base" CL device
+     22	001402	060067 	000000G			add	r0	,cl.r50		; make it the device at hand..
+     23	001406	062700 	000060 			add	#'0	,r0		; now bump it up into an ascii digit
+     24	001412	110067 	000134'			movb	r0	,cl.nam+2	; and stick that into "CLn:"
+     25
+     26	001416	005067 	000002'			clr	itsmine			; init already allocated device flag
+     27	001422	112767 	000002 	000000G		movb	#2	,d.allo		; prep to
+     28	001430	012700 	000000G			mov	#d.allo	,r0		; check device
+     29	001434	104375 				emt	375			; for activity
+     30	001436	103743 				bcs	10$			; someone else has it
+     31	001440	005700 				tst	r0			; or, perhaps you do on another line?
+     32	001442	001405 				beq	30$			; nope..
+     33	001444	020067 	000000G			cmp	r0	,tsxsav		; check against current job # too
+     34	001450	001336 				bne	10$			; it's not this job..
+     35	001452	010667 	000002'			mov	sp	,itsmine	; allocate, except if already owned..
+     36
+     37	001456	012704 	000000G		30$:	mov	#ports	,r4		; pointer to ports data
+     38	001462	000405 				br	50$			; skip test for end on first pass thru
+     39
+     40	001464	105714 			40$:	tstb	(r4)			; anything left?
+     41	001466	001501 				beq	110$			; nope..
+     42	001470	122427 	000040 			cmpb	(r4)+	,#space		; is this a space delimiter?
+     43	001474	001373 				bne	40$			; no, keep looking for one
+     44
+     45	001476	004767 	000520 		50$:	call	220$			; extract a number to try
+     46	001502	005703 				tst	r3			; /62/ check for valid number
+     47	001504	001464 				beq	90$			; /62/ line 0 doesn't exist
+     48	001506	020327 	000050 			cmp	r3	,#40.		; max possible TSX line number
+     49	001512	101061 				bhi	90$			; /62/ bad number
+     50	001514	010367 	000000G			mov	r3	,cl.line	; good number, save it for attcl
+     51	001520	012700 	000000G			mov	#attcl	,r0		; try to
+     52	001524	104375 				emt	375			; attach it
+     53	001526	103015 				bcc	60$			; it worked
+     54	001530	113700 	000052 			movb	@#errbyt,r0		; it didn't work, find out why
+     55	001534	120027 	000003 			cmpb	r0	,#3		; what to do?
+     56	001540	003351 				bgt	40$			; something's busy, try next one
+     57	001542	001445 				beq	90$			; errbyt=3, bad line
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 10-1
+SET CL LINE * processor
+
+     58	001544	120027 	000002 			cmpb	r0	,#2		; is it 1 or 2?
+     59	001550	001442 				beq	90$			; errbyt=2, bad unit
+     60	001552	012700 	000000G			mov	#er$124	,r0		; terminal privilege is required
+     61	001556	000167 	000414 			jmp	180$			; this is a fatal error..
+     62
+     63	001562	010667 	000000G		60$:	mov	sp	,z.atch		; flag TSX line was attached by Kermit
+     64	001566	005767 	000002'			tst	itsmine			; need to allocate the device?
+     65	001572	001042 				bne	120$			; no, you already have it
+     66	001574	105067 	000000G			clrb	d.allo			; make it ALLOCATE
+     67	001600	012700 	000000G			mov	#d.allo	,r0		; try to
+     68	001604	104375 				emt	375			; allocate the device
+     69	001606	103034 				bcc	120$			; ok
+     70	001610	113700 	000052 			movb	@#errbyt,r0		; it didn't work, find out why
+     71	001614	120027 	000002 			cmpb	r0	,#2		; what to do?
+     72	001620	002721 				blt	40$			; device in use, try next one
+     73	001622	001415 				beq	90$			; errbyt=2, bad device
+     74	001624	120027 	000004 			cmpb	r0	,#4		; is it 3, 4 or 5?
+     75	001630	001715 				beq	40$			; errbyt=4, in use by another job
+     76	001632	003003 				bgt	70$			; needs allocate privilege
+     77	001634	012700 	000000G			mov	#er$122	,r0		; TSX allocation table is full
+     78	001640	000556 				br	180$			; which is a fatal error..
+     79
+     80	001642	012700 	000000G		70$:	mov	#er$123	,r0		; allocate privilege is required
+     81	001646	000553 				br	180$			; fatal error..
+     82	001650	012700 	000000G		80$:	mov	#er$140	,r0		; must drop current assign first
+     83	001654	000550 				br	180$
+     84	001656	012700 	000000G		90$:	mov	#er$141	,r0		; bad ports and/or units
+     85	001662	000545 				br	180$
+     86	001664	012700 	000000G		100$:	mov	#er$142	,r0		; no specified CL unit is free
+     87	001670	000542 				br	180$
+     88	001672	012700 	000000G		110$:	mov	#er$143	,r0		; no specified TSX line is free
+     89	001676	000537 				br	180$
+     90
+     91	001700				120$:	strcpy	argbuf	,#cl.nam	; /62/ give SET LINE CL unit's name
+	001700	012746 	000132'			mov	#cl.nam	,-(sp)
+	001704	016746 	000000G			mov	argbuf	,-(sp)
+	001710	004767 	000000G			jsr	pc	,strcpy
+     92	001714	016746 	000000G			mov	infomsg	,-(sp)		; save current state of SET TT [NO]QU
+     93	001720	005067 	000000G			clr	infomsg			; suppress implicit sho$line in set$li
+     94	001724	004767 	000000G			call	set$line		; same as "Kermit-11>SET LINE CLn"
+     95	001730	012667 	000000G			mov	(sp)+	,infomsg	; restore SET TT [NO]QUIET state
+     96	001734	103003 				bcc	130$			; the set$line worked
+     97	001736	004767 	000000G			call	cl.dump			; it didn't work, clean up..
+     98	001742	000515 				br	180$
+     99
+    100	001744	105714 			130$:	tstb	(r4)			; anything left in "PORTS" buffer?
+    101	001746	001516 				beq	190$			; no, done
+    102	001750	121427 	000040 			cmpb	(r4)	,#space		; is next byte a space?
+    103	001754	001513 				beq	190$			; ya, thus no parameters given..
+    104	001756	122427 	000057 			cmpb	(r4)+	,#'/		; is next byte a slash?
+    105	001762	001100 				bne	160$			; no, it's an error
+    106	001764	004767 	000232 			call	220$			; extract a speed value
+    107	001770					calls	setspd	,<r3>		; give it a try
+	001770	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001772	010346 				  mov	r3	,-(sp)		; doing it thusly generates less code
+	001774	010605 				  mov	sp	,r5		; set pointer to argument list
+	001776	004767 	000000G			  jsr	pc	,setspd		; call the subroutine
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 10-2
+SET CL LINE * processor
+
+	002002	005726 				  tst	(sp)+			; pop parameter list from stack
+	002004	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    108	002006	005700 				tst	r0			; well?
+    109	002010	001070 				bne	170$			; it failed
+    110	002012	005067 	000000G			clr	b4speed			; reset this if above succeeds..
+    111	002016	121427 	000040 			cmpb	(r4)	,#space		; anything left in "PORTS" buffer?
+    112	002022	003470 				ble	190$			; no
+    113	002024	122427 	000057 			cmpb	(r4)+	,#'/		; is next byte a slash?
+    114	002030	001055 				bne	160$			; no, it's an error
+    115	002032	105067 	000000G			clrb	spare0			; /63/ init xmode buffer just in case
+    116	002036	016700 	000000G			mov	argbuf	,r0		; /63/ save modem name here
+    117	002042	004767 	000216 			call	250$			; copy modem name into spare buff
+    118	002046	121427 	000040 			cmpb	(r4)	,#space		; anything left in "PORTS" buffer?
+    119	002052	003407 				ble	140$			; no, try what was there
+    120	002054	122427 	000057 			cmpb	(r4)+	,#'/		; is next byte a slash?
+    121	002060	001041 				bne	160$			; no, it's an error
+    122	002062	012700 	000000G			mov	#spare0	,r0		; /63/ pointer for 250$
+    123	002066	004767 	000172 			call	250$			; copy xmode into a handy spare buffer
+    124
+    125	002072	016746 	000000G		140$:	mov	infomsg	,-(sp)		; save status of SET TT [NO]QUIET
+    126	002076	005067 	000000G			clr	infomsg			; suppress display
+    127	002102	004767 	000000G			call	set$modem		; try to SET to supplied string
+    128	002106	012667 	000000G			mov	(sp)+	,infomsg	; restore SET TT [NO]QUIET
+    129	002112	005700 				tst	r0			; did set$modem work?
+    130	002114	001020 				bne	150$			; /63/ no
+    131	002116	105767 	000000G			tstb	spare0			; /63/ was an xmode value saved?
+    132	002122	001430 				beq	190$			; /63/ no, done
+    133	002124					strcpy	argbuf	,#spare0	; /63/ put xmode where sph$xm needs it
+	002124	012746 	000000G			mov	#spare0	,-(sp)
+	002130	016746 	000000G			mov	argbuf	,-(sp)
+	002134	004767 	000000G			jsr	pc	,strcpy
+    134	002140	004767 	000000G			call	sph$xm			; /63/ try to SET PHONE XMODE..
+    135	002144	005700 				tst	r0			; did it work?
+    136	002146	001416 				beq	190$			; /63/ ys
+    137	002150	012700 	000000G			mov	#er$147	,r0		; SET PHONE XMODE failed
+    138	002154	000410 				br	180$
+    139
+    140	002156	012700 	000000G		150$:	mov	#er$146	,r0		; no, bad ports string
+    141	002162	000405 				br	180$
+    142	002164	012700 	000000G		160$:	mov	#er$144	,r0		; bad delimiter before speed or modem
+    143	002170	000402 				br	180$
+    144	002172	012700 	000000G		170$:	mov	#er$145	,r0		; SET SPEED failed, bad ports string
+    145	002176	004767 	000000G		180$:	call	incsts			; set the global error flag
+    146	002202	000406 				br	210$
+    147	002204	005767 	000000G		190$:	tst	infomsg			; time to say what's up?
+    148	002210	001402 				beq	200$			; no
+    149	002212	004767 	002050 			call	sho$line		; ya, display what was just done
+    150	002216	005000 			200$:	clr	r0			; flag success
+    151	002220	000207 			210$:	return
+    152
+    153	002222	005003 			220$:	clr	r3			; init an accumulator for the integer
+    154	002224	112400 			230$:	movb	(r4)+	,r0		; next char
+    155	002226	162700 	000072 			sub	#'9+1	,r0		; convert ascii byte to integer value
+    156	002232	062700 	000012 			add	#9.+1	,r0		; but use it only if a 0..9 digit
+    157	002236	103010 				bcc	240$			; not a number
+    158	002240					mul	#10.	,r3		; bump previous integer by 10s
+	002240	012746 	000012 			mov	#10.	,-(sp)		; pass multiplier to p$mul
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 10-3
+SET CL LINE * processor
+
+	002244	010346 				mov	r3	,-(sp)		; pass multiplicand too
+	002246	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	002252	012603 				.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+    159	002254	060003 				add	r0	,r3		; then add in the current value
+    160	002256	000762 				br	230$			; is next byte part of number?
+    161	002260	105744 			240$:	tstb	-(r4)			; park on first non-numeric byte
+    162	002262	000207 				return
+    163
+    164	002264	121427 	000040 		250$:	cmpb	(r4)	,#space		; is next byte a space or less?
+    165	002270	101405 				blos	260$			; /63/ ya, time to see if it will SET
+    166	002272	121427 	000057 			cmpb	(r4)	,#'/		; no, but is it a slash?
+    167	002276	001402 				beq	260$			; ya, try to SET..
+    168	002300	112420 				movb	(r4)+	,(r0)+		; no, it's part of the modem name
+    169	002302	000770 				br	250$			; check the next byte
+    170	002304	105010 			260$:	clrb	(r0)			; terminate
+    171	002306	000207 				return
+    172
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 11
+SET CL LINE * processor
+
+      1
+      2						.sbttl	The CONNECT command	; /BBS/ heavily modified
+      3
+      4	002310	105767 	000000G		c$conn::tstb	ttname			; anything to connect ??
+      5	002314	001003 				bne	10$			; ya
+      6	002316	012700 	000000G			mov	#er$tt	,r0		; /62/ can't connect TT to TT
+      7	002322	000415 				br	20$
+      8
+      9	002324	016746 	000000G		10$:	mov	mready	,-(sp)		; save modem's init status
+     10	002330	004767 	000000G			call	doconn			; run the terminal emulator
+     11	002334	005726 				tst	(sp)+			; was modem ever initialized?
+     12	002336	001417 				beq	40$			; no
+     13	002340	005767 	000000G			tst	mready			; ya, still initialized?
+     14	002344	001014 				bne	40$			; ya
+     15	002346	004767 	000000G			call	reinit			; no, go re-init it
+     16	002352	005700 				tst	r0			; /62/ did it work?
+     17	002354	001406 				beq	30$			; /62/ ya
+     18	002356				20$:	direrr	r0			; /62/ dump error message
+	002356	010046 				mov	r0	,-(sp)
+	002360	004767 	000000G			call	direr$
+     19	002364	004767 	000000G			call	incsts			; /62/ flag error so r0 can be cleared
+     20	002370	000402 				br	40$
+     21	002372				30$:	.newline			; ensure prompt comes up in the clear
+	002372	004767 	000000G			call	l$pcrlf
+     22	002376	005000 			40$:	clr	r0			; /62/ only do error message once
+     23	002400	000207 				return
+     24
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 12
+The CONNECT command	; /BBS/ heavily modified
+
+      1
+      2						.sbttl	The TAKE command	; /BBS/ heavily hacked ..
+      3
+      4	002402	005767 	000000G		c$take::tst	cmdlun			; indirect file already open?
+      5	002406	001433 				beq	30$			; no
+      6	002410	005767 	000000G			tst	sy.ini			; here during init from KRT.INI?
+      7	002414	001403 				beq	10$			; no
+      8	002416	004767 	001570 			call	defterm			; ya, do end of init file stuff
+      9	002422	000413 				br	20$			; continue
+     10
+     11	002424	005767 	000000G		10$:	tst	infomsg			; /41/ how verbose are we today?
+     12	002430	001410 				beq	20$			; Not very
+     13	002432					wrtall	#indnam			; dump file name
+	002432	012746 	000000G			mov	#indnam	,-(sp)		; pass the address
+	002436	004767 	000000G			call	wrtall			; do it
+     14	002442					wrtall	#cm1.01			; /63/ " closed",cr
+	002442	012746 	000043'			mov	#cm1.01	,-(sp)		; pass the address
+	002446	004767 	000000G			call	wrtall			; do it
+     15	002452				20$:	calls	close	,<#lun.ta>	; close the file
+	002452	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002454	012746 	000000G			  mov	#lun.ta	,-(sp)		; doing it thusly generates less code
+	002460	010605 				  mov	sp	,r5		; set pointer to argument list
+	002462	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	002466	005726 				  tst	(sp)+			; pop parameter list from stack
+	002470	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     16	002472	005067 	000000G			clr	cmdlun			; clear the it's open flag for it
+     17
+     18	002476	005004 			30$:	clr	r4			; init try the path flag
+     19	002500					upcase	argbuf			; upper case all args
+	002500	016700 	000000G			mov	argbuf	,r0
+	002504	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     20	002510					scan	#'.	,argbuf		; look for a dot in the name
+	002510	016746 	000000G			mov	argbuf	,-(sp)
+	002514	005046 				clr	-(sp)
+	002516	152716 	000056 			bisb	#'.	,@sp
+	002522	004767 	000000G			call	scanch
+     21	002526	005700 				tst	r0			; find one?
+     22	002530	001006 				bne	40$			; ya..
+     23	002532					strcat	argbuf	,#takdef	; no, add .COM to it
+	002532	012746 	000454'			mov	#takdef	,-(sp)
+	002536	016746 	000000G			mov	argbuf	,-(sp)
+	002542	004767 	000000G			jsr	pc	,strcat
+     24
+     25	002546				40$:	scan	#':	,argbuf		; look for device delimiter
+	002546	016746 	000000G			mov	argbuf	,-(sp)
+	002552	005046 				clr	-(sp)
+	002554	152716 	000072 			bisb	#':	,@sp
+	002560	004767 	000000G			call	scanch
+     26	002564	005700 				tst	r0			; find one?
+     27	002566	001411 				beq	50$			; no
+     28	002570					copyz	argbuf	,#indnam,#16+1	; /62/ ya, try this file name
+	002570	012746 	000017 			mov	#16+1	,-(sp)
+	002574	016746 	000000G			mov	argbuf	,-(sp)
+	002600	012746 	000000G			mov	#indnam	,-(sp)
+	002604	004767 	000000G			call	copyz$
+     29	002610	000433 				br	100$
+     30
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 12-1
+The TAKE command	; /BBS/ heavily hacked ..
+
+     31	002612	012703 	000016'		50$:	mov	#tk.1	,r3		; prep to build a list
+     32	002616	010604 				mov	sp	,r4		; flag to try the path
+     33	002620	005713 			60$:	tst	@r3			; any more to open up?
+     34	002622	001410 				beq	70$			; no
+     35	002624					copyz	argbuf	,(r3)+	,#11.	; insert name in path stuff
+	002624	012746 	000013 			mov	#11.	,-(sp)
+	002630	016746 	000000G			mov	argbuf	,-(sp)
+	002634	012346 				mov	(r3)+	,-(sp)
+	002636	004767 	000000G			call	copyz$
+     36	002642	000766 				br	60$			; try for a possible next one..
+     37
+     38	002644	012703 	000004'		70$:	mov	#tk.0	,r3		; the top of the list of stuff to try
+     39	002650	005713 			80$:	tst	@r3			; anything left?
+     40	002652	001003 				bne	90$			; ya
+     41	002654	012700 	000000G			mov	#er$fnf	,r0		; no, can't find it
+     42	002660	000507 				br	140$			; bail out
+     43
+     44	002662				90$:	copyz	(r3)+	,#indnam,#16+1	; /62/ current name in list to opener
+	002662	012746 	000017 			mov	#16+1	,-(sp)
+	002666	012346 				mov	(r3)+	,-(sp)
+	002670	012746 	000000G			mov	#indnam	,-(sp)
+	002674	004767 	000000G			call	copyz$
+     45	002700				100$:	calls	fparse	,<#indnam,#srcnam> ; parse the file name please
+	002700	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002702	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	002706	012746 	000000G			        mov	#indnam	,-(sp)	; push it
+	002712	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002714	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	002720	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002722	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     46	002724	005700 				tst	r0			; did the $parse work?
+     47	002726	001064 				bne	140$			; /62/ no
+     48	002730					calls	iswild	,<#srcnam>	; wildcarded file spec?
+	002730	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002732	012746 	000000G			  mov	#srcnam	,-(sp)		; doing it thusly generates less code
+	002736	010605 				  mov	sp	,r5		; set pointer to argument list
+	002740	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	002744	005726 				  tst	(sp)+			; pop parameter list from stack
+	002746	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     49	002750	005700 				tst	r0			; no support for it yet here..
+     50	002752	001052 				bne	140$			; /62/ disallow wildcarded file name
+     51
+     52					;	calls	chkext	,<#srcnam>	; check for binary file type
+     53					;	tst	r0			; iz it binary?
+     54					;	beq	110$			; nope
+     55					;	mov	#er$fnm	,r0		; ya, bad file name
+     56					;	br	130$			; bail out
+     57
+     58	002754				110$:	calls	open,<#srcnam,#lun.ta,#text> ; open file for input
+	002754	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002756	012746 	000000 			        mov	#text	,-(sp)	; push it
+	002762	012746 	000000G			        mov	#lun.ta	,-(sp)	; push it
+	002766	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	002772	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002774	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	003000	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003004	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 12-2
+The TAKE command	; /BBS/ heavily hacked ..
+
+     59	003006	005700 				tst	r0			; did the open for command file work?
+     60	003010	001031 				bne	130$			; no, print error and exit
+     61	003012	012767 	000000G	000000G		mov	#lun.ta	,cmdlun		; yes, stuff the unit number in
+     62	003020					copyz	#srcnam	,#indnam ,#16+1	; /62/ stash a copy of the file name
+	003020	012746 	000017 			mov	#16+1	,-(sp)
+	003024	012746 	000000G			mov	#srcnam	,-(sp)
+	003030	012746 	000000G			mov	#indnam	,-(sp)
+	003034	004767 	000000G			call	copyz$
+     63	003040	005767 	000000G			tst	infomsg			; status of SET TT [NO]QUIET
+     64	003044	001410 				beq	120$			; it's QUIET
+     65	003046					wrtall	#indnam			; it's NOQUIET, display file name
+	003046	012746 	000000G			mov	#indnam	,-(sp)		; pass the address
+	003052	004767 	000000G			call	wrtall			; do it
+     66	003056					wrtall	#cm1.02			; /63/ " opened",cr  r0 remains 0 here
+	003056	012746 	000055'			mov	#cm1.02	,-(sp)		; pass the address
+	003062	004767 	000000G			call	wrtall			; do it
+     67	003066	005067 	000000G		120$:	clr	exstal			; init take file line number pointer
+     68	003072	000411 				br	150$			; take file will be read by readcmd..
+     69
+     70	003074	005704 			130$:	tst	r4			; if using the path list of names
+     71	003076	001264 				bne	80$			; be sure they all get tried..
+     72	003100				140$:	direrr	r0			; print a error message and
+	003100	010046 				mov	r0	,-(sp)
+	003102	004767 	000000G			call	direr$
+     73	003106	004767 	000000G			call	incsts			; /62/ ensure global error flag is set
+     74	003112	105067 	000000G			clrb	indnam			; zero out take file name buffer
+     75	003116	000207 			150$:	return
+     76
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 13
+The TAKE command	; /BBS/ heavily hacked ..
+
+      1
+      2						.sbttl	Local DIRECTORY and SPACE commands  ; /BBS/ modified a bit
+      3
+      4	003120	010667 	000000G		c$spac::mov	sp	,summary	; flag for summary only
+      5	003124				c$dir::	upcase	argbuf			; upper case all command args
+	003124	016700 	000000G			mov	argbuf	,r0
+	003130	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	003134					calls	fixwild	,<argbuf>	; convert "?" to "%"
+	003134	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003136	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	003142	010605 				  mov	sp	,r5		; set pointer to argument list
+	003144	004767 	000000G			  jsr	pc	,fixwild		; call the subroutine
+	003150	005726 				  tst	(sp)+			; pop parameter list from stack
+	003152	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	003154					calls	dodir	,<argbuf>	; /62/ do the directory
+	003154	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003156	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	003162	010605 				  mov	sp	,r5		; set pointer to argument list
+	003164	004767 	000000G			  jsr	pc	,dodir		; call the subroutine
+	003170	005726 				  tst	(sp)+			; pop parameter list from stack
+	003172	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      8	003174	005700 				tst	r0			; did it work?
+      9	003176	001403 				beq	10$			; yes
+     10	003200					direrr	r0			; no, print the error
+	003200	010046 				mov	r0	,-(sp)
+	003202	004767 	000000G			call	direr$
+     11	003206	000207 			10$:	return
+     12
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 14
+Local DIRECTORY and SPACE commands  ; /BBS/ modified a bit
+
+      1
+      2						.sbttl	MOUNT, DISMOUNT a logical disk  (TSX+ only)  ; /BBS/ all new
+      3
+      4	003210	010601 			c$dismou::mov	sp	,r1		; set dismount flag
+      5	003212	000401 				br	c.mnt			; and use common code
+      6
+      7	003214	005001 			c$mount::clr	r1			; flag to mount
+      8	003216	005767 	000000G		c.mnt:	tst	tsxsav			; /63/ running under TSX?
+      9	003222	001003 				bne	10$			; ya
+     10	003224	012700 	000000G			mov	#er$tsx	,r0		; no, load error
+     11	003230	000413 				br	30$			; that's all
+     12
+     13	003232	026727 	000000G	001154 	10$:	cmp	tsxver	,#620.		; is this V6.20 or above?
+     14	003240	103003 				bhis	20$			; ya
+     15	003242	012700 	000000G			mov	#er$v62	,r0		; no
+     16	003246	000404 				br	30$
+     17
+     18	003250	004767 	000000G		20$:	call	mount			; do the mount now
+     19	003254	005700 				tst	r0			; did it work?
+     20	003256	001403 				beq	40$			; yes
+     21	003260				30$:	direrr	r0			; no, print error message
+	003260	010046 				mov	r0	,-(sp)
+	003262	004767 	000000G			call	direr$
+     22	003266	000207 			40$:	return
+     23
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 15
+MOUNT, DISMOUNT a logical disk  (TSX+ only)  ; /BBS/ all new
+
+      1
+      2						.sbttl	The local TYPE command	; /BBS/ heavily hacked..
+      3
+      4						.save
+      5	000466					.psect	$pdata
+      6	000466	   015 	   012 	   000 	less:	.asciz	<cr><lf>		; only type these for a binary file
+      7	000471	   007 	   010 	   011 	more:	.asciz	<bell><bs><tab><cr><ff><lf><ctrl$n><ctrl$o><esc> ; ok in text
+      8						.even
+      9	003270					.restore
+     10
+     11	003270				c$type::upcase	argbuf			; upper case all args
+	003270	016700 	000000G			mov	argbuf	,r0
+	003274	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     12	003300					calls	fparse	,<argbuf,#srcnam> ; parse the file name please
+	003300	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003302	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	003306	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	003312	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003314	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	003320	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003322	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13	003324	005700 				tst	r0			; did the $parse work?
+     14	003326	001402 				beq	10$			; ya
+     15	003330	000167 	000542 			jmp	170$			; no
+     16
+     17	003334	005067 	000000G		10$:	clr	index			; init getnxt directory index
+     18	003340					scan	#'.	,#srcnam	; look for a dot in the name
+	003340	012746 	000000G			mov	#srcnam	,-(sp)
+	003344	005046 				clr	-(sp)
+	003346	152716 	000056 			bisb	#'.	,@sp
+	003352	004767 	000000G			call	scanch
+     19	003356	005700 				tst	r0			; find one?
+     20	003360	001006 				bne	20$			; ya..
+     21	003362					strcat	#srcnam	,#typdef	; no, add ".LST" to it
+	003362	012746 	000461'			mov	#typdef	,-(sp)
+	003366	012746 	000000G			mov	#srcnam	,-(sp)
+	003372	004767 	000000G			jsr	pc	,strcat
+     22
+     23	003376				20$:	calls	iswild	,<#srcnam>	; wildcarded?
+	003376	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003400	012746 	000000G			  mov	#srcnam	,-(sp)		; doing it thusly generates less code
+	003404	010605 				  mov	sp	,r5		; set pointer to argument list
+	003406	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	003412	005726 				  tst	(sp)+			; pop parameter list from stack
+	003414	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     24	003416	010004 				mov	r0	,r4		; save copy of answer
+     25	003420				30$:	calls	lookup	,<#srcnam,#filnam> ; /62/
+	003420	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003422	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	003426	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	003432	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003434	004767 	000000G			  jsr	pc	,lookup		; and go to the routine
+	003440	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003442	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     26	003444	005700 				tst	r0			; did it work?
+     27	003446	001420 				beq	70$			; yes
+     28	003450	005001 				clr	r1			; clear try for another flag..
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 15-1
+The local TYPE command	; /BBS/ heavily hacked..
+
+     29	003452	020027 	000000G			cmp	r0	,#er$nmf	; no more files matching name?
+     30	003456	001403 				beq	40$			; yes, we are all done then
+     31	003460	020027 	000000G			cmp	r0	,#er$fnf	; how about file not found?
+     32	003464	001007 				bne	60$			; /62/ no, print error message
+     33	003466	005767 	000000G		40$:	tst	index			; sent any files yet?
+     34	003472	001402 				beq	50$			; no
+     35	003474	000167 	000416 			jmp	190$			; yes, that's ok then
+     36	003500	012700 	000000G		50$:	mov	#er$fnf	,r0		; no, change "no more" to "not found"
+     37	003504	000167 	000376 		60$:	jmp	180$			; /62/ go do error message
+     38
+     39	003510	012703 	000471'		70$:	mov	#more	,r3		; init for text file filtering
+     40	003514	005001 				clr	r1			; init binary/text flag
+     41	003516					calls	chkext	,<#filnam>	; check for binary file type
+	003516	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003520	012746 	000000G			  mov	#filnam	,-(sp)		; doing it thusly generates less code
+	003524	010605 				  mov	sp	,r5		; set pointer to argument list
+	003526	004767 	000000G			  jsr	pc	,chkext		; call the subroutine
+	003532	005726 				  tst	(sp)+			; pop parameter list from stack
+	003534	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     42	003536	005700 				tst	r0			; iz it binary?
+     43	003540	001403 				beq	80$			; no..
+     44	003542	012703 	000466'			mov	#less	,r3		; ya, get binary file filter
+     45	003546	005201 				inc	r1			; flag as binary
+     46	003550	005002 			80$:	clr	r2			; assume file not open
+     47	003552					calls	open,<#filnam,#lun.in,r1> ; open file for input
+	003552	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003554	010146 				        mov	r1	,-(sp)	; push it
+	003556	012746 	000000G			        mov	#lun.in	,-(sp)	; push it
+	003562	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	003566	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003570	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	003574	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003600	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     48	003602	005700 				tst	r0			; but did the open work?
+     49	003604	001134 				bne	170$			; no
+     50	003606	005102 				com	r2			; flag it as being open please
+     51	003610	005704 				tst	r4			; wildcarded?
+     52	003612	001410 				beq	90$			; nope
+     53	003614	026727 	000000G	000001 		cmp	index	,#1		; is this the first file?
+     54	003622	001004 				bne	90$			; nope
+     55	003624					wrtall	#cm1.03			; /63/ " Files copied:",cr
+	003624	012746 	000067'			mov	#cm1.03	,-(sp)		; pass the address
+	003630	004767 	000000G			call	wrtall			; do it
+     56	003634	005701 			90$:	tst	r1			; iz binary filter active?
+     57	003636	001404 				beq	100$			; nope
+     58	003640					wrtall	#cm1.04			; /63/ "Binary file filter enabled",cr
+	003640	012746 	000110'			mov	#cm1.04	,-(sp)		; pass the address
+	003644	004767 	000000G			call	wrtall			; do it
+     59	003650	005704 			100$:	tst	r4			; more than one file possibly?
+     60	003652	001410 				beq	110$			; no, skip naming of each one
+     61	003654					wrtall	#filnam			; print the expanded name out
+	003654	012746 	000000G			mov	#filnam	,-(sp)		; pass the address
+	003660	004767 	000000G			call	wrtall			; do it
+     62	003664					wrtall	#cm1.05			; /63/ " to TT:",cr
+	003664	012746 	000155'			mov	#cm1.05	,-(sp)		; pass the address
+	003670	004767 	000000G			call	wrtall			; do it
+     63	003674				110$:	calls	open,<#0,#lun.kb,r1>	; open (init) TT for putc output
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 15-2
+The local TYPE command	; /BBS/ heavily hacked..
+
+	003674	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003676	010146 				        mov	r1	,-(sp)	; push it
+	003700	012746 	000000G			        mov	#lun.kb	,-(sp)	; push it
+	003704	012746 	000000 			        mov	#0	,-(sp)	; push it
+	003710	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003712	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	003716	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003722	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     64
+     65	003724	012700 	000000G		120$:	mov	#lun.in	,r0		; I/O chan to use
+     66	003730	004767 	000000G			call	getcr0			; get a byte
+     67	003734	005700 				tst	r0			; end of it all?
+     68	003736	001057 				bne	170$			; ya
+     69	003740	026727 	000000G	000003 		cmp	vttype	,#vt200		; can term do 8-bit stuff?
+     70	003746	002002 				bge	130$			; ya..
+     71	003750	142701 	000200 			bicb	#200	,r1		; /62/ hose hi bit for VT-100 or below
+     72	003754	120127 	000040 		130$:	cmpb	r1	,#space		; a "printable" char??
+     73	003760	002007 				bge	140$			; ya, no problem..
+     74	003762					scan	r1	,r3		; look for char in allowed list
+	003762	010346 				mov	r3	,-(sp)
+	003764	005046 				clr	-(sp)
+	003766	150116 				bisb	r1	,@sp
+	003770	004767 	000000G			call	scanch
+     75	003774	005700 				tst	r0			; a hit?
+     76	003776	001752 				beq	120$			; nope, so on to the next
+     77	004000	006267 	000000'		140$:	asr	crflag			; /62/ ya, was last byte a CR?
+     78	004004	103015 				bcc	150$			; /62/ no
+     79	004006	120127 	000012 			cmpb	r1	,#lf		; /62/ is this byte a LF?
+     80	004012	001412 				beq	150$			; /62/ ya
+     81	004014					calls	putc	,<#lf,#lun.kb>	; /62/ no, append LF to CR just typed
+	004014	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004016	012746 	000000G			        mov	#lun.kb	,-(sp)	; push it
+	004022	012746 	000012 			        mov	#lf	,-(sp)	; push it
+	004026	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004030	004767 	000000G			  jsr	pc	,putc		; and go to the routine
+	004034	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004036	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     82	004040	120127 	000015 		150$:	cmpb	r1	,#cr		; /62/ is this byte a CR?
+     83	004044	001002 				bne	160$			; /62/ no
+     84	004046	005267 	000000'			inc	crflag			; /62/ ya, flag it is
+     85	004052				160$:	calls	putc	,<r1,#lun.kb>	; put char to TT
+	004052	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004054	012746 	000000G			        mov	#lun.kb	,-(sp)	; push it
+	004060	010146 				        mov	r1	,-(sp)	; push it
+	004062	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004064	004767 	000000G			  jsr	pc	,putc		; and go to the routine
+	004070	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004072	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     86	004074	000713 				br	120$			; next char please
+     87
+     88	004076	010001 			170$:	mov	r0	,r1		; save copy for wildcard loop
+     89	004100	020027 	000000G			cmp	r0	,#er$eof	; end of file?
+     90	004104	001404 				beq	190$			; ya
+     91	004106				180$:	direrr	r0			; no, print the error out
+	004106	010046 				mov	r0	,-(sp)
+	004110	004767 	000000G			call	direr$
+     92	004114	005001 				clr	r1			; clear look for another flag
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 15-3
+The local TYPE command	; /BBS/ heavily hacked..
+
+     93	004116				190$:	calls	close	,<#lun.kb>	; flush TT out buffer
+	004116	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004120	012746 	000000G			  mov	#lun.kb	,-(sp)		; doing it thusly generates less code
+	004124	010605 				  mov	sp	,r5		; set pointer to argument list
+	004126	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	004132	005726 				  tst	(sp)+			; pop parameter list from stack
+	004134	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     94	004136	005702 				tst	r2			; is the type file open?
+     95	004140	001410 				beq	200$			; no
+     96	004142					calls	close	,<#lun.in>	; ya, close it
+	004142	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004144	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	004150	010605 				  mov	sp	,r5		; set pointer to argument list
+	004152	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	004156	005726 				  tst	(sp)+			; pop parameter list from stack
+	004160	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     97	004162	020127 	000000G		200$:	cmp	r1	,#er$eof	; try for another match?
+     98	004166	001004 				bne	210$			; nope, done
+     99	004170					.newline			; ya, put possible next file in clear
+	004170	004767 	000000G			call	l$pcrlf
+    100	004174	000167 	177220 			jmp	30$			; then go try to type it out
+    101	004200				210$:	.purge	#lun.sr			; /62/ hose dir search channel
+	004200	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	004204	104374 				EMT	^O374
+    102	004206	005000 				clr	r0			; /62/ any error was already handled
+    103	004210	000207 				return
+    104
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 16
+The local TYPE command	; /BBS/ heavily hacked..
+
+      1
+      2						.sbttl	SHOW LINE		; /BBS/ moved here, added defterm
+      3
+      4	004212	005767 	000000G		defterm::tst	infomsg			; SET TT NOQ during init?
+      5	004216	001410 				beq	10$			; no
+      6	004220					wrtall	#indnam			; ya, say
+	004220	012746 	000000G			mov	#indnam	,-(sp)		; pass the address
+	004224	004767 	000000G			call	wrtall			; do it
+      7	004230					wrtall	#cm1.01			; /63/ " closed",cr
+	004230	012746 	000043'			mov	#cm1.01	,-(sp)		; pass the address
+	004234	004767 	000000G			call	wrtall			; do it
+      8	004240	005767 	000000G		10$:	tst	signon			; need to do this?
+      9	004244	001002 				bne	20$			; no
+     10	004246	004767 	000014 			call	sho$line		; ya, SHOW LINE as part of pgm sign-on
+     11	004252	016767 	000000G	000000G	20$:	mov	qu.ini	,infomsg	; make the SET permanent
+     12	004260	005067 	000000G			clr	sy.ini			; done with this now
+     13	004264	000207 				return
+     14
+     15	004266				sho$li::wrtall	#cm1.06			; /63/ "Link device is "
+	004266	012746 	000167'			mov	#cm1.06	,-(sp)		; pass the address
+	004272	004767 	000000G			call	wrtall			; do it
+     16	004276	105767 	000000G			tstb	ttname			; something besides TT?
+     17	004302	001006 				bne	10$			; ya
+     18	004304					wrtall	#cm1.07			; /63/ "TT:   "
+	004304	012746 	000207'			mov	#cm1.07	,-(sp)		; pass the address
+	004310	004767 	000000G			call	wrtall			; do it
+     19	004314	000167 	000544 			jmp	170$			; skip speed, DTR, etc for TT
+     20
+     21	004320				10$:	wrtall	#ttname			; display link device name
+	004320	012746 	000000G			mov	#ttname	,-(sp)		; pass the address
+	004324	004767 	000000G			call	wrtall			; do it
+     22	004330	016700 	000000G			mov	cl$line	,r0		; using a TSX port with it?
+     23	004334	001406 				beq	20$			; not this time
+     24	004336					wrtall	#cm1.08			; /63/ " via Line #"
+	004336	012746 	000216'			mov	#cm1.08	,-(sp)		; pass the address
+	004342	004767 	000000G			call	wrtall			; do it
+     25	004346	004767 	000000G			call	L10266			; dump line # to TT
+     26	004352	005767 	000000G		20$:	tst	tsxsav			; running under TSX?
+     27	004356	001410 				beq	30$			; no
+     28	004360					wrtall	#cm1.09			; /63/ "   Priority: "
+	004360	012746 	000232'			mov	#cm1.09	,-(sp)		; pass the address
+	004364	004767 	000000G			call	wrtall			; do it
+     29	004370	016700 	000000G			mov	cl.pri	,r0		; pass priority value to L10266
+     30	004374	004767 	000000G			call	L10266			; dump priority to TT
+     31	004400				30$:	wrtall	#cm1.10			; /63/ "   Speed: "
+	004400	012746 	000250'			mov	#cm1.10	,-(sp)		; pass the address
+	004404	004767 	000000G			call	wrtall			; do it
+     32	004410	004767 	000000G			call	ttspeed			; is current
+     33	004414	005700 				tst	r0			; speed available?
+     34	004416	001005 				bne	40$			; /62/ yes
+     35	004420					wrtall	#cm1.11			; /63/ "N/A"
+	004420	012746 	000263'			mov	#cm1.11	,-(sp)		; pass the address
+	004424	004767 	000000G			call	wrtall			; do it
+     36	004430	000413 				br	50$
+     37	004432	004767 	000000G		40$:	call	L10266			; print the speed
+     38	004436	016700 	000000G			mov	b4speed	,r0		; did last call alter speed?
+     39	004442	001406 				beq	50$			; nope
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 16-1
+SHOW LINE		; /BBS/ moved here, added defterm
+
+     40	004444					wrtall	#cm1.12			; /63/ "/"
+	004444	012746 	000267'			mov	#cm1.12	,-(sp)		; pass the address
+	004450	004767 	000000G			call	wrtall			; do it
+     41	004454	004767 	000000G			call	L10266			; display the "SET" speed too
+     42
+     43	004460				50$:	.newline
+	004460	004767 	000000G			call	l$pcrlf
+     44	004464	005767 	000000G			tst	mready			; a modem on-line?
+     45	004470	001410 				beq	60$			; /62/ no
+     46	004472					wrtall	#modem			; ya
+	004472	012746 	000000G			mov	#modem	,-(sp)		; pass the address
+	004476	004767 	000000G			call	wrtall			; do it
+     47	004502					wrtall	#cm1.13			; /63/ " modem is on-line   "
+	004502	012746 	000271'			mov	#cm1.13	,-(sp)		; pass the address
+	004506	004767 	000000G			call	wrtall			; do it
+     48	004512	005767 	000000G		60$:	tst	sy.ini			; here for program initialization?
+     49	004516	001162 				bne	170$			; ya, skip past DTR/DCD stuff
+     50	004520					wrtall	#cm1.14			; /63/ "DTR: "
+	004520	012746 	000316'			mov	#cm1.14	,-(sp)		; pass the address
+	004524	004767 	000000G			call	wrtall			; do it
+     51	004530	004767 	000000G			call	inqdtr			; see if DTR is up
+     52	004534	005700 				tst	r0			; if < it's not supported
+     53	004536	100406 				bmi	70$			; no good
+     54	004540	003012 				bgt	80$			; DTR's up
+     55	004542					wrtall	#li.lo			; /62/ "low"
+	004542	012746 	000443'			mov	#li.lo	,-(sp)		; pass the address
+	004546	004767 	000000G			call	wrtall			; do it
+     56	004552	000411 				br	90$
+     57	004554				70$:	wrtall	#cm1.11			; /63/ "N/A"
+	004554	012746 	000263'			mov	#cm1.11	,-(sp)		; pass the address
+	004560	004767 	000000G			call	wrtall			; do it
+     58	004564	000404 				br	90$
+     59	004566				80$:	wrtall	#li.hi			; /62/ "HIGH"
+	004566	012746 	000447'			mov	#li.hi	,-(sp)		; pass the address
+	004572	004767 	000000G			call	wrtall			; do it
+     60	004576				90$:	wrtall	#cm1.15			; /63/ "   DCD: "
+	004576	012746 	000324'			mov	#cm1.15	,-(sp)		; pass the address
+	004602	004767 	000000G			call	wrtall			; do it
+     61	004606	004767 	000000G			call	inqcd			; see if DCD is up
+     62	004612	005700 				tst	r0			; if > DCD is asserted
+     63	004614	003005 				bgt	100$			; it's up
+     64	004616					wrtall	#li.lo			; /62/ "low"
+	004616	012746 	000443'			mov	#li.lo	,-(sp)		; pass the address
+	004622	004767 	000000G			call	wrtall			; do it
+     65	004626	000404 				br	110$
+     66	004630				100$:	wrtall	#li.hi			; /62/ "HIGH"
+	004630	012746 	000447'			mov	#li.hi	,-(sp)		; pass the address
+	004634	004767 	000000G			call	wrtall			; do it
+     67	004640	005001 			110$:	clr	r1			; /62/ preset to XOFF flow control
+     68	004642	005767 	000000G			tst	km.lock			; /62/ only do these next two
+     69	004646	001464 				beq	150$			; /62/ for the KM handler
+     70	004650	005046 				clr	-(sp)			; /62/ a one word buffer
+     71	004652	010601 				mov	sp	,r1		; /62/ pointer to it
+     72	004654					.spfun	#rtwork,#xc.control,#clstat,r1,#0,#1 ; get the status
+	004654	012700 	000000G			MOV	#rtwork,R0
+	004660	012710 	015000G			MOV	#xc.control+<26.*^O400>,@R0
+	004664	012760 	000001 	000002 		MOV	#1,2.(R0)
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 16-2
+SHOW LINE		; /BBS/ moved here, added defterm
+
+	004672	010160 	000004 			MOV	r1,4.(R0)
+	004676	005060 	000006 			CLR	6.(R0)
+	004702	012760 	000000C	000010 		MOV	#clstat*^O400+^O377,8.(R0)
+	004710	005060 	000012 			CLR	10.(R0)
+	004714	104375 				EMT	^O375
+     73	004716	012601 				mov	(sp)+	,r1		; /62/ pop buffer, save a copy
+     74	004720					wrtall	#cm1.16			; /63/ "   RTS: "
+	004720	012746 	000335'			mov	#cm1.16	,-(sp)		; pass the address
+	004724	004767 	000000G			call	wrtall			; do it
+     75	004730	032701 	000010 			bit	#10	,r1		; /62/ is RTS asserted?
+     76	004734	001005 				bne	120$			; /62/ ya
+     77	004736					wrtall	#li.lo			; /62/ "low"
+	004736	012746 	000443'			mov	#li.lo	,-(sp)		; pass the address
+	004742	004767 	000000G			call	wrtall			; do it
+     78	004746	000404 				br	130$
+     79	004750				120$:	wrtall	#li.hi			; /62/ "HIGH"
+	004750	012746 	000447'			mov	#li.hi	,-(sp)		; pass the address
+	004754	004767 	000000G			call	wrtall			; do it
+     80	004760				130$:	wrtall	#cm1.17			; /63/ "   CTS: "
+	004760	012746 	000346'			mov	#cm1.17	,-(sp)		; pass the address
+	004764	004767 	000000G			call	wrtall			; do it
+     81	004770	032701 	000020 			bit	#20	,r1		; /62/ is CTS asserted?
+     82	004774	001005 				bne	140$			; /62/ ya
+     83	004776					wrtall	#li.lo			; /62/ "low"
+	004776	012746 	000443'			mov	#li.lo	,-(sp)		; pass the address
+	005002	004767 	000000G			call	wrtall			; do it
+     84	005006	000404 				br	150$
+     85	005010				140$:	wrtall	#li.hi			; /62/ "HIGH"
+	005010	012746 	000447'			mov	#li.hi	,-(sp)		; pass the address
+	005014	004767 	000000G			call	wrtall			; do it
+     86
+     87	005020				150$:	.newline
+	005020	004767 	000000G			call	l$pcrlf
+     88	005024					wrtall	#cm1.18			; /63/ "Flow-Control: "
+	005024	012746 	000357'			mov	#cm1.18	,-(sp)		; pass the address
+	005030	004767 	000000G			call	wrtall			; do it
+     89	005034	032701 	000040 			bit	#40	,r1		; /62/ if <> it's done in hardware
+     90	005040	001005 				bne	160$
+     91	005042					wrtall	#cm1.19			; /63/ "XOFF/XON   "
+	005042	012746 	000376'			mov	#cm1.19	,-(sp)		; pass the address
+	005046	004767 	000000G			call	wrtall			; do it
+     92	005052	000404 				br	170$
+     93	005054				160$:	wrtall	#cm1.20			; /63/ RTS/CTS   "
+	005054	012746 	000412'			mov	#cm1.20	,-(sp)		; pass the address
+	005060	004767 	000000G			call	wrtall			; do it
+     94	005064	016700 	000000G		170$:	mov	parity	,r0		; display what's set in Kermit itself
+     95	005070					wrtall	#cm1.21			; /63/ "S/W Parity: "
+	005070	012746 	000426'			mov	#cm1.21	,-(sp)		; pass the address
+	005074	004767 	000000G			call	wrtall			; do it
+     96	005100	006300 				asl	r0			; word indexing into list
+     97	005102					wrtall	parlst(r0)		; write appropriate word to TT
+	005102	016046 	000000'			mov	parlst(r0)	,-(sp)		; pass the address
+	005106	004767 	000000G			call	wrtall			; do it
+     98	005112					.newline			; format display
+	005112	004767 	000000G			call	l$pcrlf
+     99	005116	010667 	000000G			mov	sp	,signon		; sign-on has been done
+    100	005122	005000 				clr	r0			; no error possible
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 16-3
+SHOW LINE		; /BBS/ moved here, added defterm
+
+    101	005124	000207 				return
+    102
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 17
+SHOW LINE		; /BBS/ moved here, added defterm
+
+      1
+      2						.sbttl	Cleanup before exiting to monitor	; /BBS/ enhanced
+      3
+      4	005126	004767 	000000G		c$exit::call	sd$off			; close possibly open debug file
+      5	005132	005767 	000000G			tst	outopn			; is an output file open?
+      6	005136	001410 				beq	10$			; no
+      7	005140					calls	close	,<#lun.ou>	; ya, close it
+	005140	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005142	012746 	000000G			  mov	#lun.ou	,-(sp)		; doing it thusly generates less code
+	005146	010605 				  mov	sp	,r5		; set pointer to argument list
+	005150	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	005154	005726 				  tst	(sp)+			; pop parameter list from stack
+	005156	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      8	005160	016746 	000000G		10$:	mov	mready	,-(sp)		; save modem status
+      9	005164	004767 	000000G			call	c$idle			; reset modem, if need be..
+     10	005170	005726 				tst	(sp)+			; was there a modem?
+     11	005172	001412 				beq	20$			; nope
+     12	005174					calls	suspend	,<#0,settle>	; ya, let it settle
+	005174	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005176	016746 	000000G			        mov	settle	,-(sp)	; push it
+	005202	012746 	000000 			        mov	#0	,-(sp)	; push it
+	005206	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005210	004767 	000000G			  jsr	pc	,suspend		; and go to the routine
+	005214	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	005216	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13	005220	004767 	000000G		20$:	call	xl.dump			; drop DTR, handler interrupts
+     14	005224	005767 	000000G			tst	tsxcl			; using a CL line?
+     15	005230	001402 				beq	30$			; no
+     16	005232	004767 	000000G			call	cl.dump			; dump it
+     17	005236	000167 	000000G		30$:	jmp	exit			; goto hardware reset in KRTRMS
+     18
+     19		000001 				.end
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 17-1
+Symbol table
+
+ALLOER= ****** GX	CM1.19  000376R     003	ER$142= ****** GX	MAXLNG= 001130   	SOH   = 000001
+ALSIZE= 001000   	CM1.20  000412R     003	ER$143= ****** GX	MAXPAK  000136   	SPACE = 000040
+ARGBUF= ****** GX	CM1.21  000426R     003	ER$144= ****** GX	MODEM = ****** GX	SPARE0= ****** GX
+ATTCL = ****** GX	COMMA = 000054   	ER$145= ****** GX	MORE    000471R     003	SPH$XM= ****** GX
+ATTERR= ****** GX	CON$ES= 000034   	ER$146= ****** GX	MOUNT = ****** GX	SRCNAM= ****** GX
+AT.ALL  000177   	COPYZ$= ****** GX	ER$147= ****** GX	MREADY= ****** GX	STRCAT= ****** GX
+AT.CDT  000001   	CR    = 000015   	ESC   = 000033   	NONEIS= 000001   	STRCPY= ****** GX
+AT.INF  000002   	CRFLAG  000000R     004	EXIT  = ****** GX	NOSCOP= 000000   	SUCCS$= 000001
+AT.LEN  000004   	CTRL$N= 000016   	EXSTAL= ****** GX	OPEN  = ****** GX	SUMMAR= ****** GX
+AT.ON   100000   	CTRL$O= 000017   	FATAL$= 000020   	OUTOPN= ****** GX	SUSPEN= ****** GX
+AT.PRO  000010   	C$CONN  002310RG    002	FATERR= ****** GX	PARITY= ****** GX	SY.INI= ****** GX
+AT.SYS  000020   	C$DIR   003124RG    002	FF    = 000014   	PARLST  000000R     003	TAB   = 000011
+AT.TYP  000040   	C$DISM  003210RG    002	FILNAM= ****** GX	PAR$EV  000002   	TAKDEF  000454RG    003
+AT.XLE  000100   	C$EXIT  005126RG    002	FIXWIL= ****** GX	PAR$MA  000003   	TERMIN  177777
+BELL  = 000007   	C$IDLE= ****** GX	FPARSE= ****** GX	PAR$NO  000000   	TEXT    000000
+BINARY  000001   	C$MOUN  003214RG    002	GETCM0= ****** GX	PAR$OD  000001   	TILDE = 000176
+BS    = 000010   	C$SET   000000RG    002	GETCM1= ****** GX	PAR$SP  000004   	TK.0    000004R     004
+B4SPEE= ****** GX	C$SPAC  003120RG    002	GETCR0= ****** GX	PORTS = ****** GX	TK.1    000016R     004
+CAPA.A= 000010   	C$TAKE  002402RG    002	INCSTS= ****** GX	PUTC  = ****** GX	TSXCL = ****** GX
+CAPA.L= 000002   	C$TYPE  003270RG    002	INDEX = ****** GX	P$MUL = ****** GX	TSXSAV= ****** GX
+CAPA.S= 000004   	C.CRLF= 000004   	INDNAM= ****** GX	P.CAPA= 000011   	TSXVER= ****** GX
+CHKEXT= ****** GX	C.LCUC= 000040   	INFOMS= ****** GX	P.CHKT= 000007   	TTNAME= ****** GX
+CLOSE = ****** GX	C.LSPA= 000010   	INQCD = ****** GX	P.EOL = 000004   	TTSPEE= ****** GX
+CLSTAT= ****** GX	C.MNT   003216R     002	INQDTR= ****** GX	P.MXL1= 000013   	TTY   = 000001
+CL$LIN= ****** GX	C.SSPA= 000020   	ISITCL  000422R     002	P.MXL2= 000014   	TYPDEF  000461R     003
+CL.DUM= ****** GX	C.TSPA= 000200   	ISWILD= ****** GX	P.NPAD= 000002   	T10$    000030R     004
+CL.LIN= ****** GX	DECNAT  000002   	ITSMIN  000002R     004	P.PADC= 000003   	T20$    000034R     004
+CL.NAM  000132R     004	DEFTER  004212RG    002	JSW   = 000044   	P.QBIN= 000006   	T30$    000051R     004
+CL.PRI= ****** GX	DEL   = 000177   	KM.LOC= ****** GX	P.QCTL= 000005   	T40$    000055R     004
+CL.R50= ****** GX	DIRER$= ****** GX	KRTINC= 000001   	P.REPT= 000010   	T50$    000072R     004
+CL.UNI= ****** GX	DOCONN= ****** GX	LASTCM= ****** GX	P.SPSI= 000000   	T60$    000075R     004
+CL.WIL  001316R     002	DODIR = ****** GX	LESS    000466R     003	P.TIME= 000001   	T70$    000112R     004
+CMDLUN= ****** GX	DOT   = 000056   	LF    = 000012   	P.VEND= 000017   	T80$    000115R     004
+CMD$AB= ****** GX	D.ALLO= ****** GX	LI.HI   000447R     003	P.WIND= 000012   	UNITS = ****** GX
+CMD$BA= ****** GX	ERBFSI= 000170   	LI.LO   000443R     003	P00$    000012R     003	UPCASE= ****** GX
+CMD$EX= ****** GX	ERRBYT= 000052   	LN$CNT= 000003   	P10$    000017R     003	UPONE = ****** GX
+CMD$NX= ****** GX	ERROR$= 000004   	LN$MAX= 000120   	P20$    000023R     003	USERRB= 000053
+CMD$UN= ****** GX	ER$AOP= ****** GX	LOASET= ****** GX	P30$    000030R     003	VTTYPE= ****** GX
+CM1.01  000043R     003	ER$BAD= ****** GX	LOG$AL= 000003   	P40$    000035R     003	VT100 = 000002
+CM1.02  000055R     003	ER$EOF= ****** GX	LOG$CO= 000002   	QU.INI= ****** GX	VT200 = 000003
+CM1.03  000067R     003	ER$FNF= ****** GX	LOG$DE= 000020   	REINIT= ****** GX	WARN$ = 000002
+CM1.04  000110R     003	ER$NMF= ****** GX	LOG$IO= 000010   	RESTOF= ****** GX	WASNUL= ****** GX
+CM1.05  000155R     003	ER$OWN= ****** GX	LOG$ON= 040000   	RTWORK= ****** GX	WRTALL= ****** GX
+CM1.06  000167R     003	ER$PRI= ****** GX	LOG$OP= 100000   	R50DEV= ****** GX	XC.CON= ****** GX
+CM1.07  000207R     003	ER$SAM= ****** GX	LOG$PA= 000001   	SCANCH= ****** GX	XL.DUM= ****** GX
+CM1.08  000216R     003	ER$SUN= ****** GX	LOG$RP= 000004   	SCOLON= 000073   	XOFF  = 000023
+CM1.09  000232R     003	ER$TSX= ****** GX	LOOKUP= ****** GX	SD$OFF= ****** GX	XON   = 000021
+CM1.10  000250R     003	ER$TT = ****** GX	LUN.IN= ****** GX	SETSPD= ****** GX	Z.ATCH= ****** GX
+CM1.11  000263R     003	ER$V62= ****** GX	LUN.KB= ****** GX	SETTLE= ****** GX	$ALLSI= 001144
+CM1.12  000267R     003	ER$122= ****** GX	LUN.OU= ****** GX	SET$LI= ****** GX	$$    = 000002
+CM1.13  000271R     003	ER$123= ****** GX	LUN.SR= ****** GX	SET$MO= ****** GX	$$1   = 000001
+CM1.14  000316R     003	ER$124= ****** GX	LUN.TA= ****** GX	SEVER$= 000010   	$$2   = 000000
+CM1.15  000324R     003	ER$137= ****** GX	L$LEN = ****** GX	SHO$LI  004266RG    002	$$5   = 000027
+CM1.16  000335R     003	ER$140= ****** GX	L$PCRL= ****** GX	SIGNON= ****** GX	...V1 = 000003
+CM1.17  000346R     003	ER$141= ****** GX	L10266= ****** GX	SKIPIT  000350RG    002	...V2 = 000027
+CM1.18  000357R     003
+
+KRTCM1	Misc commands overlay	MACRO V05.03b  00:01  Page 17-2
+Symbol table
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	005242    002	(RO,I,LCL,REL,CON)
+$PDATA	000504    003	(RO,D,LCL,REL,CON)
+$RWDAT	000140    004	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 30
+Work  file writes: 33
+Size of work file: 14304 Words  ( 56 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.38
+KRTCM1,KRTCM1=KRTNHD,KRTCM1

@@ -1,0 +1,1589 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    6-   4	Local data
+    7-   3	BASIC+ CVT$$ function	; /62/ unused functions pulled..
+    8-   2	Get length of .asciz string
+    9-   2	Write a right justified decimal number to TT
+   10-   2	The real number conversion subroutine
+   11-   2	Simple (non-wildcarded) string comparison
+   12-   2	Convert rad50 word to 3 ascii bytes
+   13-   2	16-bit integer to ascii conversion routines	; /BBS/
+   14-   2	32-bit integer to ascii from RSX SYSLIB.OLB
+   15-   2	Decimal ascii to integer	; /BBS/ made this unsigned..
+   16-   2	Octal ascii to integer
+   17-   2	Integer to ascii octal conversion
+   18-   2	Write integer in (r5) to TT as octal number
+   19-   2	Copy an .asciz string
+   20-   2	STRCAT and STRCPY
+   21-   2	Control or uncontrol a char
+   22-   2	Scan a string for a character
+   23-   2	Upper case one arg, or all of them  ; /BBS/ added
+   24-   2	Integer to decimal ascii conversion  ; /BBS/ added
+   25-   2	Unformat a string, inverse of PRSARG
+   26-   4	MUL for a non-EIS CPU	; /BBS/ rewrote this ..
+   27-   2	DIV for a non-EIS CPU	; /BBS/ moved here + commented this..
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTSUB	Commonly used subroutines
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	move unfmts here so KRTMDM can live in KRTCVT's overlay ...
+      7
+      8					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      9					;
+     10					;	remove unused code to save memory
+     11
+     12					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     13					;
+     14					;	added a couple upper case routines
+     15					;	moved itoa here
+     16					;	add support for non-EIS CPUs
+     17
+     18					;	Brian Nelson  01-Dec-83  13:19:14
+     19					;
+     20					;	Copyright 1983 Change Software, Inc.
+     21					;
+     22					;	This software is furnished under a license and may
+     23					;	be  used  and  copied  only in accordance with the
+     24					;	terms of such license and with  the  inclusion  of
+     25					;	the  above copyright notice.  This software or any
+     26					;	other copies thereof may not be provided or other-
+     27					;	wise made available to any other person.  No title
+     28					;	to and ownership of the software is hereby  trans-
+     29					;	ferred.
+     30					;
+     31					;	The information in this  software  is  subject  to
+     32					;	change  without notice and should not be construed
+     33					;	as a commitment by the author.
+     34
+     35
+     36						.include "IN:KRTMAC.MAC"
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3
+      4						.sbttl	Local data
+      5
+      6	000000					.psect	$pdata		; /63/ consolidate local data
+      7	000000	001750 	000144 		X4$:	.word	1000., 100.	; do "thousands," "hundreds," then..
+      8	000004	000012 	000001 	000000 	X2$:	.word	10., 1., 0	; do "tens," "ones," null terminator
+      9	000012	   015 	   012 	   014 	junkch:	.byte	cr ,lf ,ff ,esc	; for the c.crlf option
+     10	000016	   000 				.byte	0		; terminator
+     11	000017	   040 	   101 	   102 	radchr:	.ascii	" ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789"
+     12						.even
+     13
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 7
+Local data
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	BASIC+ CVT$$ function	; /62/ unused functions pulled..
+      4
+      5					;	calls	cvt$$	,<addr(input),len(input),val(cvt_bit_pattern)>
+      6					;
+      7					;	returns:  addr(input)	= trimmed string
+      8					;		    r0		= length of what's left
+      9
+     10						; supported cvt_bit_pattern bits
+     11		000004 				C.CRLF	=	4	; discard CR LF FF ESC
+     12		000010 				C.LSPA	=	10	; discard leading spaces and tabs
+     13		000020 				C.SSPA	=	20	; reduce spaces and tabs to a single space
+     14		000040 				C.LCUC	=	40	; convert lower case to upper case
+     15		000200 				C.TSPA	=	200	; discard trailing spaces and tabs
+     16
+     17						; offsets into local work space on stack
+     18		000000 				PAT	=	0	; cvt_bit_pattern
+     19		000002 				LASTCH	=	2	; last character
+     20		000004 				SADDR	=	4	; string address
+     21		000006 				LSIZE	=	6	; work space size (for the above 3 words)
+     22
+     23	000000				cvt$$::	save	<r1,r2,r3,r4,r5>
+	000000	010146 				 mov	r1	,-(sp)
+	000002	010246 				 mov	r2	,-(sp)
+	000004	010346 				 mov	r3	,-(sp)
+	000006	010446 				 mov	r4	,-(sp)
+	000010	010546 				 mov	r5	,-(sp)
+     24	000012	162706 	000006 			sub	#lsize	,sp		; allocate some work space
+     25	000016	010604 				mov	sp	,r4		; point to it
+     26	000020	012502 				mov	(r5)+	,r2		; the string address for output
+     27	000022	010264 	000004 			mov	r2	,saddr(r4)	; and save it for a while
+     28	000026	012501 				mov	(r5)+	,r1		; get the string length also
+     29	000030	012564 	000000 			mov	(r5)+	,pat(r4)	; and finally the bit pattern
+     30	000034	105064 	000002 			clrb	lastch(r4)		; no previous character please
+     31	000040	010205 				mov	r2	,r5		; where to get the input string
+     32	000042	005701 				tst	r1			; the length
+     33	000044	001476 				beq	90$			; nothing to do
+     34
+     35	000046	005003 			10$:	clr	r3			; avoid the movb sxt please
+     36	000050	152503 				bisb	(r5)+	,r3		; get the next character
+     37
+     38	000052	032764 	000010 	000000 		bit	#c.lspa	,pat(r4)	; how about removing spaces and tabs?
+     39	000060	001021 				bne	30$			; if ne, yes
+     40
+     41	000062	032764 	000020 	000000 		bit	#c.sspa	,pat(r4)	; embedded tabs/spaces = just a space?
+     42	000070	001426 				beq	40$			; no
+     43	000072	120327 	000011 			cmpb	r3	,#tab		; yes, if this char is a tab
+     44	000076	001002 				bne	20$			; then make it into
+     45	000100	112703 	000040 			movb	#space	,r3		; a space first please
+     46	000104	126427 	000002 	000040 	20$:	cmpb	lastch(r4),#space	; was the last char a space?
+     47	000112	001404 				beq	30$			; or a tab?
+     48	000114	126427 	000002 	000011 		cmpb	lastch(r4),#tab		; please check both
+     49	000122	001011 				bne	40$			; no
+     50	000124	120327 	000040 		30$:	 cmpb	r3	,#space		; is the current character a space?
+     51	000130	001440 				 beq	80$			; /62/ no
+     52	000132	120327 	000011 			 cmpb	r3	,#tab		; not a space, try a horizontal tab
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 7-1
+BASIC+ CVT$$ function	; /62/ unused functions pulled..
+
+     53	000136	001435 				 beq	80$			; /62/ char was a tab, ignore it
+     54	000140	042764 	000010 	000000 		  bic	#c.lspa	,pat(r4)	; for leading spaces and tabs
+     55
+     56	000146	032764 	000004 	000000 	40$:	bit	#c.crlf	,pat(r4)	; ignore FF, ESC, CR, LF?
+     57	000154	001411 				beq	60$			; no
+     58
+     59	000156	012700 	000012'			mov	#junkch	,r0		; ya, get the address of the spec
+     60	000162	105703 				tstb	r3			; is the current char a null?
+     61	000164	001422 				beq	80$			; yes, please skip it then
+     62	000166	105710 			50$:	tstb	@r0			; anything left in the list?
+     63	000170	001403 				beq	60$			; no
+     64	000172	120320 				cmpb	r3	,(r0)+		; see if we have a match
+     65	000174	001416 				beq	80$			; /62/ if so, we will skip the char
+     66	000176	000773 				br	50$			; no, next check please
+     67
+     68	000200	032764 	000040 	000000 	60$:	bit	#c.lcuc	,pat(r4)	; how about converting lower
+     69	000206	001410 				beq	70$			; case to upper case?
+     70	000210	120327 	000172 			cmpb	r3	,#'z!40		; try against a lower case "z"
+     71	000214	101005 				bhi	70$			; it's higher than that
+     72	000216	120327 	000141 			cmpb	r3	,#'a!40		; if less than a lower z, try
+     73	000222	103402 				blo	70$			; against a lower case "a"
+     74	000224	142703 	000040 			 bicb	#40	,r3		; char is in range, translate
+     75
+     76	000230	110322 			70$:	movb	r3	,(r2)+		; if all ok, return the char
+     77	000232	110364 	000002 		80$:	movb	r3	,lastch(r4)	; please save the last char
+     78	000236	005301 				dec	r1			; and go back
+     79	000240	003302 				bgt	10$			; for some more
+     80
+     81	000242	010200 			90$:	mov	r2	,r0		; current pointer
+     82	000244	166400 	000004 			sub	saddr(r4),r0		; return the length of what's left
+     83	000250	003417 				ble	120$			; nothing left to do
+     84	000252	032764 	000200 	000000 		bit	#c.tspa	,pat(r4)	; remove trailing blanks?
+     85	000260	001413 				beq	120$			; no
+     86	000262	016401 	000004 			mov	saddr(r4),r1		; address of the string
+     87	000266	060001 				add	r0	,r1		; point to end of string+1
+     88	000270	124127 	000040 		100$:	cmpb	-(r1)	,#space		; try for a space first
+     89	000274	001403 				beq	110$			; found one..
+     90	000276	121127 	000011 			cmpb	(r1)	,#tab		; not a space, try a tab
+     91	000302	001002 				bne	120$			; not a tab
+     92	000304				110$:	sob	r0	,100$		; tab or space, check next
+	000304	005300 				dec	r0
+	000306	001370 				bne	100$
+     93	000310	062706 	000006 		120$:	add	#lsize	,sp		; pop small work area
+     94	000314					unsave	<r5,r4,r3,r2,r1>
+	000314	012605 				 mov	(sp)+	,r5
+	000316	012604 				 mov	(sp)+	,r4
+	000320	012603 				 mov	(sp)+	,r3
+	000322	012602 				 mov	(sp)+	,r2
+	000324	012601 				 mov	(sp)+	,r1
+     95	000326	000207 				return
+     96
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 8
+BASIC+ CVT$$ function	; /62/ unused functions pulled..
+
+      1
+      2						.sbttl	Get length of .asciz string
+      3
+      4					;	input:	 r0	= address of .asciz string
+      5					;	output:	 r0	= length of it
+      6
+      7	000330	010046 			l$len::	mov	r0	,-(sp)		; save start address to calc length
+      8	000332	105720 			10$:	tstb	(r0)+			; look for a null character
+      9	000334	001376 				bne	10$			; this wasn't it, keep going
+     10	000336	162600 				sub	(sp)+	,r0		; subtract start address from current
+     11	000340	005300 				dec	r0			; pointer less 1 returns the length
+     12	000342	000207 				return
+     13
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 9
+Get length of .asciz string
+
+      1
+      2						.sbttl	Write a right justified decimal number to TT
+      3
+      4		000006 				DFWIDTH	= 6			; default width
+      5
+      6					;	input:   (r5)	= number to write
+      7
+      8	000344				l$wrdec::save	<r1,r4,r5>
+	000344	010146 				 mov	r1	,-(sp)
+	000346	010446 				 mov	r4	,-(sp)
+	000350	010546 				 mov	r5	,-(sp)
+      9	000352	012701 	000006 			mov	#dfwidth,r1		; the width
+     10	000356	010104 				mov	r1	,r4		; save for a moment
+     11	000360	062701 	000006 			add	#6	,r1		; make it round up to even number
+     12	000364	042701 	000001 			bic	#1	,r1		; at last...
+     13	000370	010446 				mov	r4	,-(sp)		; /62/ the field width please
+     14	000372	011546 				mov	@r5	,-(sp)		; and the number to print out
+     15	000374	010605 				mov	sp	,r5		; setup the parameter list address
+     16	000376	005745 				tst	-(r5)			; make room for the buffer on
+     17	000400	160106 				sub	r1	,sp		; the stack
+     18	000402	010615 				mov	sp	,@r5		; insert the buffer address
+     19	000404	004767 	000030 			call	l$cvtnum		; and convert the number
+     20	000410	061504 				add	(r5)	,r4		; find end of buffer
+     21	000412	105014 				clrb	(r4)			; null terminate
+     22	000414					wrtall	(r5)			; print it out
+	000414	011546 				mov	(r5)	,-(sp)		; pass the address
+	000416	004767 	000000G			call	wrtall			; do it
+     23	000422	060106 				add	r1	,sp		; pop buffer
+     24	000424	022626 				cmp	(sp)+	,(sp)+		; pop width and number buffers
+     25	000426					unsave	<r5,r4,r1>
+	000426	012605 				 mov	(sp)+	,r5
+	000430	012604 				 mov	(sp)+	,r4
+	000432	012601 				 mov	(sp)+	,r1
+     26	000434	012616 				mov	(sp)+	,(sp)		; put return address where number was
+     27	000436	000207 				return
+     28
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 10
+Write a right justified decimal number to TT
+
+      1
+      2						.sbttl	The real number conversion subroutine
+      3
+      4					;	input:	 (r5)	= buffer address
+      5					;		2(r5)	= value to print, string will be right justified
+      6					;		4(r5)	= field width, if zero will be set to dfwidth
+      7
+      8	000440				l$cvtnum::save	<r0,r1,r2,r3,r4>
+	000440	010046 				 mov	r0	,-(sp)
+	000442	010146 				 mov	r1	,-(sp)
+	000444	010246 				 mov	r2	,-(sp)
+	000446	010346 				 mov	r3	,-(sp)
+	000450	010446 				 mov	r4	,-(sp)
+      9	000452	011502 				mov	(r5)	,r2		; the buffer address to use
+     10	000454	016503 	000004 			mov	4(r5)	,r3		; the field width to use
+     11	000460	003002 				bgt	10$			; non-zero
+     12	000462	012703 	000006 			 mov	#dfwidth,r3		; zero, use default width
+     13	000466	010301 			10$:	mov	r3	,r1		; put it here to clear buffer
+     14	000470	112722 	000040 		20$:	movb	#space	,(r2)+		; fill the buffer with blanks
+     15	000474					sob	r1	,20$		; for "width" number of chars
+	000474	005301 				dec	r1
+	000476	001374 				bne	20$
+     16	000500	010304 				mov	r3	,r4		; save buffer size also
+     17	000502	016501 	000002 			mov	2(r5)	,r1		; get the value to print out
+     18	000506	100001 				bpl	30$			; it's a positive number
+     19	000510	005401 				 neg	r1			; it wasn't positive, but it is now..
+     20	000512	005000 			30$:	clr	r0			; set up for the divide by 10
+     21	000514					div	#10.	,r0		; remainder in r1, quotient r0
+	000514	012746 	000012 			mov	#10.	,-(sp)		; divisor
+	000520	010146 				mov	r1	,-(sp)		; dividend low word
+	000522	010046 				mov	r0	,-(sp)		; dividend high word
+	000524	004767 	002104 			call	p$div			; divide
+	000530	012601 				mov	(sp)+	,r1		; remainder
+	000532	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     22	000534	062701 	000060 			add	#'0	,r1		; convert remainder to character
+     23	000540	020215 				cmp	r2	,@r5		; overflowed the buffer at all?
+     24	000542	001417 				beq	50$			; yes, get out of here!
+     25	000544	110142 				movb	r1	,-(r2)		; and return the character now
+     26	000546	010001 				mov	r0	,r1		; copy the quotient
+     27	000550	001404 				beq	40$			; it was zero
+     28	000552					sob	r3	,30$		; more to do, go back for it
+	000552	005303 				dec	r3
+	000554	001356 				bne	30$
+     29	000556	005701 				tst	r1			; something left over by chance?
+     30	000560	001010 				bne	50$			; yes, that's a definite error
+     31	000562	005765 	000002 		40$:	tst	2(r5)			; was this a negative number?
+     32	000566	100007 				bpl	60$			; /62/ no, exit
+     33	000570	020215 				cmp	r2	,@r5		; yes, room left for a "-" sign?
+     34	000572	001403 				beq	50$			; no, flag an error please
+     35	000574	112742 	000055 			 movb	#'-	,-(r2)		; yes, insert a minus symbol
+     36	000600	000402 				br	60$
+     37	000602	112712 	000052 		50$:	movb	#'*	,@r2		; field overflow, place a "*" in
+     38	000606				60$:	unsave	<r4,r3,r2,r1,r0>	; beginning of the buffer
+	000606	012604 				 mov	(sp)+	,r4
+	000610	012603 				 mov	(sp)+	,r3
+	000612	012602 				 mov	(sp)+	,r2
+	000614	012601 				 mov	(sp)+	,r1
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 10-1
+The real number conversion subroutine
+
+	000616	012600 				 mov	(sp)+	,r0
+     39	000620	000207 				return
+     40
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 11
+The real number conversion subroutine
+
+      1
+      2						.sbttl	Simple (non-wildcarded) string comparison
+      3
+      4					;	input:   (r5)	= address of the first string
+      5					;		2(r5)	= length of the first string
+      6					;		4(r5)	= address of the second string, the one to find
+      7					;		6(r5)	= length of the second string
+      8					;	output:   r0	if > 0 then r0=position of second in first
+      9					;			if = 0 the second is not a substring
+     10
+     11	000622				instr::	save	<r1,r2,r3,r4>
+	000622	010146 				 mov	r1	,-(sp)
+	000624	010246 				 mov	r2	,-(sp)
+	000626	010346 				 mov	r3	,-(sp)
+	000630	010446 				 mov	r4	,-(sp)
+     12	000632	011500 				mov	(r5)	,r0		; address of first string
+     13	000634	016501 	000004 			mov	4(r5)	,r1		; address of second one
+     14	000640	016502 	000006 			mov	6(r5)	,r2		; length of second one
+     15	000644	003435 				ble	60$			; a null string..
+     16	000646	016504 	000002 			mov	2(r5)	,r4		; the length of first
+     17	000652	003432 				ble	60$			; a null string..
+     18	000654	160204 				sub	r2	,r4		; convert to looping counter
+     19	000656	005003 				clr	r3			; the real loop counter
+     20
+     21	000660	020304 			10$:	cmp	r3	,r4		; are we done yet?
+     22	000662	003026 				bgt	60$			; yes, if r3 > r4
+     23
+     24	000664	122011 				  cmpb	(r0)+	,(r1)		; see if current character in
+     25	000666	001022 				  bne	50$			; matches first one in second
+     26
+     27	000670					    save	<r0,r1,r2>	; found first character match
+	000670	010046 				 mov	r0	,-(sp)
+	000672	010146 				 mov	r1	,-(sp)
+	000674	010246 				 mov	r2	,-(sp)
+     28	000676	005201 				    inc	r1			; point to the next character
+     29	000700	005302 				    dec	r2			; length of pattern thats left
+     30	000702	003404 				    ble	30$			; in case the len(pattern)=1
+     31
+     32	000704	122021 			20$:	    cmpb	(r0)+ , (r1)+	; check the rest of the pattern
+     33	000706	001007 				    bne	40$			; not a match..
+     34	000710					    sob	r2	,20$		; loop for len(pattern)-1
+	000710	005302 				dec	r2
+	000712	001374 				bne	20$
+     35	000714	010300 			30$:	    mov	r3	,r0		; the current loop count
+     36	000716	005200 				    inc	r0			; point to the next character
+     37	000720	062706 	000006 			    add	#6	,sp		; fix the stack from save <r0,r1,r2>
+     38	000724	000406 				    br	70$
+     39
+     40	000726				40$:	    unsave	<r2,r1,r0>	; the match failed, restore the
+	000726	012602 				 mov	(sp)+	,r2
+	000730	012601 				 mov	(sp)+	,r1
+	000732	012600 				 mov	(sp)+	,r0
+     41	000734	005203 			50$:	  inc	r3			; pointers and go try the next
+     42	000736	000750 				br	10$			; character in the first string
+     43
+     44	000740	005000 			60$:	clr	r0			; no match
+     45	000742				70$:	unsave	<r4,r3,r2,r1>
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 11-1
+Simple (non-wildcarded) string comparison
+
+	000742	012604 				 mov	(sp)+	,r4
+	000744	012603 				 mov	(sp)+	,r3
+	000746	012602 				 mov	(sp)+	,r2
+	000750	012601 				 mov	(sp)+	,r1
+     46	000752	000207 				return
+     47
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 12
+Simple (non-wildcarded) string comparison
+
+      1
+      2						.sbttl	Convert rad50 word to 3 ascii bytes
+      3
+      4					;	input:	 (r5)	= address of where to put ascii chars
+      5					;		2(r5)	= the value of rad 50 word
+      6
+      7	000754				rdtoa::	save	<r0,r1,r3>
+	000754	010046 				 mov	r0	,-(sp)
+	000756	010146 				 mov	r1	,-(sp)
+	000760	010346 				 mov	r3	,-(sp)
+      8	000762	016501 	000002 			mov	2(r5)	,r1		; go get the rad50 character
+      9	000766	011503 				mov	(r5)	,r3		; where to put the characters
+     10	000770	005000 				clr	r0			; prepare for divide
+     11	000772					div	#50*50	,r0		; get first char
+	000772	012746 	003100 			mov	#50*50	,-(sp)		; divisor
+	000776	010146 				mov	r1	,-(sp)		; dividend low word
+	001000	010046 				mov	r0	,-(sp)		; dividend high word
+	001002	004767 	001626 			call	p$div			; divide
+	001006	012601 				mov	(sp)+	,r1		; remainder
+	001010	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     12	001012	116023 	000017'			movb	radchr(r0),(r3)+	; put in buffer
+     13	001016	005000 				clr	r0			; another divide
+     14	001020					div	#50	,r0		; this one gives char 2
+	001020	012746 	000050 			mov	#50	,-(sp)		; divisor
+	001024	010146 				mov	r1	,-(sp)		; dividend low word
+	001026	010046 				mov	r0	,-(sp)		; dividend high word
+	001030	004767 	001600 			call	p$div			; divide
+	001034	012601 				mov	(sp)+	,r1		; remainder
+	001036	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     15	001040	116023 	000017'			movb	radchr(r0),(r3)+	; put this in buffer
+     16	001044	116123 	000017'			movb	radchr(r1),(r3)+	; and also char 3
+     17	001050					unsave	<r3,r1,r0>
+	001050	012603 				 mov	(sp)+	,r3
+	001052	012601 				 mov	(sp)+	,r1
+	001054	012600 				 mov	(sp)+	,r0
+     18	001056	000207 				return
+     19
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 13
+Convert rad50 word to 3 ascii bytes
+
+      1
+      2						.sbttl	16-bit integer to ascii conversion routines	; /BBS/
+      3
+      4	001060	010046 			L10012::MOV	R0	,-(SP)	; convert integer in r0
+      5	001062	005000 				CLR	R0		; to ascii in buffer @r1
+      6	001064	005200 			L10016:	INC	R0
+      7	001066	162716 	000012 			SUB	#12	,(SP)
+      8	001072	103374 				BCC	L10016
+      9	001074	062716 	000072 			ADD	#72	,(SP)
+     10	001100	005300 				DEC	R0
+     11	001102	001402 				BEQ	L10042
+     12	001104	004767 	177750 			JSR	PC	,L10012
+     13	001110	112621 			L10042:	MOVB	(SP)+	,(R1)+	; r1 is left at end of the string on exit..
+     14	001112	000207 				RTS	PC
+     15
+     16	001114	010046 			L10266::MOV	R0	,-(SP)	; print integer in r0
+     17	001116	005000 				CLR	R0		; as decimal number on TT
+     18	001120	005200 			L10272:	INC	R0
+     19	001122	162716 	000012 			SUB	#12	,(SP)
+     20	001126	103374 				BCC	L10272
+     21	001130	062716 	000072 			ADD	#72	,(SP)
+     22	001134	005300 				DEC	R0
+     23	001136	001402 				BEQ	L10316
+     24	001140	004767 	177750 			JSR	PC	,L10266
+     25	001144	112600 			L10316:	MOVB	(SP)+	,R0
+     26	001146	000167 	000000G			jmp	writ1ch
+     27
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 14
+16-bit integer to ascii conversion routines	; /BBS/
+
+      1
+      2						.sbttl	32-bit integer to ascii from RSX SYSLIB.OLB
+      3
+      4					;	clr	r2			; suppress leading 0s in $CDDMG output
+      5					;	mov	#xblock	,r1		; address of 32-bit (two words) number
+      6					;	mov	#sizbuf	,r0		; address of ascii output buff
+      7					;	call	$cddmg			; convert 32-bit integer to ascii
+      8					;	clrb	@r0			; null terminate the ascii string
+      9
+     10	001152	004567 	000304 		$CDDMG::JSR	R5	,$SAVRG
+     11	001156	010003 				MOV	R0	,R3
+     12	001160	012704 	023420 			MOV	#23420	,R4
+     13	001164	012705 	000012 			MOV	#12	,R5
+     14	001170	005702 				TST	R2
+     15	001172	001401 				BEQ	C00024
+     16	001174	052705 	001000 		C00022:	BIS	#1000	,R5
+     17		001176'			C00024=	C00022+2
+     18	001200	021104 				CMP	(R1)	,R4
+     19	001202	103033 				BCC	C00104
+     20	001204	012100 				MOV	(R1)+	,R0
+     21	001206	011101 				MOV	(R1)	,R1
+     22	001210					DIV	R4	,R0
+	001210	010446 				mov	R4	,-(sp)		; divisor
+	001212	010146 				mov	r1	,-(sp)		; dividend low word
+	001214	010046 				mov	r0	,-(sp)		; dividend high word
+	001216	004767 	001412 			call	p$div			; divide
+	001222	012601 				mov	(sp)+	,r1		; remainder
+	001224	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     23	001226	010146 				MOV	R1	,-(SP)
+     24	001230	010001 				MOV	R0	,R1
+     25	001232	001407 				BEQ	C00064
+     26	001234	012702 	024000 			MOV	#24000	,R2
+     27	001240	004767 	000014 			CALL	C00072
+     28	001244	052705 	001000 			BIS	#1000	,R5
+     29	001250	010003 				MOV	R0	,R3
+     30	001252	012601 			C00064:	MOV	(SP)+	,R1
+     31	001254	012702 	020000 			MOV	#20000	,R2
+     32	001260	010300 			C00072:	MOV	R3	,R0
+     33	001262	050502 				BIS	R5	,R2
+     34	001264	004767 	000020 			CALL	$CBTA
+     35	001270	000406 				BR	C00116
+     36	001272	012702 	000005 		C00104:	MOV	#5	,R2
+     37	001276	112720 	000052 		C00110:	MOVB	#52	,(R0)+
+     38	001302					SOB	R2	,C00110
+	001302	005302 				dec	R2
+	001304	001374 				bne	C00110
+     39	001306	000207 			C00116:	RETURN
+     40
+     41	001310	004567 	000146 		$CBTA:	JSR	R5	,$SAVRG
+     42	001314	110205 				MOVB	R2	,R5
+     43	001316	105002 				CLRB	R2
+     44	001320	000302 				SWAB	R2
+     45	001322	006202 				ASR	R2
+     46	001324	103005 				BCC	E00134
+     47	001326	005701 				TST	R1
+     48	001330	100003 				BPL	E00134
+     49	001332	005401 				NEG	R1
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 14-1
+32-bit integer to ascii from RSX SYSLIB.OLB
+
+     50	001334	112720 	000055 			MOVB	#55	,(R0)+
+     51	001340	010004 			E00134:	MOV	R0	,R4
+     52	001342	006002 				ROR	R2
+     53	001344	006002 				ROR	R2
+     54	001346	006003 				ROR	R3
+     55	001350	105003 				CLRB	R3
+     56	001352	150203 				BISB	R2	,R3
+     57	001354	105002 				CLRB	R2
+     58	001356	152702 	000060 			BISB	#60	,R2
+     59	001362	010100 				MOV	R1	,R0
+     60	001364	010001 			E00160:	MOV	R0	,R1
+     61	001366	005000 				CLR	R0
+     62	001370					DIV	R5	,R0
+	001370	010546 				mov	R5	,-(sp)		; divisor
+	001372	010146 				mov	r1	,-(sp)		; dividend low word
+	001374	010046 				mov	r0	,-(sp)		; dividend high word
+	001376	004767 	001232 			call	p$div			; divide
+	001402	012601 				mov	(sp)+	,r1		; remainder
+	001404	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     63	001406	020127 	000011 			CMP	R1	,#11
+     64	001412	101402 				BLOS	E00200
+     65	001414	062701 	000007 			ADD	#7	,R1
+     66	001420	060201 			E00200:	ADD	R2	,R1
+     67	001422	010146 				MOV	R1	,-(SP)
+     68	001424	105303 				DECB	R3
+     69	001426	003412 				BLE	E00234
+     70	001430	005700 				TST	R0
+     71	001432	001006 				BNE	E00230
+     72	001434	005702 				TST	R2
+     73	001436	100006 				BPL	E00234
+     74	001440	005703 				TST	R3
+     75	001442	100002 				BPL	E00230
+     76	001444	042702 	000020 			BIC	#20	,R2
+     77	001450	004767 	177710 		E00230:	CALL	E00160
+     78	001454	112624 			E00234:	MOVB	(SP)+	,(R4)+
+     79	001456	010400 				MOV	R4	,R0
+     80	001460	000207 				RETURN
+     81
+     82	001462	010446 			$SAVRG:	MOV	R4	,-(SP)
+     83	001464	010346 				MOV	R3	,-(SP)
+     84	001466	010546 				MOV	R5	,-(SP)
+     85	001470	016605 	000006 			MOV	6(SP)	,R5
+     86	001474	004736 				CALL	@(SP)+
+     87	001476	012603 				MOV	(SP)+	,R3
+     88	001500	012604 				MOV	(SP)+	,R4
+     89	001502	012605 				MOV	(SP)+	,R5
+     90	001504	000207 				RETURN
+     91
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 15
+32-bit integer to ascii from RSX SYSLIB.OLB
+
+      1
+      2						.sbttl	Decimal ascii to integer	; /BBS/ made this unsigned..
+      3
+      4					;	input:	 (r5)	= address of .asciz decimal number string to convert
+      5					;	output:	  r1	= binary value of the string
+      6					;		  r0	= if <>, not a number
+      7
+      8	001506				l$val::	save	<r3>
+	001506	010346 				 mov	r3	,-(sp)
+      9	001510	005001 				clr	r1			; initialize the result
+     10	001512	011503 				mov	(r5)	,r3		; the address of the string
+     11	001514	112300 			10$:	movb	(r3)+	,r0		; /62/ next char
+     12	001516	001424 				beq	30$			; if null, exit please
+     13	001520	020027 	000056 			cmp	r0	,#dot		; /63/ a decimal point?
+     14	001524	001421 				beq	30$			; /63/ ya, number has ended..
+     15	001526	162700 	000072 			sub	#'9+1	,r0		; /62/ convert ascii byte
+     16	001532	062700 	000012 			add	#9.+1	,r0		; /62/ to an integer
+     17	001536	103011 				bcc	20$			; /62/ not a number
+     18	001540					mul	#10.	,r1		; /62/ bump accumulator by tens
+	001540	012746 	000012 			mov	#10.	,-(sp)		; pass multiplier to p$mul
+	001544	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	001546	004767 	001006 			call	p$mul			; multiply, returns a 16-bit product
+	001552	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     19	001554	103402 				bcs	20$			; /62/ overflowed, bail out..
+     20	001556	060001 				add	r0	,r1		; /62/ add in result from this pass
+     21	001560	103355 				bcc	10$			; /62/ ok, try the next byte
+     22	001562	012700 	000000G		20$:	mov	#er$bad	,r0		; /63/ illegal number, flag an error
+     23	001566	000401 				br	40$
+     24	001570	005000 			30$:	clr	r0			; indicate success
+     25	001572				40$:	unsave	<r3>
+	001572	012603 				 mov	(sp)+	,r3
+     26	001574	000207 				return
+     27
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 16
+Decimal ascii to integer	; /BBS/ made this unsigned..
+
+      1
+      2						.sbttl	Octal ascii to integer
+      3
+      4					;	input:	 (r5)	= address of .asciz octal number string to convert
+      5					;	output:	  r1	= binary value of the string
+      6					;		  r0	= if <>, not a number
+      7
+      8	001576				octval::save	<r3>			; /62/ all new..
+	001576	010346 				 mov	r3	,-(sp)
+      9	001600	005001 				clr	r1			; initialize the result
+     10	001602	011503 				mov	(r5)	,r3		; the address of the string
+     11	001604	112300 			10$:	movb	(r3)+	,r0		; next char
+     12	001606	001415 				beq	30$			; if null, exit please
+     13	001610	162700 	000070 			sub	#'7+1	,r0		; convert ascii byte
+     14	001614	062700 	000010 			add	#7+1	,r0		; to an integer
+     15	001620	103005 				bcc	20$			; not an octal number
+     16	001622					ash	#3	,r1		; bump accumulator * 8
+	001622	006301 				.iif gt <$$type>  asl	r1
+	001624	006301 				.iif gt <$$type>  asl	r1
+	001626	006301 				.iif gt <$$type>  asl	r1
+     17	001630	060001 				add	r0	,r1		; add in result from this pass
+     18	001632	000764 				br	10$
+     19	001634	012700 	000000G		20$:	mov	#er$bad	,r0		; /63/ illegal number, flag an error
+     20	001640	000401 				br	40$
+     21	001642	005000 			30$:	clr	r0			; indicate success
+     22	001644				40$:	unsave	<r3>
+	001644	012603 				 mov	(sp)+	,r3
+     23	001646	000207 				return
+     24
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 17
+Octal ascii to integer
+
+      1
+      2						.sbttl	Integer to ascii octal conversion
+      3
+      4					;	input:	 (r5)	= buffer address
+      5					;		2(r5)	= binary number to write as ascii string in above
+      6
+      7	001650				l$otoa::save	<r0,r1,r2>		; /62/ all new..
+	001650	010046 				 mov	r0	,-(sp)
+	001652	010146 				 mov	r1	,-(sp)
+	001654	010246 				 mov	r2	,-(sp)
+      8	001656	011501 				mov	(r5)	,r1		; the buffer for ascii output
+      9	001660	016500 	000002 			mov	2(r5)	,r0		; the binary number to convert
+     10	001664	012702 	000006 			mov	#6	,r2		; loop 6 times, zero filling..
+     11	001670	004767 	000012 			call	10$			; call conversion routine
+     12	001674	105011 				clrb	(r1)			; add null termination byte
+     13	001676					unsave	<r2,r1,r0>
+	001676	012602 				 mov	(sp)+	,r2
+	001700	012601 				 mov	(sp)+	,r1
+	001702	012600 				 mov	(sp)+	,r0
+     14	001704	000207 				return
+     15
+     16	001706	010046 			10$:	mov	r0	,-(sp)		; copy of the number
+     17	001710	042716 	177770 			bic	#^c<7>	,(sp)		; mask for lower 3 bits
+     18	001714	062716 	000060 			add	#60	,(sp)		; make result an ascii digit
+     19	001720	006000 				ror	r0			; rotate next group of 3 bits into low
+     20	001722	006200 				asr	r0			; order bits of r0..
+     21	001724	006200 				asr	r0
+     22	001726	005302 				dec	r2			; loop for six passes
+     23	001730	001402 				beq	20$			; we are done
+     24	001732	004767 	177750 			call	10$			; if not, call ourself
+     25	001736	112621 			20$:	movb	(sp)+	,(r1)+		; last in first out back to text buff
+     26	001740	000207 				return
+     27
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 18
+Integer to ascii octal conversion
+
+      1
+      2						.sbttl	Write integer in (r5) to TT as octal number
+      3
+      4	001742				l$wroc::save	<r0>
+	001742	010046 				 mov	r0	,-(sp)
+      5	001744	162706 	000010 			sub	#10	,sp		; use stack for a buffer
+      6	001750	010600 				mov	sp	,r0		; pointer to said buffer
+      7	001752					calls	l$otoa	,<r0,(r5)>	; call the conversion subroutine
+	001752	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001754	011546 				        mov	(r5)	,-(sp)	; push it
+	001756	010046 				        mov	r0	,-(sp)	; push it
+	001760	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001762	004767 	177662 			  jsr	pc	,l$otoa		; and go to the routine
+	001766	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001770	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      8	001772					wrtall	r0			; display the number on terminal
+	001772	010046 				mov	r0	,-(sp)		; pass the address
+	001774	004767 	000000G			call	wrtall			; do it
+      9	002000	062706 	000010 			add	#10	,sp		; dump the buffer
+     10	002004					unsave	<r0>
+	002004	012600 				 mov	(sp)+	,r0
+     11	002006	000207 				return
+     12
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 19
+Write integer in (r5) to TT as octal number
+
+      1
+      2						.sbttl	Copy an .asciz string
+      3
+      4					;	input:	2(sp)	= destination string address
+      5					;		4(sp)	= source string address
+      6					;		6(sp)	= length to copy or zero for max
+      7
+      8	002010				copyz$::save	<r0,r1>
+	002010	010046 				 mov	r0	,-(sp)
+	002012	010146 				 mov	r1	,-(sp)
+      9	002014	005766 	000012 			tst	4+6(sp)			; see if a maxlen was passed
+     10	002020	001003 				bne	10$			; yes
+     11	002022	012766 	077777 	000012 		mov	#77777	,4+6(sp)	; no, say we can have max int chars
+     12	002030	016600 	000010 		10$:	mov	4+4(sp)	,r0		; source string address
+     13	002034	016601 	000006 			mov	4+2(sp)	,r1		; destination string address
+     14	002040	112021 			20$:	movb	(r0)+	,(r1)+		; copy a byte
+     15	002042	001404 				beq	30$			; until a null is found
+     16	002044	005366 	000012 			dec	4+6(sp)			; or we have copied maxlen number
+     17	002050	001373 				bne	20$			; of characters over
+     18	002052	105041 				clrb	-(r1)			; ensure output .asciz please
+     19	002054				30$:	unsave	<r1,r0>			; /63/ move 30$ here
+	002054	012601 				 mov	(sp)+	,r1
+	002056	012600 				 mov	(sp)+	,r0
+     20	002060	011666 	000006 			mov	@sp	,6(sp)		; move return address up
+     21	002064	062706 	000006 			add	#6	,sp		; fix the stack
+     22	002070	000207 				return
+     23
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 20
+Copy an .asciz string
+
+      1
+      2						.sbttl	STRCAT and STRCPY
+      3
+      4					;	input:	 (sp)	= return address
+      5					;		2(sp)	= destination address
+      6					;		4(sp)	= source address
+      7					;	output:	  r0	= destination address
+      8
+      9	002072				strcpy::save	<r1>
+	002072	010146 				 mov	r1	,-(sp)
+     10	002074	016600 	000004 			mov	2+2(sp)	,r0		; destination address
+     11	002100	016601 	000006 			mov	2+4(sp)	,r1		; source .asciz address
+     12	002104	112120 			10$:	movb	(r1)+	,(r0)+		; copy until a null
+     13	002106	001376 				bne	10$			; not done
+     14	002110	016600 	000004 			mov	2+2(sp)	,r0		; return the dst address
+     15	002114					unsave	<r1>
+	002114	012601 				 mov	(sp)+	,r1
+     16	002116	011666 	000004 			mov	(sp)	,4(sp)		; move return address up now
+     17	002122	022626 				cmp	(sp)+	,(sp)+		; pop junk
+     18	002124	000207 				return
+     19
+     20	002126				strcat::save	<r1>
+	002126	010146 				 mov	r1	,-(sp)
+     21	002130	016600 	000004 			mov	2+2(sp)	,r0		; destination address
+     22	002134	016601 	000006 			mov	2+4(sp)	,r1		; source .asciz address
+     23	002140	105720 			10$:	tstb	(r0)+			; look for the end of the dst string
+     24	002142	001376 				bne	10$			; not found yet
+     25	002144	005300 				dec	r0			; found it, fix the pointer
+     26	002146	112120 			20$:	movb	(r1)+	,(r0)+		; copy until a null
+     27	002150	001376 				bne	20$			; not done
+     28	002152	016600 	000004 			mov	2+2(sp)	,r0		; return the dst address
+     29	002156					unsave	<r1>
+	002156	012601 				 mov	(sp)+	,r1
+     30	002160	011666 	000004 			mov	(sp)	,4(sp)		; move return address up now
+     31	002164	022626 				cmp	(sp)+	,(sp)+		; pop junk
+     32	002166	000207 				return
+     33
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 21
+STRCAT and STRCPY
+
+      1
+      2						.sbttl	Control or uncontrol a char
+      3
+      4	002170				l$xor::	save	<r0>
+	002170	010046 				 mov	r0	,-(sp)
+      5	002172	016600 	000004 			mov	4(sp)	,r0		; the input
+      6	002176					ixor	#100	,r0		; bump up or down 64. in ascii table
+	002176	012746 	000100 			mov	#100	,-(sp)		; it's much simpler to do this
+	002202	040016 				bic	r0	,@sp		; for all RT-11 systems rather
+	002204	042700 	000100 			bic	#100	,r0		; than to be selective
+	002210	052600 				bis	(sp)+	,r0		; done
+      7	002212	010066 	000004 			mov	r0	,4(sp)		; the output
+      8	002216					unsave	<r0>
+	002216	012600 				 mov	(sp)+	,r0
+      9	002220	000207 				return
+     10
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 22
+Control or uncontrol a char
+
+      1
+      2						.sbttl	Scan a string for a character
+      3
+      4					;	input:	4(sp)	= string address
+      5					;		2(sp)	= character to look for
+      6					;	output:	  r0	= position of char in string
+      7
+      8	002222				scanch::save	<r2>
+	002222	010246 				 mov	r2	,-(sp)
+      9	002224	016602 	000006 			mov	6(sp)	,r2		; get address of the string
+     10	002230	005000 				clr	r0			; initial found position
+     11	002232	105712 			10$:	tstb	@r2			; end of the string yet?
+     12	002234	001405 				beq	20$			; yes
+     13	002236	005200 				inc	r0			; no, pos := succ(pos)
+     14	002240	126622 	000004 			cmpb	4(sp)	,(r2)+		; does the ch match the next one?
+     15	002244	001372 				bne	10$			; no, try again
+     16	002246	000401 				br	30$			; yes, exit loop
+     17	002250	005000 			20$:	clr	r0			; failure, return position = 0
+     18	002252				30$:	unsave	<r2>
+	002252	012602 				 mov	(sp)+	,r2
+     19	002254	011666 	000004 			mov	@sp	,4(sp)		; move return address up
+     20	002260	022626 				cmp	(sp)+	,(sp)+		; pop stack
+     21	002262	000207 				return
+     22
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 23
+Scan a string for a character
+
+      1
+      2						.sbttl	Upper case one arg, or all of them  ; /BBS/ added
+      3						.enabl	lsb
+      4
+      5	002264				upone::	save	<r1,r0>
+	002264	010146 				 mov	r1	,-(sp)
+	002266	010046 				 mov	r0	,-(sp)
+      6	002270	012701 	000040 			mov	#space	,r1		; stop at next space
+      7	002274	000403 				br	10$			; share common code
+      8
+      9	002276				upcase::save	<r1,r0>
+	002276	010146 				 mov	r1	,-(sp)
+	002300	010046 				 mov	r0	,-(sp)
+     10	002302	005001 				clr	r1			; stop at null, do the whole string
+     11	002304	121001 			10$:	cmpb	(r0)	,r1		; hit the delimiter yet?
+     12	002306	101412 				blos	30$			; yes, exit
+     13	002310	121027 	000141 			cmpb	(r0)	,#'a!40		; a small letter?
+     14	002314	103405 				blo	20$			; no
+     15	002316	121027 	000172 			cmpb	(r0)	,#'z!40		; a small letter?
+     16	002322	101002 				bhi	20$			; no
+     17	002324	142710 	000040 			bicb	#40	,(r0)		; yes, make it upper case
+     18	002330	005200 			20$:	inc	r0			; bump pointer to next char
+     19	002332	000764 				br	10$			; and go check it
+     20	002334				30$:	unsave	<r0,r1>
+	002334	012600 				 mov	(sp)+	,r0
+	002336	012601 				 mov	(sp)+	,r1
+     21	002340	000207 				return
+     22
+     23						.dsabl	lsb
+     24
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 24
+Upper case one arg, or all of them  ; /BBS/ added
+
+      1
+      2						.sbttl	Integer to decimal ascii conversion  ; /BBS/ added
+      3
+      4	002342	012702 	000000'		i4toa::	mov	#X4$	,r2	; four decimal places, or 0000 if need be
+      5	002346	000402 				br	itoa		; share the rest
+      6	002350	012702 	000004'		i2toa::	mov	#X2$	,r2	; come here for 2 place numbers
+      7	002354				itoa:	save	<r0>		; enter here with r2 loaded
+	002354	010046 				 mov	r0	,-(sp)
+      8	002356	112700 	000057 		10$:	movb	#'0-1	,r0	; initialize the ascii char output register
+      9	002362	005200 			20$:	inc	r0		; step thru ascii 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+     10	002364	161203 				sub	(r2)	,r3	; while subtracting divisor from input integer
+     11	002366	103375 				bcc	20$		; until less than the divisor is left
+     12	002370	062203 				add	(r2)+	,r3	; recover remainder and set for next pass
+     13	002372	110021 				movb	r0	,(r1)+	; put ascii equiv in out buff
+     14	002374	005712 				tst	(r2)		; done yet?
+     15	002376	001367 				bne	10$		; nope, next one, please..
+     16	002400					unsave	<r0>
+	002400	012600 				 mov	(sp)+	,r0
+     17	002402	000207 				rts	pc
+     18
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 25
+Integer to decimal ascii conversion  ; /BBS/ added
+
+      1
+      2						.sbttl	Unformat a string, inverse of PRSARG
+      3										; /63/ moved here from KRTCVT so
+      4	002404				unfmts::save	<r1,r2,r3,r4>		; /63/ KRTMDM can be in KRTCVT's ovrly
+	002404	010146 				 mov	r1	,-(sp)
+	002406	010246 				 mov	r2	,-(sp)
+	002410	010346 				 mov	r3	,-(sp)
+	002412	010446 				 mov	r4	,-(sp)
+      5	002414	010003 				mov	r0	,r3		; /63/ copy the address of the data
+      6	002416	012704 	000000G			mov	#spare1	,r4		; /63/ (bigger) target buffer
+      7	002422	112301 			10$:	movb	(r3)+	,r1		; /63/ get the data
+      8	002424	001445 				beq	100$			; all done
+      9	002426	120127 	000040 			cmpb	r1	,#space		; control character?
+     10	002432	103402 				blo	20$			; yes
+     11	002434	110124 				movb	r1	,(r4)+		; no, just copy as is
+     12	002436	000437 				br	40$			; and do the next one
+     13	002440	112724 	000134 		20$:	movb	#'\	,(r4)+		; control character, insert "\"
+     14	002444	005000 				clr	r0			; get setup for conversion
+     15	002446					div	#10	,r0		; got it
+	002446	012746 	000010 			mov	#10	,-(sp)		; divisor
+	002452	010146 				mov	r1	,-(sp)		; dividend low word
+	002454	010046 				mov	r0	,-(sp)		; dividend high word
+	002456	004767 	000152 			call	p$div			; divide
+	002462	012601 				mov	(sp)+	,r1		; remainder
+	002464	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     16	002466	110102 				movb	r1	,r2		; save the LSB
+     17	002470	010001 				mov	r0	,r1		; and get the last two out
+     18	002472	005000 				clr	r0			; ....
+     19	002474					div	#10	,r0		; do it
+	002474	012746 	000010 			mov	#10	,-(sp)		; divisor
+	002500	010146 				mov	r1	,-(sp)		; dividend low word
+	002502	010046 				mov	r0	,-(sp)		; dividend high word
+	002504	004767 	000124 			call	p$div			; divide
+	002510	012601 				mov	(sp)+	,r1		; remainder
+	002512	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     20	002514	062700 	000060 			add	#'0	,r0		; convert to ascii
+     21	002520	062701 	000060 			add	#'0	,r1		; ..ditto
+     22	002524	062702 	000060 			add	#'0	,r2		; ....ditto
+     23	002530	110024 				movb	r0	,(r4)+		; insert
+     24	002532	110124 				movb	r1	,(r4)+		; the
+     25	002534	110224 				movb	r2	,(r4)+		; data
+     26	002536	000731 			40$:	br	10$			; next please
+     27	002540	105014 			100$:	clrb	@r4			; ensure .asciz
+     28	002542	012700 	000000G			mov	#spare1	,r0		; /53/ return addr of converted data
+     29	002546					unsave	<r4,r3,r2,r1>		; /63/
+	002546	012604 				 mov	(sp)+	,r4
+	002550	012603 				 mov	(sp)+	,r3
+	002552	012602 				 mov	(sp)+	,r2
+	002554	012601 				 mov	(sp)+	,r1
+     30	002556	000207 				return
+     31
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 26
+Unformat a string, inverse of PRSARG
+
+      1
+      2						.if df NONEIS		; /BBS/ only do this for non-EIS version!
+      3
+      4						.sbttl	MUL for a non-EIS CPU	; /BBS/ rewrote this ..
+      5
+      6					; /BBS/	 WARNING:  This routine does _NOT_ set the V bit ala the EIS multiply!
+      7
+      8	002560	010046 			p$mul::	mov	r0	,-(sp)	; this a is SINGLE PRECISION multiply!
+      9	002562	010146 				mov	r1	,-(sp)	; save regs used here
+     10	002564	010246 				mov	r2	,-(sp)
+     11
+     12	002566	016600 	000010 			mov	10(sp)	,r0	; src, the multiplier
+     13	002572	016601 	000012 			mov	12(sp)	,r1	; reg, the multiplicand
+     14	002576	005002 				clr	r2		; init the product
+     15
+     16	002600	006201 			10$:	asr	r1		; divide by 2
+     17	002602	103002 				bcc	20$		; don't add when result is even number
+     18	002604	060002 				add	r0	,r2	; add asl'd multiplier to product
+     19	002606	103403 				bcs	30$		; if overflow, bail out leaving carry set..
+     20	002610	006300 			20$:	asl	r0		; multiply by 2 for the next pass
+     21	002612	005701 				tst	r1		; anything left to do?  also clears carry..
+     22	002614	001371 				bne	10$		; ya
+     23
+     24	002616	010266 	000012 		30$:	mov	r2	,12(sp)	; done, put product on stack for caller
+     25
+     26	002622	012602 				mov	(sp)+	,r2	; restore everything to as when called
+     27	002624	012601 				mov	(sp)+	,r1
+     28	002626	012600 				mov	(sp)+	,r0
+     29
+     30	002630	012616 				mov	(sp)+	,(sp)	; move return address up, calling macro
+     31	002632	000207 				return			; pushes 2 args on stack but only pops 1
+     32
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 27
+MUL for a non-EIS CPU	; /BBS/ rewrote this ..
+
+      1
+      2						.sbttl	DIV for a non-EIS CPU	; /BBS/ moved here + commented this..
+      3
+      4					; /BBS/	 WARNING:  This routine does _NOT_ set C or V bits ala the EIS divide!
+      5
+      6	002634	010046 			p$div::	mov	r0	,-(sp)		; patched for double precision input
+      7	002636	010146 				mov	r1	,-(sp)		; output is SINGLE PRECISION!
+      8	002640	010246 				mov	r2	,-(sp)		; save all regs used here
+      9
+     10	002642	016602 	000010 			mov	10(sp)	,r2		; high word of dividend
+     11	002646	016600 	000012 			mov	12(sp)	,r0		; low word of dividend
+     12	002652	016601 	000014 			mov	14(sp)	,r1		; divisor
+     13
+     14	002656	012746 	000040 			mov	#40	,-(sp)		; do 32. iterations for 32. bits
+     15	002662	010146 				mov	r1	,-(sp)		; the divisor
+     16	002664	005001 				clr	r1			; init remainder
+     17
+     18	002666	006300 			10$:	asl	r0			; shift dividend (low word then..
+     19	002670	006102 				rol	r2			; ..hi word) to left 1 bit, and
+     20	002672	006101 				rol	r1			; into the remainder
+     21	002674	020116 				cmp	r1	,(sp)		; is remainder now .gt. divisor?
+     22	002676	103402 				bcs	20$			; no
+     23	002700	161601 				sub	(sp)	,r1		; ya, subtract divisor from it
+     24	002702	005200 				inc	r0			; and bump quotient accordingly
+     25	002704	005366 	000002 		20$:	dec	2(sp)			; do next iteration?
+     26	002710	003366 				bgt	10$			; ya, there is something left to do..
+     27
+     28	002712	022626 				cmp	(sp)+	,(sp)+		; no, pop iterations + divisor buffers
+     29
+     30	002714	010166 	000012 			mov	r1	,12(sp)		; the remainder
+     31	002720	010066 	000014 			mov	r0	,14(sp)		; the quotient
+     32
+     33	002724	012602 				mov	(sp)+	,r2		; restore everything to as when called
+     34	002726	012601 				mov	(sp)+	,r1
+     35	002730	012600 				mov	(sp)+	,r0
+     36
+     37	002732	012616 				mov	(sp)+	,(sp)		; move return address up, calling
+     38	002734	000207 				return				; macro pushes 3 args, only pops 2..
+     39
+     40						.endc
+     41
+     42		000001 				.end
+KRTSUB	Commonly used subroutin	MACRO V05.03b  00:01  Page 27-1
+Symbol table
+
+ALSIZE= 001000   	C00072  001260R     002	LOG$AL= 000003   	PAR$SP  000004   	TAB   = 000011
+AT.ALL  000177   	C00104  001272R     002	LOG$CO= 000002   	PAT   = 000000   	TERMIN  177777
+AT.CDT  000001   	C00110  001276R     002	LOG$DE= 000020   	P$DIV   002634RG    002	TEXT    000000
+AT.INF  000002   	C00116  001306R     002	LOG$IO= 000010   	P$MUL   002560RG    002	TILDE = 000176
+AT.LEN  000004   	DECNAT  000002   	LOG$ON= 040000   	P.CAPA= 000011   	TTY   = 000001
+AT.ON   100000   	DEL   = 000177   	LOG$OP= 100000   	P.CHKT= 000007   	UNFMTS  002404RG    002
+AT.PRO  000010   	DFWIDT= 000006   	LOG$PA= 000001   	P.EOL = 000004   	UPCASE  002276RG    002
+AT.SYS  000020   	DOT   = 000056   	LOG$RP= 000004   	P.MXL1= 000013   	UPONE   002264RG    002
+AT.TYP  000040   	ERBFSI= 000170   	LSIZE = 000006   	P.MXL2= 000014   	USERRB= 000053
+AT.XLE  000100   	ERRBYT= 000052   	L$CVTN  000440RG    002	P.NPAD= 000002   	VT100 = 000002
+BELL  = 000007   	ERROR$= 000004   	L$LEN   000330RG    002	P.PADC= 000003   	VT200 = 000003
+BINARY  000001   	ER$BAD= ****** GX	L$OTOA  001650RG    002	P.QBIN= 000006   	WARN$ = 000002
+BS    = 000010   	ESC   = 000033   	L$VAL   001506RG    002	P.QCTL= 000005   	WRIT1C= ****** GX
+CAPA.A= 000010   	E00134  001340R     002	L$WRDE  000344RG    002	P.REPT= 000010   	WRTALL= ****** GX
+CAPA.L= 000002   	E00160  001364R     002	L$WROC  001742RG    002	P.SPSI= 000000   	XOFF  = 000023
+CAPA.S= 000004   	E00200  001420R     002	L$XOR   002170RG    002	P.TIME= 000001   	XON   = 000021
+COMMA = 000054   	E00230  001450R     002	L10012  001060RG    002	P.VEND= 000017   	X2$     000004R     003
+CON$ES= 000034   	E00234  001454R     002	L10016  001064R     002	P.WIND= 000012   	X4$     000000R     003
+COPYZ$  002010RG    002	FATAL$= 000020   	L10042  001110R     002	RADCHR  000017R     003	$ALLSI= 001144
+CR    = 000015   	FF    = 000014   	L10266  001114RG    002	RDTOA   000754RG    002	$C    = 000003
+CTRL$N= 000016   	INSTR   000622RG    002	L10272  001120R     002	SADDR = 000004   	$CBTA   001310R     002
+CTRL$O= 000017   	ITOA    002354R     002	L10316  001144R     002	SCANCH  002222RG    002	$CDDMG  001152RG    002
+CVT$$   000000RG    002	I2TOA   002350RG    002	MAXLNG= 001130   	SCOLON= 000073   	$SAVRG  001462R     002
+C.CRLF= 000004   	I4TOA   002342RG    002	MAXPAK  000136   	SEVER$= 000010   	$$    = 000000
+C.LCUC= 000040   	JSW   = 000044   	NONEIS= 000001   	SOH   = 000001   	$$SIZE= 000003
+C.LSPA= 000010   	JUNKCH  000012R     003	NOSCOP= 000000   	SPACE = 000040   	$$TYPE= 000001
+C.SSPA= 000020   	KRTINC= 000001   	OCTVAL  001576RG    002	SPARE1= ****** GX	$$$0  = 000000
+C.TSPA= 000200   	LASTCH= 000002   	PAR$EV  000002   	STRCAT  002126RG    002	$$1   = 000001
+C00022  001174R     002	LF    = 000012   	PAR$MA  000003   	STRCPY  002072RG    002	$$2   = 000000
+C00024= 001176R     002	LN$CNT= 000003   	PAR$NO  000000   	SUCCS$= 000001   	$$5   = 000000
+C00064  001252R     002	LN$MAX= 000120   	PAR$OD  000001
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	002736    002	(RO,I,LCL,REL,CON)
+$PDATA	000070    003	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 12408 Words  ( 49 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.20
+KRTSUB,KRTSUB=KRTNHD,KRTSUB

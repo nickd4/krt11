@@ -1,0 +1,711 @@
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01
+Table of contents
+
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    7-   3	TRANSMIT		; /BBS/ heavily hacked..
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTTRA	ASCII transfer to remote
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5
+      6					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      7					;
+      8					;	now called direct instead of through KRTCM1
+      9
+     10					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     11					;
+     12					;	after each byte sent the response from the receiver is echo'd
+     13					;	this makes it handy for reading text files into a called system's
+     14					;	message editor, etc..  speed is locked at 1 byte/tick, which is
+     15					;	600 baud in 60Hz land
+     16					;
+     17					;	added code at EOF so last char(s) echo'd by remote are displayed
+     18					;	modified action on EOF to reconnect, also suppress CONNECTs sign-on
+     19					;	message for a cleaner return
+     20
+     21					;	07-Mar-84  11:42:22   Brian Nelson
+     22					;
+     23					;	Copyright 1984 Change Software, Inc.
+     24
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 2
+
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3						.mcall	.TTYOUT	,.TWAIT
+      4
+      5
+      6	000000					.psect	$pdata
+      7	000000	000000 	000015 		fifteen:.word	0 ,15			; wait fifteen ticks after EOF
+      8	000004	000000 	000001 		short:	.word	0 ,1			; wait up to 1 tick for remote to echo
+      9	000010	000000 	000000 		twarea:	.word	0 ,0			; .twait work area
+     10
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	TRANSMIT		; /BBS/ heavily hacked..
+      4
+      5					;	input:	argbuf	= name of file to send
+      6					;	output:	   r0	= if <>, error code
+      7
+      8	000000	005767 	000000G		c$tran::tst	remote			; /62/ disallow to TT
+      9	000004	001405 				beq	10$			; prevents typing TSX lead-in!
+     10	000006					direrr	#er$pls			; please SET LINE first
+	000006	012746 	000000G			mov	#er$pls	,-(sp)
+	000012	004767 	000000G			call	direr$
+     11	000016	000207 				return
+     12
+     13	000020	005002 			10$:	clr	r2			; input_open := false
+     14	000022	005003 				clr	r3			; terminal_set := false
+     15	000024					upcase	argbuf			; /62/ upper case all args
+	000024	016700 	000000G			mov	argbuf	,r0
+	000030	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     16	000034					calls	fparse	,<argbuf,#srcnam> ; /62/ parse the file name please
+	000034	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000036	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	000042	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	000046	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000050	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	000054	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000056	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     17	000060	005700 				tst	r0			; did the $parse work ok?
+     18	000062	001127 				bne	50$			; no
+     19	000064					calls	iswild	,<#srcnam>	; check for wildcarded file spec
+	000064	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000066	012746 	000000G			  mov	#srcnam	,-(sp)		; doing it thusly generates less code
+	000072	010605 				  mov	sp	,r5		; set pointer to argument list
+	000074	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	000100	005726 				  tst	(sp)+			; pop parameter list from stack
+	000102	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     20	000104	005700 				tst	r0			; is it?
+     21	000106	001115 				bne	50$			; ya..
+     22
+     23	000110	004767 	000000G			call	opentt			; open the link
+     24	000114	005700 				tst	r0			; did it work?
+     25	000116	001111 				bne	50$			; no
+     26	000120	010603 				mov	sp	,r3		; ya, flag link is init'd..
+     27	000122					calls	open	,<#srcnam,#lun.in,#text> ; open the input file
+	000122	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000124	012746 	000000 			        mov	#text	,-(sp)	; push it
+	000130	012746 	000000G			        mov	#lun.in	,-(sp)	; push it
+	000134	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	000140	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000142	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	000146	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000152	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     28	000154	005700 				tst	r0			; did it work?
+     29	000156	001071 				bne	50$			; no
+     30	000160	010602 				mov	sp	,r2		; ya, flag the file is open
+     31
+     32	000162	005767 	000000G		20$:	tst	cccnt			; ^C typed?
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 7-1
+TRANSMIT		; /BBS/ heavily hacked..
+
+     33	000166	001074 				bne	60$			; ya, exit
+     34	000170					calls	getc	,<#lun.in>	; no, get the next char in the file
+	000170	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000172	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	000176	010605 				  mov	sp	,r5		; set pointer to argument list
+	000200	004767 	000000G			  jsr	pc	,getc		; call the subroutine
+	000204	005726 				  tst	(sp)+			; pop parameter list from stack
+	000206	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     35	000210	005700 				tst	r0			; did that work?
+     36	000212	001053 				bne	50$			; no
+     37	000214	120127 	000012 			cmpb	r1	,#lf		; a line feed we don't need?
+     38	000220	001760 				beq	20$			; ya, skip it
+     39	000222	010146 				mov	r1	,-(sp)		; one word buffer
+     40	000224	010601 				mov	sp	,r1		; point to it please
+     41	000226					calls	binwri	,<r1,#1>	; simple to put a single char
+	000226	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000230	012746 	000001 			        mov	#1	,-(sp)	; push it
+	000234	010146 				        mov	r1	,-(sp)	; push it
+	000236	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000240	004767 	000000G			  jsr	pc	,binwri		; and go to the routine
+	000244	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000246	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     42	000250	005726 				tst	(sp)+			; pop the tiny buffer now
+     43	000252					.twait	#twarea	,#short		; wait one tick
+	000252	012700 	000010'			MOV	#twarea,R0
+	000256	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	000262	012760 	000004'	000002 		MOV	#short,2.(R0)
+	000270	104375 				EMT	^O375
+     44	000272				30$:	calls	xbinrea	,<#-1>		; now try for the echo please
+	000272	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000274	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	000300	010605 				  mov	sp	,r5		; set pointer to argument list
+	000302	004767 	000000G			  jsr	pc	,xbinrea		; call the subroutine
+	000306	005726 				  tst	(sp)+			; pop parameter list from stack
+	000310	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     45	000312	005700 				tst	r0			; get anything back?
+     46	000314	001322 				bne	20$			; no, continue sending
+     47	000316	005767 	000000G			tst	tsxsav			; running under TSX?
+     48	000322	001403 				beq	40$			; no
+     49	000324	120167 	000000G			cmpb	r1	,m.tsxr		; /62/ ya, don't type
+     50	000330	001760 				beq	30$			; the lead-in char
+     51	000332	010100 			40$:	mov	r1	,r0		; pass char to .ttyout
+     52	000334					.ttyout				; dump it to the terminal
+	000334	104341 				EMT	^O<341>
+	000336	103776 				BCS	.-2.
+     53	000340	000754 				br	30$			; and see if another can be had
+     54
+     55	000342	010004 			50$:	mov	r0	,r4		; save a copy of the error
+     56	000344	020027 	000000G			cmp	r0	,#er$eof	; end of file?
+     57	000350	001403 				beq	60$			; yes, that's ok
+     58	000352					direrr	r0			; no, print the error out and exit
+	000352	010046 				mov	r0	,-(sp)
+	000354	004767 	000000G			call	direr$
+     59	000360	005702 			60$:	tst	r2			; input file still open?
+     60	000362	001444 				beq	100$			; no
+     61	000364					.twait	#twarea	,#fifteen	; after EOF, wait 15. ticks
+	000364	012700 	000010'			MOV	#twarea,R0
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 7-2
+TRANSMIT		; /BBS/ heavily hacked..
+
+	000370	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	000374	012760 	000000'	000002 		MOV	#fifteen,2.(R0)
+	000402	104375 				EMT	^O375
+     62	000404				70$:	calls	xbinrea	,<#-1>		; now clean up echo at end
+	000404	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000406	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	000412	010605 				  mov	sp	,r5		; set pointer to argument list
+	000414	004767 	000000G			  jsr	pc	,xbinrea		; call the subroutine
+	000420	005726 				  tst	(sp)+			; pop parameter list from stack
+	000422	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     63	000424	005700 				tst	r0			; get anything back this time?
+     64	000426	001012 				bne	90$			; no, all done
+     65	000430	005767 	000000G			tst	tsxsav			; running under TSX?
+     66	000434	001403 				beq	80$			; no
+     67	000436	120167 	000000G			cmpb	r1	,m.tsxr		; /62/ ya, don't type
+     68	000442	001760 				beq	70$			; the lead-in char
+     69	000444	010100 			80$:	mov	r1	,r0		; pass char to .ttyout
+     70	000446					.ttyout				; dump it to the terminal
+	000446	104341 				EMT	^O<341>
+	000450	103776 				BCS	.-2.
+     71	000452	000754 				br	70$			; see if another can be had
+     72
+     73	000454				90$:	calls	close	,<#lun.in>	; close the input file
+	000454	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000456	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	000462	010605 				  mov	sp	,r5		; set pointer to argument list
+	000464	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	000470	005726 				  tst	(sp)+			; pop parameter list from stack
+	000472	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     74	000474	020427 	000000G		100$:	cmp	r4	,#er$eof	; end of file today?
+     75	000500	001412 				beq	130$			; ya, reconnect with link open
+     76	000502	005703 				tst	r3			; should we put the terminal back?
+     77	000504	001402 				beq	110$			; no
+     78	000506	004767 	000000G			call	clostt			; close the link device
+     79	000512	005702 			110$:	tst	r2			; ever get file open?
+     80	000514	001402 				beq	120$			; no, so skip the newline
+     81	000516					.newline			; for prompt
+	000516	004767 	000000G			call	l$pcrlf
+     82	000522	005000 			120$:	clr	r0			; /62/ error already handled..
+     83	000524	000207 				return
+     84
+     85	000526	012700 	000007 		130$:	mov	#bell	,r0		; load a beep
+     86	000532					.ttyout				; ring the bell when done
+	000532	104341 				EMT	^O<341>
+	000534	103776 				BCS	.-2.
+     87	000536	010667 	000000G			mov	sp	,conmsg		; suppress CONNECT sign-on msg
+     88	000542	000167 	000000G			jmp	c$conn			; and connect automatically..
+     89
+     90		000001 				.end
+KRTTRA	ASCII transfer to remot	MACRO V05.03b  00:01  Page 7-3
+Symbol table
+
+ALSIZE= 002000   	CR    = 000015   	GETC  = ****** GX	PAR$MA  000003   	SRCNAM= ****** GX
+ARGBUF= ****** GX	CTRL$N= 000016   	ISWILD= ****** GX	PAR$NO  000000   	SUCCS$= 000001
+AT.ALL  000177   	CTRL$O= 000017   	JSW   = 000044   	PAR$OD  000001   	TAB   = 000011
+AT.CDT  000001   	C$CONN= ****** GX	KRTINC= 000001   	PAR$SP  000004   	TERMIN  177777
+AT.INF  000002   	C$TRAN  000000RG    002	LF    = 000012   	P.CAPA= 000011   	TEXT    000000
+AT.LEN  000004   	C.CRLF= 000004   	LN$CNT= 000012   	P.CHKT= 000007   	TILDE = 000176
+AT.ON   100000   	C.LCUC= 000040   	LN$MAX= 000204   	P.EOL = 000004   	TSXSAV= ****** GX
+AT.PRO  000010   	C.LSPA= 000010   	LOG$AL= 000003   	P.MXL1= 000013   	TTY   = 000001
+AT.SYS  000020   	C.SSPA= 000020   	LOG$CO= 000002   	P.MXL2= 000014   	TWAREA  000010R     003
+AT.TYP  000040   	C.TSPA= 000200   	LOG$DE= 000020   	P.NPAD= 000002   	UPCASE= ****** GX
+AT.XLE  000100   	DECNAT  000002   	LOG$IO= 000010   	P.PADC= 000003   	USERRB= 000053
+BELL  = 000007   	DEL   = 000177   	LOG$ON= 040000   	P.QBIN= 000006   	VT100 = 000002
+BINARY  000001   	DIRER$= ****** GX	LOG$OP= 100000   	P.QCTL= 000005   	VT200 = 000003
+BINWRI= ****** GX	DOT   = 000056   	LOG$PA= 000001   	P.REPT= 000010   	WARN$ = 000002
+BS    = 000010   	ERBFSI= 000170   	LOG$RP= 000004   	P.SPSI= 000000   	XBINRE= ****** GX
+CAPA.A= 000010   	ERRBYT= 000052   	LUN.IN= ****** GX	P.TIME= 000001   	XOFF  = 000023
+CAPA.L= 000002   	ERROR$= 000004   	L$PCRL= ****** GX	P.VEND= 000017   	XON   = 000021
+CAPA.S= 000004   	ER$EOF= ****** GX	MAXLNG= 003600   	P.WIND= 000012   	$ALLSI= 003614
+CCCNT = ****** GX	ER$PLS= ****** GX	MAXPAK  000136   	REMOTE= ****** GX	$$    = 000001
+CLOSE = ****** GX	ESC   = 000033   	M.TSXR= ****** GX	SCOLON= 000073   	$$1   = 000001
+CLOSTT= ****** GX	FATAL$= 000020   	NOSCOP= 000000   	SEVER$= 000010   	$$2   = 000000
+COMMA = 000054   	FF    = 000014   	OPEN  = ****** GX	SHORT   000004R     003	$$5   = 000027
+CONMSG= ****** GX	FIFTEE  000000R     003	OPENTT= ****** GX	SOH   = 000001   	...V1 = 000003
+CON$ES= 000034   	FPARSE= ****** GX	PAR$EV  000002   	SPACE = 000040
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	000546    002	(RO,I,LCL,REL,CON)
+$PDATA	000014    003	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 12496 Words  ( 49 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.11
+KRTTRA,KRTTRA=KRTTRA

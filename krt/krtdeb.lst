@@ -1,0 +1,1711 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   2	Local data			; /63/ consolidated here..
+    9-   2	Symbol name data table
+   10-   2	EXAMINE data in memory
+   11-   2	Print symbol
+   12-   2	Format byte data
+   13-   2	Format integer data
+   14-   2	Locate symbol offset in index
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTDEB	Examine data in memory
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5
+      6					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      7					;
+      8					;	use erbfsiz to size errtxt buffer
+      9
+     10					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     11					;
+     12					;	added new variables to data displayable with EXAMINE
+     13					;	display ascii chars when dumping byte values
+     14					;	fixed error handling
+     15					;	fixed addressing bug in pint (displays word values)
+     16
+     17					;	Copyright 1984 Change Software, Inc.
+     18					;
+     19					;	21-May-84  22:07:50  Brian Nelson
+     20
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3
+      4		000001 				CHR	=	1		; string (byte) data
+      5		000002 				INT	=	2		; integer (word) data
+      6
+      7						.macro	entry	name ,type ,size
+      8						.save
+      9						.if  b	<name>
+     10						.psect	$addr
+     11						.word	0
+     12						.iff
+     13						.dsabl	lc
+     14						.psect	$name	,ro,d,lcl,rel,con
+     15						$$ = .
+     16						.asciz	#name#
+     17						.psect	$addr
+     18						.word	$$
+     19						.psect	$addr1
+     20						.word	name
+     21						.psect	$type
+     22						.word	type
+     23						.psect	$size
+     24						.word	size
+     25						.enabl	lc
+     26						.endc
+     27						.restore
+     28						.endm	entry
+     29
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 8
+Utility macros
+
+      1
+      2						.sbttl	Local data			; /63/ consolidated here..
+      3
+      4	000000					.psect	$pdata
+      5	000000	000404'	000700'		deb.01:	.word	pbyte ,pint
+      6	000004	000010'	000031'		deb.02:	.word	deb.03 ,deb.04
+      7	000010	   011 	   102 	   171 	deb.03:	.asciz	<tab>"Byte data, size"	; /BBS/ added tabs
+      8	000031	   011 	   127 	   157 	deb.04:	.asciz	<tab>"Word data, size"
+      9	000052	   011 	   040 	   040 	deb.05:	.asciz	<tab>"  Starting address: "
+     10	000100	   077 	   113 	   122 	deb.06:	.asciz	"?KRTDEB-E-"			; /62/
+     11	000113	   123 	   171 	   155 	deb.07:	.asciz	"Symbol not in internal STB"	; /62/
+     12	000146	   102 	   141 	   144 	deb.08:	.asciz	"Bad octal value"		; /62/
+     13	000166	   056 	   040 	   050 	deb.09:	.asciz	". ("			; /BBS/ added decimal point
+     14	000172	   051 	   040 	   040 	deb.10:	.asciz	")   "			; /BBS/ added spaces for formatting
+     15	000177	   040 	   040 	   040 	octpad:	.asciz	"    "			; /BBS/ dummy octal number element
+     16						.even
+     17
+     18	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+     19	000000	000000 			togo:	.word	0			; /BBS/ number of bytes
+     20	000002				ascbuf:	.blkb	24			; /BBS/ ascii buffer for byte dump
+     21						.even
+     22
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9
+Local data			; /63/ consolidated here..
+
+      1
+      2						.sbttl	Symbol name data table
+      3
+      4	000000					.psect	$addr	,ro,d,lcl,rel,con
+      5	000000				texadr:
+      6	000000					.psect	$addr1	,ro,d,lcl,rel,con
+      7	000000				virtad:
+      8	000000					.psect	$type	,ro,d,lcl,rel,con
+      9	000000				symtyp:
+     10	000000					.psect	$size	,ro,d,lcl,rel,con
+     11	000000				symsiz:
+     12	000000					.psect	$code
+     13
+     14	000000					entry	<$image>, int, 1
+	000000	   044 	   111 	   115 		.ASCIZ	#$IMAGE#
+	000000	000000'				.WORD	$$
+	000000	000000G				.WORD	$IMAGE
+	000000	000002 				.WORD	INT
+	000000	000001 				.WORD	1
+     15	000000					entry	<$limit>, int, 2
+	000007	   044 	   114 	   111 		.ASCIZ	#$LIMIT#
+	000002	000007'				.WORD	$$
+	000002	000000G				.WORD	$LIMIT
+	000002	000002 				.WORD	INT
+	000002	000002 				.WORD	2
+     16	000000					entry	<albuff>, int, 1
+	000016	   101 	   114 	   102 		.ASCIZ	#ALBUFF#
+	000004	000016'				.WORD	$$
+	000004	000000G				.WORD	ALBUFF
+	000004	000002 				.WORD	INT
+	000004	000001 				.WORD	1
+     17	000000					entry	<argbuf>, int, 1
+	000025	   101 	   122 	   107 		.ASCIZ	#ARGBUF#
+	000006	000025'				.WORD	$$
+	000006	000000G				.WORD	ARGBUF
+	000006	000002 				.WORD	INT
+	000006	000001 				.WORD	1
+     18	000000					entry	<argpnt>, int, 1
+	000034	   101 	   122 	   107 		.ASCIZ	#ARGPNT#
+	000010	000034'				.WORD	$$
+	000010	000000G				.WORD	ARGPNT
+	000010	000002 				.WORD	INT
+	000010	000001 				.WORD	1
+     19	000000					entry	<asname>, chr, ln$max
+	000043	   101 	   123 	   116 		.ASCIZ	#ASNAME#
+	000012	000043'				.WORD	$$
+	000012	000000G				.WORD	ASNAME
+	000012	000001 				.WORD	CHR
+	000012	000120 				.WORD	LN$MAX
+     20	000000					entry	<at$len>, int, 1
+	000052	   101 	   124 	   044 		.ASCIZ	#AT$LEN#
+	000014	000052'				.WORD	$$
+	000014	000000G				.WORD	AT$LEN
+	000014	000002 				.WORD	INT
+	000014	000001 				.WORD	1
+     21	000000					entry	<at$sys>, chr, 2
+	000061	   101 	   124 	   044 		.ASCIZ	#AT$SYS#
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-1
+Symbol name data table
+
+	000016	000061'				.WORD	$$
+	000016	000000G				.WORD	AT$SYS
+	000016	000001 				.WORD	CHR
+	000016	000002 				.WORD	2
+     22	000000					entry	<b4speed>,int, 1
+	000070	   102 	   064 	   123 		.ASCIZ	#B4SPEED#
+	000020	000070'				.WORD	$$
+	000020	000000G				.WORD	B4SPEED
+	000020	000002 				.WORD	INT
+	000020	000001 				.WORD	1
+     23	000000					entry	<blknum>, int, 5
+	000100	   102 	   114 	   113 		.ASCIZ	#BLKNUM#
+	000022	000100'				.WORD	$$
+	000022	000000G				.WORD	BLKNUM
+	000022	000002 				.WORD	INT
+	000022	000005 				.WORD	5
+     24	000000					entry	<buflst>, int, 5
+	000107	   102 	   125 	   106 		.ASCIZ	#BUFLST#
+	000024	000107'				.WORD	$$
+	000024	000000G				.WORD	BUFLST
+	000024	000002 				.WORD	INT
+	000024	000005 				.WORD	5
+     25	000000					entry	<bufp>,   int, 5
+	000116	   102 	   125 	   106 		.ASCIZ	#BUFP#
+	000026	000116'				.WORD	$$
+	000026	000000G				.WORD	BUFP
+	000026	000002 				.WORD	INT
+	000026	000005 				.WORD	5
+     26	000000					entry	<bufs>,   int, 5
+	000123	   102 	   125 	   106 		.ASCIZ	#BUFS#
+	000030	000123'				.WORD	$$
+	000030	000000G				.WORD	BUFS
+	000030	000002 				.WORD	INT
+	000030	000005 				.WORD	5
+     27	000000					entry	<cc$max>, int, 1
+	000130	   103 	   103 	   044 		.ASCIZ	#CC$MAX#
+	000032	000130'				.WORD	$$
+	000032	000000G				.WORD	CC$MAX
+	000032	000002 				.WORD	INT
+	000032	000001 				.WORD	1
+     28	000000					entry	<chksiz>, int, 1
+	000137	   103 	   110 	   113 		.ASCIZ	#CHKSIZ#
+	000034	000137'				.WORD	$$
+	000034	000000G				.WORD	CHKSIZ
+	000034	000002 				.WORD	INT
+	000034	000001 				.WORD	1
+     29	000000					entry	<chktyp>, chr, 1
+	000146	   103 	   110 	   113 		.ASCIZ	#CHKTYP#
+	000036	000146'				.WORD	$$
+	000036	000000G				.WORD	CHKTYP
+	000036	000001 				.WORD	CHR
+	000036	000001 				.WORD	1
+     30	000000					entry	<cl$line>,int, 1
+	000155	   103 	   114 	   044 		.ASCIZ	#CL$LINE#
+	000040	000155'				.WORD	$$
+	000040	000000G				.WORD	CL$LINE
+	000040	000002 				.WORD	INT
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-2
+Symbol name data table
+
+	000040	000001 				.WORD	1
+     31	000000					entry	<cl.line>,int, 1
+	000165	   103 	   114 	   056 		.ASCIZ	#CL.LINE#
+	000042	000165'				.WORD	$$
+	000042	000000G				.WORD	CL.LINE
+	000042	000002 				.WORD	INT
+	000042	000001 				.WORD	1
+     32	000000					entry	<cl.pri>, int, 1
+	000175	   103 	   114 	   056 		.ASCIZ	#CL.PRI#
+	000044	000175'				.WORD	$$
+	000044	000000G				.WORD	CL.PRI
+	000044	000002 				.WORD	INT
+	000044	000001 				.WORD	1
+     33	000000					entry	<cl.r50>, int, 4
+	000204	   103 	   114 	   056 		.ASCIZ	#CL.R50#
+	000046	000204'				.WORD	$$
+	000046	000000G				.WORD	CL.R50
+	000046	000002 				.WORD	INT
+	000046	000004 				.WORD	4
+     34	000000					entry	<cl.unit>,int, 1
+	000213	   103 	   114 	   056 		.ASCIZ	#CL.UNIT#
+	000050	000213'				.WORD	$$
+	000050	000000G				.WORD	CL.UNIT
+	000050	000002 				.WORD	INT
+	000050	000001 				.WORD	1
+     35	000000					entry	<clkflg>, int, 1
+	000223	   103 	   114 	   113 		.ASCIZ	#CLKFLG#
+	000052	000223'				.WORD	$$
+	000052	000000G				.WORD	CLKFLG
+	000052	000002 				.WORD	INT
+	000052	000001 				.WORD	1
+     36	000000					entry	<cmdbuf>, int, 1
+	000232	   103 	   115 	   104 		.ASCIZ	#CMDBUF#
+	000054	000232'				.WORD	$$
+	000054	000000G				.WORD	CMDBUF
+	000054	000002 				.WORD	INT
+	000054	000001 				.WORD	1
+     37	000000					entry	<conpar>, chr, 20
+	000241	   103 	   117 	   116 		.ASCIZ	#CONPAR#
+	000056	000241'				.WORD	$$
+	000056	000000G				.WORD	CONPAR
+	000056	000001 				.WORD	CHR
+	000056	000020 				.WORD	20
+     38	000000					entry	<context>,int, 1
+	000250	   103 	   117 	   116 		.ASCIZ	#CONTEXT#
+	000060	000250'				.WORD	$$
+	000060	000000G				.WORD	CONTEXT
+	000060	000002 				.WORD	INT
+	000060	000001 				.WORD	1
+     39	000000					entry	<date.a>, int, 5
+	000260	   104 	   101 	   124 		.ASCIZ	#DATE.A#
+	000062	000260'				.WORD	$$
+	000062	000000G				.WORD	DATE.A
+	000062	000002 				.WORD	INT
+	000062	000005 				.WORD	5
+     40	000000					entry	<do8bit>, int, 1
+	000267	   104 	   117 	   070 		.ASCIZ	#DO8BIT#
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-3
+Symbol name data table
+
+	000064	000267'				.WORD	$$
+	000064	000000G				.WORD	DO8BIT
+	000064	000002 				.WORD	INT
+	000064	000001 				.WORD	1
+     41	000000					entry	<doattr>, int, 1
+	000276	   104 	   117 	   101 		.ASCIZ	#DOATTR#
+	000066	000276'				.WORD	$$
+	000066	000000G				.WORD	DOATTR
+	000066	000002 				.WORD	INT
+	000066	000001 				.WORD	1
+     42	000000					entry	<dorpt> , int, 1
+	000305	   104 	   117 	   122 		.ASCIZ	#DORPT#
+	000070	000305'				.WORD	$$
+	000070	000000G				.WORD	DORPT
+	000070	000002 				.WORD	INT
+	000070	000001 				.WORD	1
+     43					;	entry	<doslid>, int, 1
+     44	000000					entry	<edists>, int, 1
+	000313	   105 	   104 	   111 		.ASCIZ	#EDISTS#
+	000072	000313'				.WORD	$$
+	000072	000000G				.WORD	EDISTS
+	000072	000002 				.WORD	INT
+	000072	000001 				.WORD	1
+     45	000000					entry	<ebquot>, chr, 1
+	000322	   105 	   102 	   121 		.ASCIZ	#EBQUOT#
+	000074	000322'				.WORD	$$
+	000074	000000G				.WORD	EBQUOT
+	000074	000001 				.WORD	CHR
+	000074	000001 				.WORD	1
+     46	000000					entry	<errtxt>, chr, erbfsiz
+	000331	   105 	   122 	   122 		.ASCIZ	#ERRTXT#
+	000076	000331'				.WORD	$$
+	000076	000000G				.WORD	ERRTXT
+	000076	000001 				.WORD	CHR
+	000076	000170 				.WORD	ERBFSIZ
+     47	000000					entry	<fetpt>,  int, 1
+	000340	   106 	   105 	   124 		.ASCIZ	#FETPT#
+	000100	000340'				.WORD	$$
+	000100	000000G				.WORD	FETPT
+	000100	000002 				.WORD	INT
+	000100	000001 				.WORD	1
+     48	000000					entry	<fetptm>, int, 1
+	000346	   106 	   105 	   124 		.ASCIZ	#FETPTM#
+	000102	000346'				.WORD	$$
+	000102	000000G				.WORD	FETPTM
+	000102	000002 				.WORD	INT
+	000102	000001 				.WORD	1
+     49	000000					entry	<filnam>, chr, ln$max
+	000355	   106 	   111 	   114 		.ASCIZ	#FILNAM#
+	000104	000355'				.WORD	$$
+	000104	000000G				.WORD	FILNAM
+	000104	000001 				.WORD	CHR
+	000104	000120 				.WORD	LN$MAX
+     50	000000					entry	<filtyp>, int, 5
+	000364	   106 	   111 	   114 		.ASCIZ	#FILTYP#
+	000106	000364'				.WORD	$$
+	000106	000000G				.WORD	FILTYP
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-4
+Symbol name data table
+
+	000106	000002 				.WORD	INT
+	000106	000005 				.WORD	5
+     51	000000					entry	<freept>, int, 1
+	000373	   106 	   122 	   105 		.ASCIZ	#FREEPT#
+	000110	000373'				.WORD	$$
+	000110	000000G				.WORD	FREEPT
+	000110	000002 				.WORD	INT
+	000110	000001 				.WORD	1
+     52	000000					entry	<hilimit>,int, 1
+	000402	   110 	   111 	   114 		.ASCIZ	#HILIMIT#
+	000112	000402'				.WORD	$$
+	000112	000000G				.WORD	HILIMIT
+	000112	000002 				.WORD	INT
+	000112	000001 				.WORD	1
+     53	000000					entry	<image>,  int, 1
+	000412	   111 	   115 	   101 		.ASCIZ	#IMAGE#
+	000114	000412'				.WORD	$$
+	000114	000000G				.WORD	IMAGE
+	000114	000002 				.WORD	INT
+	000114	000001 				.WORD	1
+     54	000000					entry	<imgtyp>, int, 1
+	000420	   111 	   115 	   107 		.ASCIZ	#IMGTYP#
+	000116	000420'				.WORD	$$
+	000116	000000G				.WORD	IMGTYP
+	000116	000002 				.WORD	INT
+	000116	000001 				.WORD	1
+     55	000000					entry	<index>,  int, 1
+	000427	   111 	   116 	   104 		.ASCIZ	#INDEX#
+	000120	000427'				.WORD	$$
+	000120	000000G				.WORD	INDEX
+	000120	000002 				.WORD	INT
+	000120	000001 				.WORD	1
+     56	000000					entry	<indnam>, chr, 16+2	; /63/
+	000435	   111 	   116 	   104 		.ASCIZ	#INDNAM#
+	000122	000435'				.WORD	$$
+	000122	000000G				.WORD	INDNAM
+	000122	000001 				.WORD	CHR
+	000122	000020 				.WORD	16+2
+     57	000000					entry	<ininam>, chr, 16+2	; /63/
+	000444	   111 	   116 	   111 		.ASCIZ	#ININAM#
+	000124	000444'				.WORD	$$
+	000124	000000G				.WORD	ININAM
+	000124	000001 				.WORD	CHR
+	000124	000020 				.WORD	16+2
+     58	000000					entry	<jobsts>, int, 10
+	000453	   112 	   117 	   102 		.ASCIZ	#JOBSTS#
+	000126	000453'				.WORD	$$
+	000126	000000G				.WORD	JOBSTS
+	000126	000002 				.WORD	INT
+	000126	000010 				.WORD	10
+     59	000000					entry	<jobtyp>, int, 1
+	000462	   112 	   117 	   102 		.ASCIZ	#JOBTYP#
+	000130	000462'				.WORD	$$
+	000130	000000G				.WORD	JOBTYP
+	000130	000002 				.WORD	INT
+	000130	000001 				.WORD	1
+     60	000000					entry	<km.lock>,int, 1
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-5
+Symbol name data table
+
+	000471	   113 	   115 	   056 		.ASCIZ	#KM.LOCK#
+	000132	000471'				.WORD	$$
+	000132	000000G				.WORD	KM.LOCK
+	000132	000002 				.WORD	INT
+	000132	000001 				.WORD	1
+     61	000000					entry	<limits>, chr, 34.
+	000501	   114 	   111 	   115 		.ASCIZ	#LIMITS#
+	000134	000501'				.WORD	$$
+	000134	000000G				.WORD	LIMITS
+	000134	000001 				.WORD	CHR
+	000134	000042 				.WORD	34.
+     62	000000					entry	<linksts>,int, 1
+	000510	   114 	   111 	   116 		.ASCIZ	#LINKSTS#
+	000136	000510'				.WORD	$$
+	000136	000000G				.WORD	LINKSTS
+	000136	000002 				.WORD	INT
+	000136	000001 				.WORD	1
+     63	000000					entry	<logfil>, chr, 26+2	; /63/
+	000520	   114 	   117 	   107 		.ASCIZ	#LOGFIL#
+	000140	000520'				.WORD	$$
+	000140	000000G				.WORD	LOGFIL
+	000140	000001 				.WORD	CHR
+	000140	000030 				.WORD	26+2
+     64	000000					entry	<lokdate>,int, 1
+	000527	   114 	   117 	   113 		.ASCIZ	#LOKDATE#
+	000142	000527'				.WORD	$$
+	000142	000000G				.WORD	LOKDATE
+	000142	000002 				.WORD	INT
+	000142	000001 				.WORD	1
+     65	000000					entry	<loklen>, int, 1
+	000537	   114 	   117 	   113 		.ASCIZ	#LOKLEN#
+	000144	000537'				.WORD	$$
+	000144	000000G				.WORD	LOKLEN
+	000144	000002 				.WORD	INT
+	000144	000001 				.WORD	1
+     66	000000					entry	<lokstat>,int, 1
+	000546	   114 	   117 	   113 		.ASCIZ	#LOKSTAT#
+	000146	000546'				.WORD	$$
+	000146	000000G				.WORD	LOKSTAT
+	000146	000002 				.WORD	INT
+	000146	000001 				.WORD	1
+     67	000000					entry	<loktime>,int, 1
+	000556	   114 	   117 	   113 		.ASCIZ	#LOKTIME#
+	000150	000556'				.WORD	$$
+	000150	000000G				.WORD	LOKTIME
+	000150	000002 				.WORD	INT
+	000150	000001 				.WORD	1
+     68	000000					entry	<maxtop>, int, 1
+	000566	   115 	   101 	   130 		.ASCIZ	#MAXTOP#
+	000152	000566'				.WORD	$$
+	000152	000000G				.WORD	MAXTOP
+	000152	000002 				.WORD	INT
+	000152	000001 				.WORD	1
+     69	000000					entry	<mcrcmd>, int, 1
+	000575	   115 	   103 	   122 		.ASCIZ	#MCRCMD#
+	000154	000575'				.WORD	$$
+	000154	000000G				.WORD	MCRCMD
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-6
+Symbol name data table
+
+	000154	000002 				.WORD	INT
+	000154	000001 				.WORD	1
+     70	000000					entry	<mode>,   int, 5
+	000604	   115 	   117 	   104 		.ASCIZ	#MODE#
+	000156	000604'				.WORD	$$
+	000156	000000G				.WORD	MODE
+	000156	000002 				.WORD	INT
+	000156	000005 				.WORD	5
+     71	000000					entry	<modtype>,int, 1
+	000611	   115 	   117 	   104 		.ASCIZ	#MODTYPE#
+	000160	000611'				.WORD	$$
+	000160	000000G				.WORD	MODTYPE
+	000160	000002 				.WORD	INT
+	000160	000001 				.WORD	1
+     72	000000					entry	<montyp>, int, 1
+	000621	   115 	   117 	   116 		.ASCIZ	#MONTYP#
+	000162	000621'				.WORD	$$
+	000162	000000G				.WORD	MONTYP
+	000162	000002 				.WORD	INT
+	000162	000001 				.WORD	1
+     73	000000					entry	<mready>, int, 1
+	000630	   115 	   122 	   105 		.ASCIZ	#MREADY#
+	000164	000630'				.WORD	$$
+	000164	000000G				.WORD	MREADY
+	000164	000002 				.WORD	INT
+	000164	000001 				.WORD	1
+     74	000000					entry	<numtry>, int, 1
+	000637	   116 	   125 	   115 		.ASCIZ	#NUMTRY#
+	000166	000637'				.WORD	$$
+	000166	000000G				.WORD	NUMTRY
+	000166	000002 				.WORD	INT
+	000166	000001 				.WORD	1
+     75	000000					entry	<outlun>, int, 1
+	000646	   117 	   125 	   124 		.ASCIZ	#OUTLUN#
+	000170	000646'				.WORD	$$
+	000170	000000G				.WORD	OUTLUN
+	000170	000002 				.WORD	INT
+	000170	000001 				.WORD	1
+     76	000000					entry	<outopn>, int, 1
+	000655	   117 	   125 	   124 		.ASCIZ	#OUTOPN#
+	000172	000655'				.WORD	$$
+	000172	000000G				.WORD	OUTOPN
+	000172	000002 				.WORD	INT
+	000172	000001 				.WORD	1
+     77	000000					entry	<packet>, chr, $allsiz	; /BBS/
+	000664	   120 	   101 	   103 		.ASCIZ	#PACKET#
+	000174	000664'				.WORD	$$
+	000174	000000G				.WORD	PACKET
+	000174	000001 				.WORD	CHR
+	000174	001144 				.WORD	$ALLSIZ
+     78	000000					entry	<paknum>, int, 1
+	000673	   120 	   101 	   113 		.ASCIZ	#PAKNUM#
+	000176	000673'				.WORD	$$
+	000176	000000G				.WORD	PAKNUM
+	000176	000002 				.WORD	INT
+	000176	000001 				.WORD	1
+     79	000000					entry	<pcnt.r>, int, 2*34
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-7
+Symbol name data table
+
+	000702	   120 	   103 	   116 		.ASCIZ	#PCNT.R#
+	000200	000702'				.WORD	$$
+	000200	000000G				.WORD	PCNT.R
+	000200	000002 				.WORD	INT
+	000200	000070 				.WORD	2*34
+     80	000000					entry	<pcnt.s>, int, 2*34
+	000711	   120 	   103 	   116 		.ASCIZ	#PCNT.S#
+	000202	000711'				.WORD	$$
+	000202	000000G				.WORD	PCNT.S
+	000202	000002 				.WORD	INT
+	000202	000070 				.WORD	2*34
+     81	000000					entry	<pnhead>, int, 1
+	000720	   120 	   116 	   110 		.ASCIZ	#PNHEAD#
+	000204	000720'				.WORD	$$
+	000204	000000G				.WORD	PNHEAD
+	000204	000002 				.WORD	INT
+	000204	000001 				.WORD	1
+     82	000000					entry	<prexon>, int, 1
+	000727	   120 	   122 	   105 		.ASCIZ	#PREXON#
+	000206	000727'				.WORD	$$
+	000206	000000G				.WORD	PREXON
+	000206	000002 				.WORD	INT
+	000206	000001 				.WORD	1
+     83	000000					entry	<prot.a>, int, 5
+	000736	   120 	   122 	   117 		.ASCIZ	#PROT.A#
+	000210	000736'				.WORD	$$
+	000210	000000G				.WORD	PROT.A
+	000210	000002 				.WORD	INT
+	000210	000005 				.WORD	5
+     84	000000					entry	<qedtst>, int, 1	; /63/
+	000745	   121 	   105 	   104 		.ASCIZ	#QEDTST#
+	000212	000745'				.WORD	$$
+	000212	000000G				.WORD	QEDTST
+	000212	000002 				.WORD	INT
+	000212	000001 				.WORD	1
+     85	000000					entry	<qu.ini>, int, 1
+	000754	   121 	   125 	   056 		.ASCIZ	#QU.INI#
+	000214	000754'				.WORD	$$
+	000214	000000G				.WORD	QU.INI
+	000214	000002 				.WORD	INT
+	000214	000001 				.WORD	1
+     86	000000					entry	<r50dev>, int, 4
+	000763	   122 	   065 	   060 		.ASCIZ	#R50DEV#
+	000216	000763'				.WORD	$$
+	000216	000000G				.WORD	R50DEV
+	000216	000002 				.WORD	INT
+	000216	000004 				.WORD	4
+     87	000000					entry	<r50out>, int, 4	; /63/
+	000772	   122 	   065 	   060 		.ASCIZ	#R50OUT#
+	000220	000772'				.WORD	$$
+	000220	000000G				.WORD	R50OUT
+	000220	000002 				.WORD	INT
+	000220	000004 				.WORD	4
+     88	000000					entry	<remote>, int, 1
+	001001	   122 	   105 	   115 		.ASCIZ	#REMOTE#
+	000222	001001'				.WORD	$$
+	000222	000000G				.WORD	REMOTE
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-8
+Symbol name data table
+
+	000222	000002 				.WORD	INT
+	000222	000001 				.WORD	1
+     89	000000					entry	<restof>, int, 1
+	001010	   122 	   105 	   123 		.ASCIZ	#RESTOF#
+	000224	001010'				.WORD	$$
+	000224	000000G				.WORD	RESTOF
+	000224	000002 				.WORD	INT
+	000224	000001 				.WORD	1
+     90	000000					entry	<rptlast>,chr, 2	; /63/
+	001017	   122 	   120 	   124 		.ASCIZ	#RPTLAST#
+	000226	001017'				.WORD	$$
+	000226	000000G				.WORD	RPTLAST
+	000226	000001 				.WORD	CHR
+	000226	000002 				.WORD	2
+     91	000000					entry	<rptquo>, chr, 2	; /63/
+	001027	   122 	   120 	   124 		.ASCIZ	#RPTQUO#
+	000230	001027'				.WORD	$$
+	000230	000000G				.WORD	RPTQUO
+	000230	000001 				.WORD	CHR
+	000230	000002 				.WORD	2
+     92	000000					entry	<rptsave>,chr, 2	; /63/
+	001036	   122 	   120 	   124 		.ASCIZ	#RPTSAVE#
+	000232	001036'				.WORD	$$
+	000232	000000G				.WORD	RPTSAVE
+	000232	000001 				.WORD	CHR
+	000232	000002 				.WORD	2
+     93	000000					entry	<rt11upd>,int, 1
+	001046	   122 	   124 	   061 		.ASCIZ	#RT11UPD#
+	000234	001046'				.WORD	$$
+	000234	000000G				.WORD	RT11UPD
+	000234	000002 				.WORD	INT
+	000234	000001 				.WORD	1
+     94	000000					entry	<rt11ver>,int, 1
+	001056	   122 	   124 	   061 		.ASCIZ	#RT11VER#
+	000236	001056'				.WORD	$$
+	000236	000000G				.WORD	RT11VER
+	000236	000002 				.WORD	INT
+	000236	000001 				.WORD	1
+     95	000000					entry	<rtwork>, int, 10
+	001066	   122 	   124 	   127 		.ASCIZ	#RTWORK#
+	000240	001066'				.WORD	$$
+	000240	000000G				.WORD	RTWORK
+	000240	000002 				.WORD	INT
+	000240	000010 				.WORD	10
+     96	000000					entry	<senwin>, int, 1
+	001075	   123 	   105 	   116 		.ASCIZ	#SENWIN#
+	000242	001075'				.WORD	$$
+	000242	000000G				.WORD	SENWIN
+	000242	000002 				.WORD	INT
+	000242	000001 				.WORD	1
+     97	000000					entry	<senpar>, chr, 20
+	001104	   123 	   105 	   116 		.ASCIZ	#SENPAR#
+	000244	001104'				.WORD	$$
+	000244	000000G				.WORD	SENPAR
+	000244	000001 				.WORD	CHR
+	000244	000020 				.WORD	20
+     98	000000					entry	<size>,   int, 1
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-9
+Symbol name data table
+
+	001113	   123 	   111 	   132 		.ASCIZ	#SIZE#
+	000246	001113'				.WORD	$$
+	000246	000000G				.WORD	SIZE
+	000246	000002 				.WORD	INT
+	000246	000001 				.WORD	1
+     99	000000					entry	<sizof>,  int, 5
+	001120	   123 	   111 	   132 		.ASCIZ	#SIZOF#
+	000250	001120'				.WORD	$$
+	000250	000000G				.WORD	SIZOF
+	000250	000002 				.WORD	INT
+	000250	000005 				.WORD	5
+    100	000000					entry	<snd8bit>,int, 1
+	001126	   123 	   116 	   104 		.ASCIZ	#SND8BIT#
+	000252	001126'				.WORD	$$
+	000252	000000G				.WORD	SND8BIT
+	000252	000002 				.WORD	INT
+	000252	000001 				.WORD	1
+    101	000000					entry	<spare1>, chr, 256.
+	001136	   123 	   120 	   101 		.ASCIZ	#SPARE1#
+	000254	001136'				.WORD	$$
+	000254	000000G				.WORD	SPARE1
+	000254	000001 				.WORD	CHR
+	000254	000400 				.WORD	256.
+    102	000000					entry	<sparsz>, int, 1
+	001145	   123 	   120 	   101 		.ASCIZ	#SPARSZ#
+	000256	001145'				.WORD	$$
+	000256	000000G				.WORD	SPARSZ
+	000256	000002 				.WORD	INT
+	000256	000001 				.WORD	1
+    103	000000					entry	<srcnam>, chr, ln$max
+	001154	   123 	   122 	   103 		.ASCIZ	#SRCNAM#
+	000260	001154'				.WORD	$$
+	000260	000000G				.WORD	SRCNAM
+	000260	000001 				.WORD	CHR
+	000260	000120 				.WORD	LN$MAX
+    104	000000					entry	<stklim>, chr, stksiz	; /62/ dump the stack, backwards!
+	001163	   123 	   124 	   113 		.ASCIZ	#STKLIM#
+	000262	001163'				.WORD	$$
+	000262	000000G				.WORD	STKLIM
+	000262	000001 				.WORD	CHR
+	000262	000000G				.WORD	STKSIZ
+    105	000000					entry	<time.a>, int, 5
+	001172	   124 	   111 	   115 		.ASCIZ	#TIME.A#
+	000264	001172'				.WORD	$$
+	000264	000000G				.WORD	TIME.A
+	000264	000002 				.WORD	INT
+	000264	000005 				.WORD	5
+    106	000000					entry	<times>,  int, 10	; /BBS/ wuz 4
+	001201	   124 	   111 	   115 		.ASCIZ	#TIMES#
+	000266	001201'				.WORD	$$
+	000266	000000G				.WORD	TIMES
+	000266	000002 				.WORD	INT
+	000266	000010 				.WORD	10
+    107	000000					entry	<totp.r>, int, 1	; pointer
+	001207	   124 	   117 	   124 		.ASCIZ	#TOTP.R#
+	000270	001207'				.WORD	$$
+	000270	000000G				.WORD	TOTP.R
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-10
+Symbol name data table
+
+	000270	000002 				.WORD	INT
+	000270	000001 				.WORD	1
+    108	000000					entry	<totp.s>, int, 1	; pointer
+	001216	   124 	   117 	   124 		.ASCIZ	#TOTP.S#
+	000272	001216'				.WORD	$$
+	000272	000000G				.WORD	TOTP.S
+	000272	000002 				.WORD	INT
+	000272	000001 				.WORD	1
+    109	000000					entry	<tsxcl>,  int, 1
+	001225	   124 	   123 	   130 		.ASCIZ	#TSXCL#
+	000274	001225'				.WORD	$$
+	000274	000000G				.WORD	TSXCL
+	000274	000002 				.WORD	INT
+	000274	000001 				.WORD	1
+    110	000000					entry	<tsxsav>, int, 1
+	001233	   124 	   123 	   130 		.ASCIZ	#TSXSAV#
+	000276	001233'				.WORD	$$
+	000276	000000G				.WORD	TSXSAV
+	000276	000002 				.WORD	INT
+	000276	000001 				.WORD	1
+    111	000000					entry	<tsxver>, int, 1
+	001242	   124 	   123 	   130 		.ASCIZ	#TSXVER#
+	000300	001242'				.WORD	$$
+	000300	000000G				.WORD	TSXVER
+	000300	000002 				.WORD	INT
+	000300	000001 				.WORD	1
+    112	000000					entry	<tt$io>,  int, 1
+	001251	   124 	   124 	   044 		.ASCIZ	#TT$IO#
+	000302	001251'				.WORD	$$
+	000302	000000G				.WORD	TT$IO
+	000302	000002 				.WORD	INT
+	000302	000001 				.WORD	1
+    113	000000					entry	<ttbuf>,  int, ttbsiz+2
+	001257	   124 	   124 	   102 		.ASCIZ	#TTBUF#
+	000304	001257'				.WORD	$$
+	000304	000000G				.WORD	TTBUF
+	000304	000002 				.WORD	INT
+	000304	000002G				.WORD	TTBSIZ+2
+    114	000000					entry	<ttparm>, int, 1
+	001265	   124 	   124 	   120 		.ASCIZ	#TTPARM#
+	000306	001265'				.WORD	$$
+	000306	000000G				.WORD	TTPARM
+	000306	000002 				.WORD	INT
+	000306	000001 				.WORD	1
+    115	000000					entry	<ttpar2>, int, 1
+	001274	   124 	   124 	   120 		.ASCIZ	#TTPAR2#
+	000310	001274'				.WORD	$$
+	000310	000000G				.WORD	TTPAR2
+	000310	000002 				.WORD	INT
+	000310	000001 				.WORD	1
+    116	000000					entry	<undchr>, chr, 2
+	001303	   125 	   116 	   104 		.ASCIZ	#UNDCHR#
+	000312	001303'				.WORD	$$
+	000312	000000G				.WORD	UNDCHR
+	000312	000001 				.WORD	CHR
+	000312	000002 				.WORD	2
+    117	000000					entry	<undlin>, chr, ln$max+2
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 9-11
+Symbol name data table
+
+	001312	   125 	   116 	   104 		.ASCIZ	#UNDLIN#
+	000314	001312'				.WORD	$$
+	000314	000000G				.WORD	UNDLIN
+	000314	000001 				.WORD	CHR
+	000314	000122 				.WORD	LN$MAX+2
+    118	000000					entry	<vbgexe>, int, 1
+	001321	   126 	   102 	   107 		.ASCIZ	#VBGEXE#
+	000316	001321'				.WORD	$$
+	000316	000000G				.WORD	VBGEXE
+	000316	000002 				.WORD	INT
+	000316	000001 				.WORD	1
+    119	000000					entry	<xcdone>, int, 1
+	001330	   130 	   103 	   104 		.ASCIZ	#XCDONE#
+	000320	001330'				.WORD	$$
+	000320	000000G				.WORD	XCDONE
+	000320	000002 				.WORD	INT
+	000320	000001 				.WORD	1
+    120	000000					entry	<xkbuff>, chr, <xksize+2>
+	001337	   130 	   113 	   102 		.ASCIZ	#XKBUFF#
+	000322	001337'				.WORD	$$
+	000322	000000G				.WORD	XKBUFF
+	000322	000001 				.WORD	CHR
+	000322	000002G				.WORD	XKSIZE+2
+    121	000000					entry	<xklgbu>, int, 1
+	001346	   130 	   113 	   114 		.ASCIZ	#XKLGBU#
+	000324	001346'				.WORD	$$
+	000324	000000G				.WORD	XKLGBU
+	000324	000002 				.WORD	INT
+	000324	000001 				.WORD	1
+    122	000000					entry	<xkpoint>,int, 1
+	001355	   130 	   113 	   120 		.ASCIZ	#XKPOINT#
+	000326	001355'				.WORD	$$
+	000326	000000G				.WORD	XKPOINT
+	000326	000002 				.WORD	INT
+	000326	000001 				.WORD	1
+    123	000000					entry	<xl.lock>,int, 1
+	001365	   130 	   114 	   056 		.ASCIZ	#XL.LOCK#
+	000330	001365'				.WORD	$$
+	000330	000000G				.WORD	XL.LOCK
+	000330	000002 				.WORD	INT
+	000330	000001 				.WORD	1
+    124	000000					entry	<xmfetp>, int, 1
+	001375	   130 	   115 	   106 		.ASCIZ	#XMFETP#
+	000332	001375'				.WORD	$$
+	000332	000000G				.WORD	XMFETP
+	000332	000002 				.WORD	INT
+	000332	000001 				.WORD	1
+    125	000000					entry	<z.atch>, int, 1
+	001404	   132 	   056 	   101 		.ASCIZ	#Z.ATCH#
+	000334	001404'				.WORD	$$
+	000334	000000G				.WORD	Z.ATCH
+	000334	000002 				.WORD	INT
+	000334	000001 				.WORD	1
+    126	000000					entry
+	000336	000000 				.word	0
+    127
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 10
+Symbol name data table
+
+      1
+      2						.sbttl	EXAMINE data in memory
+      3
+      4	000000				c$exam::upcase	argbuf			; /63/ more appropriate name..
+	000000	016700 	000000G			mov	argbuf	,r0
+	000004	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      5	000010	121027 	000060 			cmpb	@r0	,#'0		; /45/ numeric?
+      6	000014	103426 				blo	10$			; /45/ no
+      7	000016	121027 	000071 			cmpb	@r0	,#'9		; /62/ numeric?
+      8	000022	101023 				bhi	10$			; /45/ no
+      9	000024					calls	octval	,<r0>		; /45/ yes, get the address
+	000024	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000026	010046 				  mov	r0	,-(sp)		; doing it thusly generates less code
+	000030	010605 				  mov	sp	,r5		; set pointer to argument list
+	000032	004767 	000000G			  jsr	pc	,octval		; call the subroutine
+	000036	005726 				  tst	(sp)+			; pop parameter list from stack
+	000040	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     10	000042	005700 				tst	r0			; /BBS/ ok?
+     11	000044	001050 				bne	50$			; /BBS/ nope
+     12	000046	042701 	000001 			bic	#1	,r1		; /62/ ensure it's word aligned
+     13
+     14					; /BBS/ WARNING: This only works for valid addresses.
+     15					;	Consult the link map and assembly listings to
+     16					;	determine what is valid.  Attempting to access
+     17					;	an illegal address will trap to the monitor.
+     18
+     19	000052					octout	@r1			; /45/ dump the data
+	000052	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000054	011146 				  mov	@r1	,-(sp)		; doing it thusly generates less code
+	000056	010605 				  mov	sp	,r5		; set pointer to argument list
+	000060	004767 	000000G			  jsr	pc	,l$wroct		; call the subroutine
+	000064	005726 				  tst	(sp)+			; pop parameter list from stack
+	000066	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     20	000070	000446 				br	60$			; /45/ exit
+     21
+     22	000072	121027 	000052 		10$:	cmpb	@r0	,#'*		; dump everything today?
+     23	000076	001013 				bne	30$			; no
+     24	000100	005000 				clr	r0			; yes, start with first one
+     25	000102	005760 	000000'		20$:	tst	texadr(r0)		; keep going until address of zero
+     26	000106	001441 				beq	70$			; exit /BBS/ skip extra newline at end
+     27	000110	004767 	000102 			call	prtsym			; print the symbol out
+     28	000114	062700 	000002 			add	#2	,r0		; next please
+     29	000120					.newline
+	000120	004767 	000000G			call	l$pcrlf
+     30	000124	000766 				br	20$
+     31
+     32	000126	004767 	000664 		30$:	call	findsy			; find the symbol now
+     33	000132	005700 				tst	r0			; found it?
+     34	000134	100403 				bmi	40$			; no
+     35	000136	004767 	000054 			call	prtsym			; dump it please
+     36	000142	000421 				br	60$
+     37
+     38	000144				40$:	wrtall	#deb.06			; /63/ "?KRTDEB-E-"
+	000144	012746 	000100'			mov	#deb.06	,-(sp)		; pass the address
+	000150	004767 	000000G			call	wrtall			; do it
+     39	000154					wrtall	#deb.07			; /63/ "Symbol not in internal STB"
+	000154	012746 	000113'			mov	#deb.07	,-(sp)		; pass the address
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 10-1
+EXAMINE data in memory
+
+	000160	004767 	000000G			call	wrtall			; do it
+     40	000164	000410 				br	60$
+     41	000166				50$:	wrtall	#deb.06			; /63/ "?KRTDEB-E-"
+	000166	012746 	000100'			mov	#deb.06	,-(sp)		; pass the address
+	000172	004767 	000000G			call	wrtall			; do it
+     42	000176					wrtall	#deb.08			; /63/ "Bad octal value"
+	000176	012746 	000146'			mov	#deb.08	,-(sp)		; pass the address
+	000202	004767 	000000G			call	wrtall			; do it
+     43	000206				60$:	.newline
+	000206	004767 	000000G			call	l$pcrlf
+     44	000212	005000 			70$:	clr	r0			; /62/
+     45	000214	000207 				return
+     46
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 11
+EXAMINE data in memory
+
+      1
+      2						.sbttl	Print symbol
+      3
+      4					;	input:	r0	offset
+      5
+      6	000216				prtsym:	save	<r0>
+	000216	010046 				 mov	r0	,-(sp)
+      7	000220	162706 	000020 			sub	#20	,sp		; allocate a small text buffer
+      8	000224	010603 				mov	sp	,r3		; and a pointer
+      9	000226	010005 				mov	r0	,r5		; ensure we don't zap offset
+     10	000230					wrtall	texadr(r5)		; print the symbol name
+	000230	016546 	000000'			mov	texadr(r5)	,-(sp)		; pass the address
+	000234	004767 	000000G			call	wrtall			; do it
+     11	000240	016504 	000000'			mov	symtyp(r5),r4		; get the class of symbol
+     12	000244	006304 				asl	r4			; word indexing
+     13	000246					wrtall	deb.02-2(r4)		; /63/ format it a bit
+	000246	016446 	000002'			mov	deb.02-2(r4)	,-(sp)		; pass the address
+	000252	004767 	000000G			call	wrtall			; do it
+     14	000256					deccvt	symsiz(r5),r3,#5	; get the data item's size
+	000256	010546 				mov	r5	,-(sp)
+	000260	012746 	000005 			mov	#5	,-(sp)
+	000264	016546 	000000'			mov	symsiz(r5)	,-(sp)
+	000270	010346 				mov	r3	,-(sp)
+	000272	010605 				mov	sp	,r5
+	000274	004767 	000000G			call	l$cvtnum
+	000300	062706 	000006 			add	#6	,sp
+	000304	012605 				mov	(sp)+	,r5
+     15	000306	105063 	000005 			clrb	5(r3)			; null terminate
+     16	000312					wrtall	r3			; print that out
+	000312	010346 				mov	r3	,-(sp)		; pass the address
+	000314	004767 	000000G			call	wrtall			; do it
+     17	000320	012700 	000056 			mov	#'.	,r0
+     18	000324	004767 	000000G			call	writ1ch			; /BBS/ add decimal point
+     19	000330					wrtall	#deb.05			; /BBS/ address header
+	000330	012746 	000052'			mov	#deb.05	,-(sp)		; pass the address
+	000334	004767 	000000G			call	wrtall			; do it
+     20	000340					octout	virtad(r5)		; /BBS/ display starting address
+	000340	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000342	016546 	000000'			  mov	virtad(r5)	,-(sp)		; doing it thusly generates less code
+	000346	010605 				  mov	sp	,r5		; set pointer to argument list
+	000350	004767 	000000G			  jsr	pc	,l$wroct		; call the subroutine
+	000354	005726 				  tst	(sp)+			; pop parameter list from stack
+	000356	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     21	000360					.newline
+	000360	004767 	000000G			call	l$pcrlf
+     22	000364					.newline
+	000364	004767 	000000G			call	l$pcrlf
+     23	000370	004774 	177776'			jsr	pc	,@deb.01-2(r4)	; /63/ call appropriate format routine
+     24	000374	062706 	000020 			add	#20	,sp
+     25	000400					unsave	<r0>
+	000400	012600 				 mov	(sp)+	,r0
+     26	000402	000207 				return
+     27
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 12
+Print symbol
+
+      1
+      2						.sbttl	Format byte data
+      3
+      4	000404	162706 	000020 		pbyte:	sub	#20	,sp		; a buffer to use today
+      5	000410	016567 	000000'	000000'		mov	symsiz(r5),togo		; number of bytes to dump
+      6	000416	001513 				beq	90$			; nothing to do..
+      7	000420	016505 	000000'			mov	virtad(r5),r5		; get the base address
+      8	000424	012703 	000020 		10$:	mov	#20	,r3		; maximum of 16 items per line
+      9	000430	012701 	000002'			mov	#ascbuf	,r1		; /BBS/ for ascii display of line
+     10	000434	010602 			20$:	mov	sp	,r2		; pointer to local buffer
+     11	000436	005004 				clr	r4			; get the next byte please
+     12	000440	152504 				bisb	(r5)+	,r4		; without sign extension
+     13	000442	105011 				clrb	(r1)			; /BBS/ prep to ..
+     14	000444	150411 				bisb	r4	,(r1)		; /BBS/ ..copy sans sign extension
+     15	000446	142711 	177600 			bicb	#^c<177>,(r1)		; /BBS/ hose hi bit
+     16	000452	121127 	000040 			cmpb	(r1)	,#space		; /BBS/ printable?
+     17	000456	002403 				blt	30$			; /BBS/ no
+     18	000460	121127 	000177 			cmpb	(r1)	,#177		; /BBS printable?
+     19	000464	002403 				blt	40$			; /BBS/ ya
+     20	000466	112721 	000056 		30$:	movb	#'.&77	,(r1)+		; /BBS/ no, stuff a dot
+     21	000472	000401 				br	50$			; /BBS/ and continue
+     22	000474	105721 			40$:	tstb	(r1)+			; /BBS/ save char, bump to next byte
+     23	000476	010400 			50$:	mov	r4	,r0		; copy it
+     24	000500					ash	#-6	,r0		; get the high two bits now
+	000500	006200 				.iif lt <$$type>  asr	r0
+	000502	006200 				.iif lt <$$type>  asr	r0
+	000504	006200 				.iif lt <$$type>  asr	r0
+	000506	006200 				.iif lt <$$type>  asr	r0
+	000510	006200 				.iif lt <$$type>  asr	r0
+	000512	006200 				.iif lt <$$type>  asr	r0
+     25	000514	042700 	177774 			bic	#^c<3>	,r0		; mask the lower bits please
+     26	000520	062700 	000060 			add	#'0	,r0		; convert
+     27	000524	110022 				movb	r0	,(r2)+		; and copy
+     28	000526	010400 				mov	r4	,r0		; copy it
+     29	000530					ash	#-3	,r0		; get the high two bits now
+	000530	006200 				.iif lt <$$type>  asr	r0
+	000532	006200 				.iif lt <$$type>  asr	r0
+	000534	006200 				.iif lt <$$type>  asr	r0
+     30	000536	042700 	177770 			bic	#^c<7>	,r0		; mask the lower bits please
+     31	000542	062700 	000060 			add	#'0	,r0		; convert
+     32	000546	110022 				movb	r0	,(r2)+		; and copy
+     33	000550	010400 				mov	r4	,r0		; copy it
+     34	000552	042700 	177770 			bic	#^c<7>	,r0		; mask the lower bits please
+     35	000556	062700 	000060 			add	#'0	,r0		; convert
+     36	000562	110022 				movb	r0	,(r2)+		; and copy
+     37	000564	112722 	000040 			movb	#space	,(r2)+		; /BBS/ a trailing space
+     38	000570	105012 				clrb	@r2			; at last, .asciz
+     39	000572	010602 				mov	sp	,r2		; restore buffer pointer and print
+     40	000574					wrtall	r2			; simple
+	000574	010246 				mov	r2	,-(sp)		; pass the address
+	000576	004767 	000000G			call	wrtall			; do it
+     41	000602	005367 	000000'			dec	togo			; anything else to print
+     42	000606	001405 				beq	60$			; no
+     43	000610					sob	r3	,20$		; yes, next on the line please
+	000610	005303 				dec	r3
+	000612	001310 				bne	20$
+     44	000614	004767 	000034 			call	100$			; /BBS/ dump ascii list next then goto
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 12-1
+Format byte data
+
+     45	000620	000701 				br	10$			; next line
+     46	000622	005303 			60$:	dec	r3			; /BBS/ adj r3 for last pass thru loop
+     47	000624	003406 				ble	80$			; /BBS/ r3 now contains pad count
+     48	000626				70$:	wrtall	#octpad			; /BBS/ blanks where "000" would be
+	000626	012746 	000177'			mov	#octpad	,-(sp)		; pass the address
+	000632	004767 	000000G			call	wrtall			; do it
+     49	000636					sob	r3	,70$		; /BBS/ until padded to a full line
+	000636	005303 				dec	r3
+	000640	001372 				bne	70$
+     50	000642	004767 	000006 		80$:	call	100$			; /BBS/ now dump ascii chars
+     51	000646	062706 	000020 		90$:	add	#20	,sp		; release the local buffer
+     52	000652	000207 				return
+     53
+     54	000654	112721 	000015 		100$:	movb	#cr	,(r1)+		; /BBS/ stuff a CR
+     55	000660	112721 	000012 			movb	#lf	,(r1)+		; /BBS/ and LF in buffer
+     56	000664	105011 				clrb	@r1			; /BBS/ terminate it
+     57	000666					wrtall	#ascbuf			; /BBS/ dump it to screen
+	000666	012746 	000002'			mov	#ascbuf	,-(sp)		; pass the address
+	000672	004767 	000000G			call	wrtall			; do it
+     58	000676	000207 				return
+     59
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 13
+Format byte data
+
+      1
+      2						.sbttl	Format integer data
+      3
+      4	000700	016501 	000000'		pint:	mov	symsiz(r5),r1		; get the number of data elements
+      5	000704	001443 				beq	40$			; nothing to do at all
+      6	000706	016502 	000000'			mov	virtad(r5),r2		; get the address of what to print
+      7	000712	012703 	000004 		10$:	mov	#4	,r3		; number of items per line
+      8	000716	012204 			20$:	mov	(r2)+	,r4		; /BBS/ get word while in this segment
+      9	000720					decout	r4			; dump it /BBS/ wuz (r2)
+	000720	010546 				mov	r5	,-(sp)
+	000722	010446 				mov	r4	,-(sp)		; /62/ l$wrdec pops this buffer
+	000724	010605 				mov	sp	,r5
+	000726	004767 	000000G			call	l$wrdec
+	000732	012605 				mov	(sp)+	,r5
+     10	000734					wrtall	#deb.09			; /63/ ". ("
+	000734	012746 	000166'			mov	#deb.09	,-(sp)		; pass the address
+	000740	004767 	000000G			call	wrtall			; do it
+     11	000744					octout	r4			; /BBS/ (r2)+ can return BAD values!!
+	000744	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000746	010446 				  mov	r4	,-(sp)		; doing it thusly generates less code
+	000750	010605 				  mov	sp	,r5		; set pointer to argument list
+	000752	004767 	000000G			  jsr	pc	,l$wroct		; call the subroutine
+	000756	005726 				  tst	(sp)+			; pop parameter list from stack
+	000760	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     12	000762					wrtall	#deb.10			; /63/ ")   "
+	000762	012746 	000172'			mov	#deb.10	,-(sp)		; pass the address
+	000766	004767 	000000G			call	wrtall			; do it
+     13	000772	005301 				dec	r1			; all done?
+     14	000774	001405 				beq	30$			; yes, exit
+     15	000776					sob	r3	,20$		; not done, print next item
+	000776	005303 				dec	r3
+	001000	001346 				bne	20$
+     16	001002					.newline
+	001002	004767 	000000G			call	l$pcrlf
+     17	001006	000741 				br	10$			; next line of printing
+     18	001010				30$:	.newline
+	001010	004767 	000000G			call	l$pcrlf
+     19	001014	000207 			40$:	return
+     20
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 14
+Format integer data
+
+      1
+      2						.sbttl	Locate symbol offset in index
+      3
+      4	001016	005003 			findsy:	clr	r3			; init index
+      5	001020	016301 	000000'		10$:	mov	texadr(r3),r1		; point to the text now
+      6	001024	001413 				beq	50$			; if eq, we hit the end of it all
+      7	001026	010002 				mov	r0	,r2		; /BBS/ refresh pointer
+      8	001030	122221 			20$:	cmpb	(r2)+	,(r1)+		; check for exact match on characters
+      9	001032	001003 				bne	30$			; no
+     10	001034	105712 				tstb	(r2)			; ya, anything left?
+     11	001036	001374 				bne	20$			; ya, keep checking
+     12	001040	000403 				br	40$			; no, it's a match
+     13	001042	062703 	000002 		30$:	add	#2	,r3		; no match, advance to the next addr
+     14	001046	000764 				br	10$			; next please
+     15
+     16	001050	010300 			40$:	mov	r3	,r0		; return index in r0
+     17	001052	000402 				br	60$
+     18	001054	012700 	177777 		50$:	mov	#-1	,r0		; no match, return index of -1
+     19	001060	000207 			60$:	return
+     20
+     21		000001 				.end
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 14-1
+Symbol table
+
+ALBUFF= ****** GX	C.LCUC= 000040   	LF    = 000012   	PNHEAD= ****** GX	TERMIN  177777
+ALSIZE= 001000   	C.LSPA= 000010   	LIMITS= ****** GX	PREXON= ****** GX	TEXADR  000000R     005
+ARGBUF= ****** GX	C.SSPA= 000020   	LINKST= ****** GX	PROT.A= ****** GX	TEXT    000000
+ARGPNT= ****** GX	C.TSPA= 000200   	LN$CNT= 000003   	PRTSYM  000216R     002	TILDE = 000176
+ASCBUF  000002R     004	DATE.A= ****** GX	LN$MAX= 000120   	P.CAPA= 000011   	TIMES = ****** GX
+ASNAME= ****** GX	DEB.01  000000R     003	LOGFIL= ****** GX	P.CHKT= 000007   	TIME.A= ****** GX
+AT$LEN= ****** GX	DEB.02  000004R     003	LOG$AL= 000003   	P.EOL = 000004   	TOGO    000000R     004
+AT$SYS= ****** GX	DEB.03  000010R     003	LOG$CO= 000002   	P.MXL1= 000013   	TOTP.R= ****** GX
+AT.ALL  000177   	DEB.04  000031R     003	LOG$DE= 000020   	P.MXL2= 000014   	TOTP.S= ****** GX
+AT.CDT  000001   	DEB.05  000052R     003	LOG$IO= 000010   	P.NPAD= 000002   	TSXCL = ****** GX
+AT.INF  000002   	DEB.06  000100R     003	LOG$ON= 040000   	P.PADC= 000003   	TSXSAV= ****** GX
+AT.LEN  000004   	DEB.07  000113R     003	LOG$OP= 100000   	P.QBIN= 000006   	TSXVER= ****** GX
+AT.ON   100000   	DEB.08  000146R     003	LOG$PA= 000001   	P.QCTL= 000005   	TTBSIZ= ****** GX
+AT.PRO  000010   	DEB.09  000166R     003	LOG$RP= 000004   	P.REPT= 000010   	TTBUF = ****** GX
+AT.SYS  000020   	DEB.10  000172R     003	LOKDAT= ****** GX	P.SPSI= 000000   	TTPARM= ****** GX
+AT.TYP  000040   	DECNAT  000002   	LOKLEN= ****** GX	P.TIME= 000001   	TTPAR2= ****** GX
+AT.XLE  000100   	DEL   = 000177   	LOKSTA= ****** GX	P.VEND= 000017   	TTY   = 000001
+BELL  = 000007   	DOATTR= ****** GX	LOKTIM= ****** GX	P.WIND= 000012   	TT$IO = ****** GX
+BINARY  000001   	DORPT = ****** GX	L$CVTN= ****** GX	QEDTST= ****** GX	UNDCHR= ****** GX
+BLKNUM= ****** GX	DOT   = 000056   	L$PCRL= ****** GX	QU.INI= ****** GX	UNDLIN= ****** GX
+BS    = 000010   	DO8BIT= ****** GX	L$WRDE= ****** GX	REMOTE= ****** GX	UPCASE= ****** GX
+BUFLST= ****** GX	EBQUOT= ****** GX	L$WROC= ****** GX	RESTOF= ****** GX	USERRB= 000053
+BUFP  = ****** GX	EDISTS= ****** GX	MAXLNG= 001130   	RPTLAS= ****** GX	VBGEXE= ****** GX
+BUFS  = ****** GX	ERBFSI= 000170   	MAXPAK  000136   	RPTQUO= ****** GX	VIRTAD  000000R     006
+B4SPEE= ****** GX	ERRBYT= 000052   	MAXTOP= ****** GX	RPTSAV= ****** GX	VT100 = 000002
+CAPA.A= 000010   	ERROR$= 000004   	MCRCMD= ****** GX	RTWORK= ****** GX	VT200 = 000003
+CAPA.L= 000002   	ERRTXT= ****** GX	MODE  = ****** GX	RT11UP= ****** GX	WARN$ = 000002
+CAPA.S= 000004   	ESC   = 000033   	MODTYP= ****** GX	RT11VE= ****** GX	WRIT1C= ****** GX
+CC$MAX= ****** GX	FATAL$= 000020   	MONTYP= ****** GX	R50DEV= ****** GX	WRTALL= ****** GX
+CHKSIZ= ****** GX	FETPT = ****** GX	MREADY= ****** GX	R50OUT= ****** GX	XCDONE= ****** GX
+CHKTYP= ****** GX	FETPTM= ****** GX	NONEIS= 000001   	SCOLON= 000073   	XKBUFF= ****** GX
+CHR   = 000001   	FF    = 000014   	NOSCOP= 000000   	SENPAR= ****** GX	XKLGBU= ****** GX
+CLKFLG= ****** GX	FILNAM= ****** GX	NUMTRY= ****** GX	SENWIN= ****** GX	XKPOIN= ****** GX
+CL$LIN= ****** GX	FILTYP= ****** GX	OCTPAD  000177R     003	SEVER$= 000010   	XKSIZE= ****** GX
+CL.LIN= ****** GX	FINDSY  001016R     002	OCTVAL= ****** GX	SIZE  = ****** GX	XL.LOC= ****** GX
+CL.PRI= ****** GX	FREEPT= ****** GX	OUTLUN= ****** GX	SIZOF = ****** GX	XMFETP= ****** GX
+CL.R50= ****** GX	HILIMI= ****** GX	OUTOPN= ****** GX	SND8BI= ****** GX	XOFF  = 000023
+CL.UNI= ****** GX	IMAGE = ****** GX	PACKET= ****** GX	SOH   = 000001   	XON   = 000021
+CMDBUF= ****** GX	IMGTYP= ****** GX	PAKNUM= ****** GX	SPACE = 000040   	Z.ATCH= ****** GX
+COMMA = 000054   	INDEX = ****** GX	PAR$EV  000002   	SPARE1= ****** GX	$ALLSI= 001144
+CONPAR= ****** GX	INDNAM= ****** GX	PAR$MA  000003   	SPARSZ= ****** GX	$C    = 000003
+CONTEX= ****** GX	ININAM= ****** GX	PAR$NO  000000   	SRCNAM= ****** GX	$IMAGE= ****** GX
+CON$ES= 000034   	INT   = 000002   	PAR$OD  000001   	STKLIM= ****** GX	$LIMIT= ****** GX
+CR    = 000015   	JOBSTS= ****** GX	PAR$SP  000004   	STKSIZ= ****** GX	$$    = 000001
+CTRL$N= 000016   	JOBTYP= ****** GX	PBYTE   000404R     002	SUCCS$= 000001   	$$SIZE= 000003
+CTRL$O= 000017   	JSW   = 000044   	PCNT.R= ****** GX	SYMSIZ  000000R     010	$$TYPE= 177777
+C$EXAM  000000RG    002	KM.LOC= ****** GX	PCNT.S= ****** GX	SYMTYP  000000R     007	$$$0  = 000027
+C.CRLF= 000004   	KRTINC= 000001   	PINT    000700R     002	TAB   = 000011   	$$5   = 000004
+
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	001062    002	(RO,I,LCL,REL,CON)
+$PDATA	000204    003	(RO,D,LCL,REL,CON)
+$RWDAT	000026    004	(RW,D,LCL,REL,CON)
+$ADDR 	000340    005	(RO,D,LCL,REL,CON)
+$ADDR1	000336    006	(RO,D,LCL,REL,CON)
+KRTDEB	Examine data in memory	MACRO V05.03b  00:01  Page 14-2
+Symbol table
+
+$TYPE 	000336    007	(RO,D,LCL,REL,CON)
+$SIZE 	000336    010	(RO,D,LCL,REL,CON)
+$NAME 	001413    011	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 12384 Words  ( 49 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.35
+KRTDEB,KRTDEB=KRTNHD,KRTDEB

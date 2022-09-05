@@ -1,0 +1,4954 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    3-   3	Load this overlay and return its location
+    4-   2	Modem data base structure
+    5-   2	Macros for individual fields of a modem's data structure
+    6-   2	Macros to place data in the individual fields
+    7-   2	The actual modem definition macro
+    8-   2	Modem response classes	; /BBS/
+    9-   3	Finally, we can define the modems
+   10-   2	User-Defined modem
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTMDM	Modem definitions
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	created this module as KRTDIA had become too large
+      7					;	there are now 1793. words free in which more modems may be defined
+      8					;	defined T3000X.42 modem (it's the T3000V.42 but with XOFF restraint)
+      9					;	convert T3000 (DTE falls back to DCE) definition to XOFF flow control
+     10
+     11					;	Copyright 1985,1986 Change Software, Inc.
+     12
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con	; /63/ added this to..
+      3						.sbttl	Load this overlay and return its location
+      4
+      5	000000	012700 	000000'		loamdm::mov	#modinf	,r0		; /63/ return address of top of list
+      6	000004	000207 				return				; /63/ done
+      7
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 4
+Load this overlay and return its location
+
+      1
+      2						.sbttl	Modem data base structure
+      3
+      4					;	Loosely based on CKUDIAL.C
+      5					;
+      6					;	Anything new that is needed in the modem database should be added at
+      7					;	the end of the list (just prior to mod.size) then increment mod.size
+      8					;	to include the new element.  You must also conform the define macro,
+      9					;	farther below in this module, to your changes and add a new macro to
+     10					;	those which put data into the individual fields, immediately below.
+     11
+     12		000000 				mod.next	==:	 0	; link to next modem in list
+     13		000002 				mod.string	==:	 2	; address of name of modem
+     14		000004 				dial.time	==:	 4	; dial time-out value in secs
+     15		000006 				wake.string	==:	 6	; address of wakeup string
+     16		000010 				wake.rate	==:	10	; ticks delay between sending chars
+     17		000012 				wake.prompt	==:	12	; address of wakeup prompt string
+     18		000014 				dmod.string	==:	14	; address of dial initiate string and
+     19		000016 				dmod.prompt	==:	16	; address of prompt returned for it
+     20		000020 				dial.string	==:	20	; address of dial format string
+     21		000022 				dial.rate	==:	22	; ticks delay between sending chars
+     22		000024 				dial.ack	==:	24	; modem response to confirm number
+     23		000026 				dial.blind	==:	26	; if <> dial w/o wait for dial tone
+     24		000030 				dial.wait	==:	30	; string for pause format effector
+     25		000032 				dial.confirm	==:	32	; string to confirm number for dialing
+     26		000034 				dial.go		==:	34	; ie, va212 returns "DIALING\n"
+     27		000036 				res.bin		==:	36	; if <> it's binary responses (DF03)
+     28		000040 				dial.echo	==:	40	; if <> modem echoes its input
+     29		000042 				mod.comment	==:	42	; addr of brief description of modem
+     30		000044 				res.head	==:	44	; head of the list of result messages
+     31		000046 				dial.xabort	==:	46	; /45/ string to kill call in progress
+     32		000050 				dial.idle	==:	50	; /45/ string puts modem in idle state
+     33		000052 				dial.pulse	==:	52	; /45/ pulse dialing command string
+     34		000054 				dial.nopulse	==:	54	; /45/ tone dialing command string
+     35		000056 				init.once	==:	56	; /BBS/ if <> modem stays initialized
+     36		000060 				time.settle	==:	60	; /62/ reset settle-time in secs
+     37		000062 				x.result	==:	62	; /62/ "Hayes" style extended mode
+     38		000064 				ph.answer	==:	64	; /62/ enable answer mode string
+     39		000066 				ph.noanswer	==:	66	; /62/ disable answer mode string
+     40		000070 				mod.size	==:	70	; /62/ length of data defined above
+     41
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 5
+Modem data base structure
+
+      1
+      2						.sbttl	Macros for individual fields of a modem's data structure
+      3
+      4						; NOTE:	these first two fields are inserted by the define macro
+      5						;	mod.next		   0  link to next modem in list
+      6						;	mod.string		   2  address of name of modem
+      7
+      8						.macro	dial$time	v
+      9						modval	v ,dial.time		;  4  dial time-out value in secs
+     10						.endm	dial$time
+     11
+     12						.macro	wake$string	s
+     13						modstr	<s> ,wake.string	;  6  address of wakeup string
+     14						.endm	wake$string
+     15
+     16						.macro	wake$rate	v
+     17						modval	v ,wake.rate		; 10  ticks delay between chars
+     18						.endm	wake$rate
+     19
+     20						.macro	wake$prompt	s
+     21						modstr	^~s~ ,wake.prompt	; 12  address of wakeup prompt string
+     22						.endm	wake$prompt
+     23
+     24						.macro	dmod$string	s
+     25						modstr	<s> ,dmod.string	; 14  address of dial initiate string
+     26						.endm	dmod$string
+     27
+     28						.macro	dmod$prompt	s
+     29						modstr	<s> ,dmod.prompt	; 16  address of prompt returned by it
+     30						.endm	dmod$prompt
+     31
+     32						.macro	dial$string	s
+     33						modstr	<s> ,dial.string	; 20  address of dial format string
+     34						.endm	dial$string
+     35
+     36						.macro	dial$rate	v
+     37						modval	v ,dial.rate		; 22  ticks delay between chars
+     38						.endm	dial$rate
+     39
+     40						.macro	dial$ack	s
+     41						modstr	<s> ,dial.ack		; 24  modem response to confirm number
+     42						.endm	dial$ack
+     43
+     44						.macro	dial$blind	s
+     45						modstr	<s> ,dial.blind		; 26  if <> dial w/o waiting dial tone
+     46						.endm	dial$blind
+     47
+     48						.macro	dial$wait	s
+     49						modstr	<s> ,dial.wait		; 30  string for pause format effector
+     50						.endm	dial$wait
+     51
+     52						.macro	dial$confirm	s
+     53						modstr	<s> ,dial.confirm	; 32  string to confirm dialed number
+     54						.endm	dial$confirm
+     55
+     56						.macro	dial$go		s
+     57						modstr	<s> ,dial.go		; 34  ie, va212 returns "DIALING\n"
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 5-1
+Macros for individual fields of a modem's data structure
+
+     58						.endm	dial$go
+     59
+     60						.macro	res$bin		v
+     61						modval	v ,res.bin		; 36  if <> it's binary responses
+     62						.endm	res$bin
+     63
+     64						.macro	dial$echo	v
+     65						modval	v ,dial.echo		; 40  if <> modem echoes its input
+     66						.endm	dial$echo
+     67
+     68						.macro	mod$comment	s
+     69						modstr	^~s~ ,mod.com		; 42  addr of brief modem description
+     70						.endm	mod$comment
+     71
+     72						.macro	mod$res	s ,class	; 44  listhead of result messages
+     73					;
+     74					;	res.head(current_modem) --> first entry of linked list
+     75					;
+     76					;	.word	link_to_next		or zero for the last entry
+     77					;	.word	response_class		<0 fail, 0 info, 1 ring, >1 success
+     78					;	.asciz	"response_string"
+     79					;
+     80						.list me
+     81						.save
+     82						.psect	resdat	,ro,d,lcl,rel,con ; /62/
+     83						.nlist me
+     84						$res1 = .			; save current pc in "resdat"
+     85						.word	0			; link to next is zero for now..
+     86						.if  b	<class>			; if class not specified, then
+     87						.word	0			; make it zero (info only message)
+     88						.iff				; else insert specified
+     89						.word	class			; response class
+     90						.endc
+     91						.asciz	"s"			; the actual text /BBS/ allow "/"
+     92						.list me
+     93						.even				; must do
+     94						.restore
+     95						.nlist me
+     96						.if eq	$res			; is this first time for new type?
+     97						modval	$res1	,res.head	; yes, stuff the link header
+     98						.iff				; not the first time
+     99						.list me
+    100						.save
+    101						.psect	resdat	,ro,d,lcl,rel,con
+    102						$respc = .			; save the current pc
+    103						. = $reslast			; back to link word of previous entry
+    104						.word	$res1			; insert address of new entry
+    105						. = $respc			; restore current pc
+    106						.restore
+    107						.nlist me
+    108						.endc
+    109						$reslast = $res1		; lastlink = current_entry
+    110						$res = 1			; not the first time anymore
+    111						.endm	mod$res
+    112
+    113						.macro	dial$xabort	s
+    114						modstr	<s> ,dial.xabort	; 46  string to kill call in progress
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 5-2
+Macros for individual fields of a modem's data structure
+
+    115						.endm	dial$xabort
+    116
+    117						.macro	dial$idle	s
+    118						modstr	<s> ,dial.idle		; 50  string puts modem in idle state
+    119						.endm	dial$idle
+    120
+    121						.macro	dial$pulse	s
+    122						modstr	<s> ,dial.pulse		; 52  pulse dialing command string
+    123						.endm	dial$pulse
+    124
+    125						.macro	dial$nopulse	s
+    126						modstr	<s> ,dial.nopulse	; 54  tone dialing command string
+    127						.endm	dial$nopulse
+    128
+    129						.macro	init$once	v
+    130						modval	v ,init.once		; 56  if <> modem stays initialized
+    131						.endm	init$once
+    132
+    133						.macro	time$settle	v
+    134						modval	v ,time.settle		; 60  reset settle-time in secs
+    135						.endm	time$settle
+    136
+    137						.macro	x$result	v
+    138						modval	v ,x.result		; 62  "Hayes" style extended mode
+    139						.endm	x$result
+    140
+    141						.macro	ph$answer	s
+    142						modstr	<s> ,ph.answer		; 64  enable answer mode string
+    143						.endm	ph$answer
+    144
+    145						.macro	ph$noanswer	s
+    146						modstr	<s> ,ph.noanswer	; 66  disable answer mode string
+    147						.endm	ph$noanswer
+    148
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 6
+Macros for individual fields of a modem's data structure
+
+      1
+      2						.sbttl	Macros to place data in the individual fields
+      3
+      4						.macro	modstr	s ,offset	; insert a string in modem's data
+      5						.list me
+      6						.save
+      7						.psect	string	,ro,d,lcl,rel,con
+      8						.nlist me
+      9						$$addr	= .
+     10						$$ = 0
+     11						  .irpc	ch ,^~s~		; translate "^M" syntax to ".byte 15"
+     12						  ch1 = ''ch			; get copy of char as a literal
+     13						    .if eq ch1-'^
+     14						    $$ = 100			; char is a ^, set flag for next char
+     15						    .iff
+     16						      .if ne $$			; if not a ^ but last char flag is set
+     17							.if  ge  <ch1!40>-<'a!40> ; ensure alpha chars are upper case
+     18							.iif le <<ch1!40>-<'z!40>> ch1 = ch1&137 ; so char-100 works!
+     19							.endc
+     20						      .endc
+     21						    .byte ch1-$$		; char-100 = control char of same name
+     22						    $$ = 0			; reset the ^ flag
+     23						    .endc
+     24						  .endr
+     25						.byte	0			; null terminate
+     26						.list me
+     27						.psect	modinf	,ro,d,lcl,rel,con
+     28						. = $$current+offset
+     29						.word	$$addr			; where to find it..
+     30						.restore
+     31						.nlist me
+     32						.endm	modstr
+     33
+     34						.macro	modval	val ,offset	; insert value (word) in modem's data
+     35						.list me
+     36						.save
+     37						.psect	modinf	,ro,d,lcl,rel,con
+     38						. = $$current+offset		; it goes here..
+     39						.word	val
+     40						.restore
+     41						.nlist me
+     42						.endm	modval
+     43
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 7
+Macros to place data in the individual fields
+
+      1
+      2						.sbttl	The actual modem definition macro
+      3
+      4					;	The following creates a modem's data structure, inserting the default
+      5					;	values as shown.  These defaults may be modified using the individual
+      6					;	data field macros.  The individual modem definition entries following
+      7					;	(two pages below) are good examples of how this is accomplished.
+      8
+      9						.macro	define	lab ,s ,user
+     10						.if eq	$$trip			; /62/ this has to be done this way
+     11						$$prev	= modinf		; /62/ because "ndf" blows up the
+     12						$$trip	= 1			; /62/ .LST output..
+     13						.endc				; /62/
+     14						$res	  = 0			; init the result message
+     15						$reslast  = 0			; macro counters
+     16
+     17						.if nb	<user>			; if we are doing the "user-defined"
+     18						.list me			; modem we need to be in a
+     19						.save				; psect that is never swapped out
+     20						.globl	lab			; user-defined listhead must be global
+     21						.psect	usermd	,rw,d,gbl,rel,con ; this psect is forced into the root
+     22						.nlist me			; by inclusion in KRTSJ and KRTXM
+     23						.iff
+     24						$modtail = .			; use this to link to "usermd" as it
+     25						.endc				; avoids error from differing psects
+     26						$$current = .			; save listhead for auxiliary macros
+     27
+     28						.list me
+     29						.save
+     30						.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+     31						$$ = .				; save location of
+     32						.asciz	"s"			; the modem type string
+     33						.even
+     34						.restore
+     35						.nlist me
+     36
+     37					lab:	.word	0		;  0 mod.next	   link to next please
+     38						.word	$$		;  2 mod.string	   modem type string address
+     39						.word	30.		;  4 dial.time	   dial time-out in secs
+     40						.word	null		;  6 wake.string   init to dial out string
+     41						.word	0		; 10 wake.rate	   ticks between init chars
+     42						.word	null		; 12 wake.prompt   command mode prompt string
+     43						.word	null		; 14 dmod.string   optional dial cmd string
+     44						.word	null		; 16 dmod.prompt   optional dial prompt string
+     45						.word	null		; 20 dial.string   actual dial command string
+     46						.word	0		; 22 dial.rate	   ticks between dial chars
+     47						.word	null		; 24 dial.ack	   dialing acknowledged string
+     48						.word	null		; 26 dial.blind	   blind dial command string
+     49						.word	null		; 30 dial.wait	   pause character string
+     50						.word	null		; 32 dial.confirm  optional "ok" string
+     51						.word	null		; 34 dial.go	   optional "dialing" string
+     52						.word	0		; 36 res.bin	   if <> single char response
+     53						.word	0		; 40 dial.echo	   if <> modem echos commands
+     54						.word	null		; 42 mod.comment   modem comment string
+     55						.word	0		; 44 res.head	   result messages listhead
+     56						.word	null		; 46 dial.xabort   abort dialing string
+     57						.word	null		; 50 dial.idle	   reset modem to idle string
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 7-1
+The actual modem definition macro
+
+     58						.word	null		; 52 dial.pulse	   PULSE dialing string
+     59						.word	null		; 54 dial.nopulse  TONE dialing string
+     60						.word	0		; 56 init.once	   if <> modem stays initted
+     61						.word	20.		; 60 time.settle   ticks to wait after a reset
+     62						.word	-1		; 62 x.result	   Hayes Xmode, default is off
+     63						.word	null		; 64 ph.answer	   enable auto-answer string
+     64						.word	null		; 66 ph.noanswer   disable auto-answer string
+     65						$$end	= .
+     66						.iif ne	 <<$$end-$$current>-mod.size> .error <; 's define size error>
+     67
+     68						.if  b	<user>			; if not the user-defined modem
+     69						. = $$prev			; insert link address of modem data
+     70						.word	lab			; just defined in the previous modem
+     71						. = $$end			; then go back where we were
+     72						$$prev = lab			; and save new address for next link
+     73						.iff				; if this is the user-defined modem..
+     74						.list me
+     75						.restore			; exit root, come back to this overlay
+     76						$$$ = .
+     77						. = $modtail			; /BBS/ back to top of last definition
+     78						.word	lab			; /62/ insert link to user-defined
+     79						. = $$$
+     80						.nlist me
+     81						.endc	; b <user>
+     82						.endm	define
+     83
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 8
+The actual modem definition macro
+
+      1
+      2						.sbttl	Modem response classes	; /BBS/
+      3
+      4		113000 				CON38400  ==:	38400.	; /62/ connect at designated speeds
+      5		045400 				CON19200  ==:	19200.	; that is, when the modem's result message
+      6		022600 				CON9600	  ==:	 9600.	; matches the string associated with one of
+      7		016040 				CON7200	  ==:	 7200.	; these speed specific classes, then force
+      8		011300 				CON4800	  ==:	 4800.	; the DTE speed to it (if possible)..
+      9		004540 				CON2400	  ==:	 2400.	; see the Hayes definition below for an
+     10		002260 				CON1200	  ==:	 1200.	; example of exactly how this is done
+     11		000454 				CON300	  ==:	  300.
+     12		000002 				CONNECT	  ==:	    2	; don't check or change speed
+     13		000001 				RING	  ==:	    1	; a ring was detected
+     14		000000 				INFO	  ==:	    0	; info only   /62/ *** SEE NOTE BELOW ***
+     15		177777 				FAILED	  ==:	   -1	; call failed, modem has already stopped
+     16		177776 				ABORTED	  ==:	   -2	; aborted by program, need to kill modem
+     17
+     18					; /62/	NOTE:  Since an INFO message is anything undefined, INFO
+     19					;	       messages have been dumped here to save space.
+     20
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9
+Modem response classes	; /BBS/
+
+      1
+      2	000000					.psect	modinf	,ro,d,lcl,rel,con
+      3						.sbttl	Finally, we can define the modems
+      4
+      5					; /BBS/ NOTE:  When a response string is a  substring  of  another  response
+      6					; string the response being the substring _MUST FOLLOW_ the other containing
+      7					; it as otherwise an unwanted match will occur on the first one encountered.
+      8
+      9					; /62/	Control chars may be included in strings using the "^X" notation per
+     10					; the modstr macro, above.
+     11
+     12					; /BBS/ Keep these in modem name alphabetical order for SET MODEM ? display.
+     13
+     14	000000				modinf:					; /62/ this is the top of the list
+     15		000000 				$$TRIP = 0			; /62/ init for the define macro
+     16
+     17	000000				define		concord	,<CONCORD-224>		; /BBS/ added
+						.list me
+						.save
+	000000					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000000'				$$ = .				; save location of
+	000000	   103 	   117 	   116 		.asciz	"CONCORD-224"			; the modem type string
+	000003	   103 	   117 	   122
+	000006	   104 	   055 	   062
+	000011	   062 	   064 	   000
+						.even
+	000000					.restore
+     18	000070				mod$comment	<Concord Data 224>
+						.list me
+						.save
+	000014					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000042'				. = $$current+mod.com
+	000042	000014'				.word	$$addr			; where to find it..
+	000070					.restore
+     19	000070				wake$string	<^M^M>				; keyboard interactive mode
+						.list me
+						.save
+	000035					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000006'				. = $$current+wake.string
+	000006	000035'				.word	$$addr			; where to find it..
+	000070					.restore
+     20	000070				wake$prompt	^~CDS >~
+						.list me
+						.save
+	000040					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000012'				. = $$current+wake.prompt
+	000012	000040'				.word	$$addr			; where to find it..
+	000070					.restore
+     21	000070				dial$string	<D %M %S ^M>
+						.list me
+						.save
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-1
+Finally, we can define the modems
+
+	000046					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000020'				. = $$current+dial.string
+	000020	000046'				.word	$$addr			; where to find it..
+	000070					.restore
+     22	000070				dial$wait	<W>
+						.list me
+						.save
+	000060					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000030'				. = $$current+dial.wait
+	000030	000060'				.word	$$addr			; where to find it..
+	000070					.restore
+     23	000070				dial$echo	1
+						.list me
+						.save
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000040'				. = $$current+dial.echo		; it goes here..
+	000040	000001 				.word	1
+	000070					.restore
+     24	000070				dial$pulse	<P>
+						.list me
+						.save
+	000062					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000052'				. = $$current+dial.pulse
+	000052	000062'				.word	$$addr			; where to find it..
+	000070					.restore
+     25	000070				dial$nopulse	<M>
+						.list me
+						.save
+	000064					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000054'				. = $$current+dial.nopulse
+	000054	000064'				.word	$$addr			; where to find it..
+	000070					.restore
+     26	000070				dial$xabort	<^K>
+						.list me
+						.save
+	000066					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000046'				. = $$current+dial.xabort
+	000046	000066'				.word	$$addr			; where to find it..
+	000070					.restore
+     27	000070				dial$idle	<E>
+						.list me
+						.save
+	000070					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000050'				. = $$current+dial.idle
+	000050	000070'				.word	$$addr			; where to find it..
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-2
+Finally, we can define the modems
+
+	000070					.restore
+     28	000070				dial$time	45.
+						.list me
+						.save
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000004'				. = $$current+dial.time		; it goes here..
+	000004	000055 				.word	45.
+	000070					.restore
+     29	000070				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	000000					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000070					.restore
+						.list me
+						.save
+	000070					.psect	modinf	,ro,d,lcl,rel,con
+		000044'				. = $$current+res.head		; it goes here..
+	000044	000000'				.word	$res1
+	000070					.restore
+     30	000070				mod$res		<CALL FAILED>	,FAILED
+						.list me
+						.save
+	000012					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000070					.restore
+						.list me
+						.save
+	000032					.psect	resdat	,ro,d,lcl,rel,con
+		000032'				$respc = .			; save the current pc
+		000000'				. = $reslast			; back to link word of previous entry
+	000000	000012'				.word	$res1			; insert address of new entry
+		000032'				. = $respc			; restore current pc
+	000070					.restore
+     31	000070				mod$res		<INITIATING>	,CONNECT
+						.list me
+						.save
+	000032					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000070					.restore
+						.list me
+						.save
+	000052					.psect	resdat	,ro,d,lcl,rel,con
+		000052'				$respc = .			; save the current pc
+		000012'				. = $reslast			; back to link word of previous entry
+	000012	000032'				.word	$res1			; insert address of new entry
+		000052'				. = $respc			; restore current pc
+	000070					.restore
+     32	000070				mod$res		<NO ANSWER>	,FAILED
+						.list me
+						.save
+	000052					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-3
+Finally, we can define the modems
+
+	000070					.restore
+						.list me
+						.save
+	000070					.psect	resdat	,ro,d,lcl,rel,con
+		000070'				$respc = .			; save the current pc
+		000032'				. = $reslast			; back to link word of previous entry
+	000032	000052'				.word	$res1			; insert address of new entry
+		000070'				. = $respc			; restore current pc
+	000070					.restore
+     33	000070				mod$res		<NO DIAL TONE>	,FAILED
+						.list me
+						.save
+	000070					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000070					.restore
+						.list me
+						.save
+	000112					.psect	resdat	,ro,d,lcl,rel,con
+		000112'				$respc = .			; save the current pc
+		000052'				. = $reslast			; back to link word of previous entry
+	000052	000070'				.word	$res1			; insert address of new entry
+		000112'				. = $respc			; restore current pc
+	000070					.restore
+     34	000070				mod$res		<NO RINGING>	,FAILED
+						.list me
+						.save
+	000112					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000070					.restore
+						.list me
+						.save
+	000132					.psect	resdat	,ro,d,lcl,rel,con
+		000132'				$respc = .			; save the current pc
+		000070'				. = $reslast			; back to link word of previous entry
+	000070	000112'				.word	$res1			; insert address of new entry
+		000132'				. = $respc			; restore current pc
+	000070					.restore
+     35	000070				mod$res		<RINGING>	,RING
+						.list me
+						.save
+	000132					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000070					.restore
+						.list me
+						.save
+	000146					.psect	resdat	,ro,d,lcl,rel,con
+		000146'				$respc = .			; save the current pc
+		000112'				. = $reslast			; back to link word of previous entry
+	000112	000132'				.word	$res1			; insert address of new entry
+		000146'				. = $respc			; restore current pc
+	000070					.restore
+     36	000070				mod$res		<VOICE>		,FAILED
+						.list me
+						.save
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-4
+Finally, we can define the modems
+
+	000146					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000070					.restore
+						.list me
+						.save
+	000160					.psect	resdat	,ro,d,lcl,rel,con
+		000160'				$respc = .			; save the current pc
+		000132'				. = $reslast			; back to link word of previous entry
+	000132	000146'				.word	$res1			; insert address of new entry
+		000160'				. = $respc			; restore current pc
+	000070					.restore
+     37
+     38	000070				define		cts24	,<CTS2424>
+						.list me
+						.save
+	000072					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000072'				$$ = .				; save location of
+	000072	   103 	   124 	   123 		.asciz	"CTS2424"			; the modem type string
+	000075	   062 	   064 	   062
+	000100	   064 	   000
+						.even
+	000070					.restore
+     39	000160				mod$comment	<CTS/Fabri-Tek 2424AD>
+						.list me
+						.save
+	000102					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000132'				. = $$current+mod.com
+	000132	000102'				.word	$$addr			; where to find it..
+	000160					.restore
+     40	000160				wake$string	<^T^WAT^M>
+						.list me
+						.save
+	000127					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000076'				. = $$current+wake.string
+	000076	000127'				.word	$$addr			; where to find it..
+	000160					.restore
+     41	000160				wake$rate	10
+						.list me
+						.save
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000100'				. = $$current+wake.rate		; it goes here..
+	000100	000010 				.word	10
+	000160					.restore
+     42	000160				wake$prompt	<Modem Ready>
+						.list me
+						.save
+	000135					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000102'				. = $$current+wake.prompt
+	000102	000135'				.word	$$addr			; where to find it..
+	000160					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-5
+Finally, we can define the modems
+
+     43	000160				dial$string	<D%M%B%S^M>
+						.list me
+						.save
+	000151					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000110'				. = $$current+dial.string
+	000110	000151'				.word	$$addr			; where to find it..
+	000160					.restore
+     44	000160				dial$rate	10
+						.list me
+						.save
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000112'				. = $$current+dial.rate		; it goes here..
+	000112	000010 				.word	10
+	000160					.restore
+     45	000160				dial$wait	<+>
+						.list me
+						.save
+	000162					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000120'				. = $$current+dial.wait
+	000120	000162'				.word	$$addr			; where to find it..
+	000160					.restore
+     46	000160				dial$echo	1
+						.list me
+						.save
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000130'				. = $$current+dial.echo		; it goes here..
+	000130	000001 				.word	1
+	000160					.restore
+     47	000160				dial$blind	<&>
+						.list me
+						.save
+	000164					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000116'				. = $$current+dial.blind
+	000116	000164'				.word	$$addr			; where to find it..
+	000160					.restore
+     48	000160				dial$pulse	<P>
+						.list me
+						.save
+	000166					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000142'				. = $$current+dial.pulse
+	000142	000166'				.word	$$addr			; where to find it..
+	000160					.restore
+     49	000160				dial$nopulse	<T>
+						.list me
+						.save
+	000170					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000144'				. = $$current+dial.nopulse
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-6
+Finally, we can define the modems
+
+	000144	000170'				.word	$$addr			; where to find it..
+	000160					.restore
+     50	000160				dial$xabort	<^T^W>
+						.list me
+						.save
+	000172					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000136'				. = $$current+dial.xabort
+	000136	000172'				.word	$$addr			; where to find it..
+	000160					.restore
+     51	000160				dial$idle	<^T^W>
+						.list me
+						.save
+	000175					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000140'				. = $$current+dial.idle
+	000140	000175'				.word	$$addr			; where to find it..
+	000160					.restore
+     52	000160				dial$time	35.
+						.list me
+						.save
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000074'				. = $$current+dial.time		; it goes here..
+	000074	000043 				.word	35.
+	000160					.restore
+     53	000160				mod$res		<Busy>		,FAILED
+						.list me
+						.save
+	000160					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000160					.psect	modinf	,ro,d,lcl,rel,con
+		000134'				. = $$current+res.head		; it goes here..
+	000134	000160'				.word	$res1
+	000160					.restore
+     54	000160				mod$res		<Dead Line>	,FAILED
+						.list me
+						.save
+	000172					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000210					.psect	resdat	,ro,d,lcl,rel,con
+		000210'				$respc = .			; save the current pc
+		000160'				. = $reslast			; back to link word of previous entry
+	000160	000172'				.word	$res1			; insert address of new entry
+		000210'				. = $respc			; restore current pc
+	000160					.restore
+     55	000160				mod$res		<Disconnect>	,FAILED
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-7
+Finally, we can define the modems
+
+						.save
+	000210					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000230					.psect	resdat	,ro,d,lcl,rel,con
+		000230'				$respc = .			; save the current pc
+		000172'				. = $reslast			; back to link word of previous entry
+	000172	000210'				.word	$res1			; insert address of new entry
+		000230'				. = $respc			; restore current pc
+	000160					.restore
+     56	000160				mod$res		<No Answer>	,FAILED
+						.list me
+						.save
+	000230					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000246					.psect	resdat	,ro,d,lcl,rel,con
+		000246'				$respc = .			; save the current pc
+		000210'				. = $reslast			; back to link word of previous entry
+	000210	000230'				.word	$res1			; insert address of new entry
+		000246'				. = $respc			; restore current pc
+	000160					.restore
+     57	000160				mod$res		<No Dialtone>	,FAILED
+						.list me
+						.save
+	000246					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000266					.psect	resdat	,ro,d,lcl,rel,con
+		000266'				$respc = .			; save the current pc
+		000230'				. = $reslast			; back to link word of previous entry
+	000230	000246'				.word	$res1			; insert address of new entry
+		000266'				. = $respc			; restore current pc
+	000160					.restore
+     58	000160				mod$res		<No Tone>	,FAILED
+						.list me
+						.save
+	000266					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000302					.psect	resdat	,ro,d,lcl,rel,con
+		000302'				$respc = .			; save the current pc
+		000246'				. = $reslast			; back to link word of previous entry
+	000246	000266'				.word	$res1			; insert address of new entry
+		000302'				. = $respc			; restore current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-8
+Finally, we can define the modems
+
+	000160					.restore
+     59	000160				mod$res		<On Line>	,CONNECT	; /BBS/ <On Line Originate>
+						.list me
+						.save
+	000302					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000316					.psect	resdat	,ro,d,lcl,rel,con
+		000316'				$respc = .			; save the current pc
+		000266'				. = $reslast			; back to link word of previous entry
+	000266	000302'				.word	$res1			; insert address of new entry
+		000316'				. = $respc			; restore current pc
+	000160					.restore
+     60	000160				mod$res		<Ring>		,RING
+						.list me
+						.save
+	000316					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000160					.restore
+						.list me
+						.save
+	000330					.psect	resdat	,ro,d,lcl,rel,con
+		000330'				$respc = .			; save the current pc
+		000302'				. = $reslast			; back to link word of previous entry
+	000302	000316'				.word	$res1			; insert address of new entry
+		000330'				. = $respc			; restore current pc
+	000160					.restore
+     61
+     62	000160				define		df03	,<DF03>
+						.list me
+						.save
+	000200					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000200'				$$ = .				; save location of
+	000200	   104 	   106 	   060 		.asciz	"DF03"			; the modem type string
+	000203	   063 	   000
+						.even
+	000160					.restore
+     63	000250				mod$comment	<DEC DF03AC>
+						.list me
+						.save
+	000206					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000222'				. = $$current+mod.com
+	000222	000206'				.word	$$addr			; where to find it..
+	000250					.restore
+     64	000250				wake$string	<^A^B>				; this inits to dial
+						.list me
+						.save
+	000221					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000166'				. = $$current+wake.string
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-9
+Finally, we can define the modems
+
+	000166	000221'				.word	$$addr			; where to find it..
+	000250					.restore
+     65	000250				dial$string	<%S^M>				; /62/ needs a return here
+						.list me
+						.save
+	000224					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000200'				. = $$current+dial.string
+	000200	000224'				.word	$$addr			; where to find it..
+	000250					.restore
+     66	000250				dial$echo	1
+						.list me
+						.save
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000220'				. = $$current+dial.echo		; it goes here..
+	000220	000001 				.word	1
+	000250					.restore
+     67	000250				dial$xabort	<^C>				; /63/
+						.list me
+						.save
+	000230					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000226'				. = $$current+dial.xabort
+	000226	000230'				.word	$$addr			; where to find it..
+	000250					.restore
+     68	000250				dial$time	30.
+						.list me
+						.save
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000164'				. = $$current+dial.time		; it goes here..
+	000164	000036 				.word	30.
+	000250					.restore
+     69	000250				res$bin		1				; single char responses
+						.list me
+						.save
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000216'				. = $$current+res.bin		; it goes here..
+	000216	000001 				.word	1
+	000250					.restore
+     70	000250				mod$res		<A>		,CONNECT
+						.list me
+						.save
+	000330					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000250					.restore
+						.list me
+						.save
+	000250					.psect	modinf	,ro,d,lcl,rel,con
+		000224'				. = $$current+res.head		; it goes here..
+	000224	000330'				.word	$res1
+	000250					.restore
+     71	000250				mod$res		<B>		,FAILED
+						.list me
+						.save
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-10
+Finally, we can define the modems
+
+	000336					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000250					.restore
+						.list me
+						.save
+	000344					.psect	resdat	,ro,d,lcl,rel,con
+		000344'				$respc = .			; save the current pc
+		000330'				. = $reslast			; back to link word of previous entry
+	000330	000336'				.word	$res1			; insert address of new entry
+		000344'				. = $respc			; restore current pc
+	000250					.restore
+     72
+     73	000250				define		df100	,<DF100>
+						.list me
+						.save
+	000232					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000232'				$$ = .				; save location of
+	000232	   104 	   106 	   061 		.asciz	"DF100"			; the modem type string
+	000235	   060 	   060 	   000
+						.even
+	000250					.restore
+     74	000340				mod$comment	<DEC DF112>
+						.list me
+						.save
+	000240					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000312'				. = $$current+mod.com
+	000312	000240'				.word	$$addr			; where to find it..
+	000340					.restore
+     75	000340				wake$string	<^B>
+						.list me
+						.save
+	000252					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000256'				. = $$current+wake.string
+	000256	000252'				.word	$$addr			; where to find it..
+	000340					.restore
+     76	000340				wake$prompt	<Ready>
+						.list me
+						.save
+	000254					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000262'				. = $$current+wake.prompt
+	000262	000254'				.word	$$addr			; where to find it..
+	000340					.restore
+     77	000340				dial$string	<%S#>				; /45/
+						.list me
+						.save
+	000262					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000270'				. = $$current+dial.string
+	000270	000262'				.word	$$addr			; where to find it..
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-11
+Finally, we can define the modems
+
+	000340					.restore
+     78	000340				dial$rate	10
+						.list me
+						.save
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000272'				. = $$current+dial.rate		; it goes here..
+	000272	000010 				.word	10
+	000340					.restore
+     79	000340				dial$echo	1
+						.list me
+						.save
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000310'				. = $$current+dial.echo		; it goes here..
+	000310	000001 				.word	1
+	000340					.restore
+     80	000340				dial$xabort	<^M>
+						.list me
+						.save
+	000266					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000316'				. = $$current+dial.xabort
+	000316	000266'				.word	$$addr			; where to find it..
+	000340					.restore
+     81	000340				dial$time	30.
+						.list me
+						.save
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000254'				. = $$current+dial.time		; it goes here..
+	000254	000036 				.word	30.
+	000340					.restore
+     82	000340				mod$res		<Attached>	,CONNECT
+						.list me
+						.save
+	000344					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000340					.restore
+						.list me
+						.save
+	000340					.psect	modinf	,ro,d,lcl,rel,con
+		000314'				. = $$current+res.head		; it goes here..
+	000314	000344'				.word	$res1
+	000340					.restore
+     83	000340				mod$res		<Busy>		,FAILED
+						.list me
+						.save
+	000362					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000340					.restore
+						.list me
+						.save
+	000374					.psect	resdat	,ro,d,lcl,rel,con
+		000374'				$respc = .			; save the current pc
+		000344'				. = $reslast			; back to link word of previous entry
+	000344	000362'				.word	$res1			; insert address of new entry
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-12
+Finally, we can define the modems
+
+		000374'				. = $respc			; restore current pc
+	000340					.restore
+     84	000340				mod$res		<Disconnected>	,FAILED
+						.list me
+						.save
+	000374					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000340					.restore
+						.list me
+						.save
+	000416					.psect	resdat	,ro,d,lcl,rel,con
+		000416'				$respc = .			; save the current pc
+		000362'				. = $reslast			; back to link word of previous entry
+	000362	000374'				.word	$res1			; insert address of new entry
+		000416'				. = $respc			; restore current pc
+	000340					.restore
+     85	000340				mod$res		<Error>		,FAILED
+						.list me
+						.save
+	000416					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000340					.restore
+						.list me
+						.save
+	000430					.psect	resdat	,ro,d,lcl,rel,con
+		000430'				$respc = .			; save the current pc
+		000374'				. = $reslast			; back to link word of previous entry
+	000374	000416'				.word	$res1			; insert address of new entry
+		000430'				. = $respc			; restore current pc
+	000340					.restore
+     86	000340				mod$res		<No answer>	,FAILED
+						.list me
+						.save
+	000430					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000340					.restore
+						.list me
+						.save
+	000446					.psect	resdat	,ro,d,lcl,rel,con
+		000446'				$respc = .			; save the current pc
+		000416'				. = $reslast			; back to link word of previous entry
+	000416	000430'				.word	$res1			; insert address of new entry
+		000446'				. = $respc			; restore current pc
+	000340					.restore
+     87	000340				mod$res		<No dial tone>	,FAILED
+						.list me
+						.save
+	000446					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000340					.restore
+						.list me
+						.save
+	000470					.psect	resdat	,ro,d,lcl,rel,con
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-13
+Finally, we can define the modems
+
+		000470'				$respc = .			; save the current pc
+		000430'				. = $reslast			; back to link word of previous entry
+	000430	000446'				.word	$res1			; insert address of new entry
+		000470'				. = $respc			; restore current pc
+	000340					.restore
+     88
+     89	000340				define		df200	,<DF200>
+						.list me
+						.save
+	000270					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000270'				$$ = .				; save location of
+	000270	   104 	   106 	   062 		.asciz	"DF200"			; the modem type string
+	000273	   060 	   060 	   000
+						.even
+	000340					.restore
+     90	000430				mod$comment	<DEC DF224>
+						.list me
+						.save
+	000276					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000402'				. = $$current+mod.com
+	000402	000276'				.word	$$addr			; where to find it..
+	000430					.restore
+     91	000430				wake$string	<^B>
+						.list me
+						.save
+	000310					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000346'				. = $$current+wake.string
+	000346	000310'				.word	$$addr			; where to find it..
+	000430					.restore
+     92	000430				wake$prompt	<Ready>
+						.list me
+						.save
+	000312					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000352'				. = $$current+wake.prompt
+	000352	000312'				.word	$$addr			; where to find it..
+	000430					.restore
+     93	000430				dial$string	<%B%M%S!>			; /60/
+						.list me
+						.save
+	000320					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000360'				. = $$current+dial.string
+	000360	000320'				.word	$$addr			; where to find it..
+	000430					.restore
+     94	000430				dial$echo	1
+						.list me
+						.save
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000400'				. = $$current+dial.echo		; it goes here..
+	000400	000001 				.word	1
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-14
+Finally, we can define the modems
+
+	000430					.restore
+     95	000430				dial$blind	<^A>				; /60/
+						.list me
+						.save
+	000330					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000366'				. = $$current+dial.blind
+	000366	000330'				.word	$$addr			; where to find it..
+	000430					.restore
+     96	000430				dial$pulse	<P>				; /60/
+						.list me
+						.save
+	000332					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000412'				. = $$current+dial.pulse
+	000412	000332'				.word	$$addr			; where to find it..
+	000430					.restore
+     97	000430				dial$xabort	<^B>				; /60/
+						.list me
+						.save
+	000334					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000406'				. = $$current+dial.xabort
+	000406	000334'				.word	$$addr			; where to find it..
+	000430					.restore
+     98	000430				dial$nopulse	<T>				; /60/
+						.list me
+						.save
+	000336					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000414'				. = $$current+dial.nopulse
+	000414	000336'				.word	$$addr			; where to find it..
+	000430					.restore
+     99	000430				dial$time	30.
+						.list me
+						.save
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000344'				. = $$current+dial.time		; it goes here..
+	000344	000036 				.word	30.
+	000430					.restore
+    100	000430				mod$res		<Attached>	,CONNECT
+						.list me
+						.save
+	000470					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000430					.restore
+						.list me
+						.save
+	000430					.psect	modinf	,ro,d,lcl,rel,con
+		000404'				. = $$current+res.head		; it goes here..
+	000404	000470'				.word	$res1
+	000430					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-15
+Finally, we can define the modems
+
+    101	000430				mod$res		<Busy>		,FAILED
+						.list me
+						.save
+	000506					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000430					.restore
+						.list me
+						.save
+	000520					.psect	resdat	,ro,d,lcl,rel,con
+		000520'				$respc = .			; save the current pc
+		000470'				. = $reslast			; back to link word of previous entry
+	000470	000506'				.word	$res1			; insert address of new entry
+		000520'				. = $respc			; restore current pc
+	000430					.restore
+    102	000430				mod$res		<Disconnected>	,FAILED
+						.list me
+						.save
+	000520					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000430					.restore
+						.list me
+						.save
+	000542					.psect	resdat	,ro,d,lcl,rel,con
+		000542'				$respc = .			; save the current pc
+		000506'				. = $reslast			; back to link word of previous entry
+	000506	000520'				.word	$res1			; insert address of new entry
+		000542'				. = $respc			; restore current pc
+	000430					.restore
+    103	000430				mod$res		<Error>		,FAILED
+						.list me
+						.save
+	000542					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000430					.restore
+						.list me
+						.save
+	000554					.psect	resdat	,ro,d,lcl,rel,con
+		000554'				$respc = .			; save the current pc
+		000520'				. = $reslast			; back to link word of previous entry
+	000520	000542'				.word	$res1			; insert address of new entry
+		000554'				. = $respc			; restore current pc
+	000430					.restore
+    104	000430				mod$res		<No answer>	,FAILED
+						.list me
+						.save
+	000554					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000430					.restore
+						.list me
+						.save
+	000572					.psect	resdat	,ro,d,lcl,rel,con
+		000572'				$respc = .			; save the current pc
+		000542'				. = $reslast			; back to link word of previous entry
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-16
+Finally, we can define the modems
+
+	000542	000554'				.word	$res1			; insert address of new entry
+		000572'				. = $respc			; restore current pc
+	000430					.restore
+    105	000430				mod$res		<No dial tone>	,FAILED
+						.list me
+						.save
+	000572					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000430					.restore
+						.list me
+						.save
+	000614					.psect	resdat	,ro,d,lcl,rel,con
+		000614'				$respc = .			; save the current pc
+		000554'				. = $reslast			; back to link word of previous entry
+	000554	000572'				.word	$res1			; insert address of new entry
+		000614'				. = $respc			; restore current pc
+	000430					.restore
+    106
+    107	000430				define		hayes	,<HAYES>		; /BBS/ updated..
+						.list me
+						.save
+	000340					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000340'				$$ = .				; save location of
+	000340	   110 	   101 	   131 		.asciz	"HAYES"			; the modem type string
+	000343	   105 	   123 	   000
+						.even
+	000430					.restore
+    108	000520				mod$comment	^~Hayes Generic Command Set - DTE follows DCE speed~
+						.list me
+						.save
+	000346					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000472'				. = $$current+mod.com
+	000472	000346'				.word	$$addr			; where to find it..
+	000520					.restore
+    109	000520				wake$string	<AT E1 Q0 S0=0 S7=255 V1 %X ^M>	; note time-out set to
+						.list me
+						.save
+	000430					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000436'				. = $$current+wake.string
+	000436	000430'				.word	$$addr			; where to find it..
+	000520					.restore
+    110	000520				wake$prompt	<OK>				; 255 so dial$time (which
+						.list me
+						.save
+	000465					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000442'				. = $$current+wake.prompt
+	000442	000465'				.word	$$addr			; where to find it..
+	000520					.restore
+    111	000520				dial$string	<AT %X %A D%M %S ^M>		; is settable) will prevail..
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-17
+Finally, we can define the modems
+
+						.save
+	000470					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000450'				. = $$current+dial.string
+	000450	000470'				.word	$$addr			; where to find it..
+	000520					.restore
+    112	000520				dial$echo	1
+						.list me
+						.save
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000470'				. = $$current+dial.echo		; it goes here..
+	000470	000001 				.word	1
+	000520					.restore
+    113	000520				init$once	1
+						.list me
+						.save
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000506'				. = $$current+init.once		; it goes here..
+	000506	000001 				.word	1
+	000520					.restore
+    114	000520				dial$pulse	<P>
+						.list me
+						.save
+	000512					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000502'				. = $$current+dial.pulse
+	000502	000512'				.word	$$addr			; where to find it..
+	000520					.restore
+    115	000520				dial$nopulse	<T>
+						.list me
+						.save
+	000514					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000504'				. = $$current+dial.nopulse
+	000504	000514'				.word	$$addr			; where to find it..
+	000520					.restore
+    116	000520				dial$xabort	<^M>
+						.list me
+						.save
+	000516					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000476'				. = $$current+dial.xabort
+	000476	000516'				.word	$$addr			; where to find it..
+	000520					.restore
+    117	000520				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	000520					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000500'				. = $$current+dial.idle
+	000500	000520'				.word	$$addr			; where to find it..
+	000520					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-18
+Finally, we can define the modems
+
+    118	000520				dial$time	45.
+						.list me
+						.save
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000434'				. = $$current+dial.time		; it goes here..
+	000434	000055 				.word	45.
+	000520					.restore
+    119	000520				time$settle	<25.>				; /62/ add a few ticks..
+						.list me
+						.save
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000510'				. = $$current+time.settle		; it goes here..
+	000510	000031 				.word	25.
+	000520					.restore
+    120	000520				x$result	<4>				; /62/ extended mode, "ATX4"
+						.list me
+						.save
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000512'				. = $$current+x.result		; it goes here..
+	000512	000004 				.word	4
+	000520					.restore
+    121	000520				ph$answer	<S0=1>				; /62/
+						.list me
+						.save
+	000527					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000514'				. = $$current+ph.answer
+	000514	000527'				.word	$$addr			; where to find it..
+	000520					.restore
+    122	000520				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	000534					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000516'				. = $$current+ph.noanswer
+	000516	000534'				.word	$$addr			; where to find it..
+	000520					.restore
+    123	000520				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	000614					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	000520					.psect	modinf	,ro,d,lcl,rel,con
+		000474'				. = $$current+res.head		; it goes here..
+	000474	000614'				.word	$res1
+	000520					.restore
+    124	000520				mod$res		<CONNECT 19200>	,CON19200	; /62/ added
+						.list me
+						.save
+	000626					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-19
+Finally, we can define the modems
+
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	000650					.psect	resdat	,ro,d,lcl,rel,con
+		000650'				$respc = .			; save the current pc
+		000614'				. = $reslast			; back to link word of previous entry
+	000614	000626'				.word	$res1			; insert address of new entry
+		000650'				. = $respc			; restore current pc
+	000520					.restore
+    125	000520				mod$res		<CONNECT 14400>	,CON19200	; /63/
+						.list me
+						.save
+	000650					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	000672					.psect	resdat	,ro,d,lcl,rel,con
+		000672'				$respc = .			; save the current pc
+		000626'				. = $reslast			; back to link word of previous entry
+	000626	000650'				.word	$res1			; insert address of new entry
+		000672'				. = $respc			; restore current pc
+	000520					.restore
+    126	000520				mod$res		<CONNECT 12000>	,CON19200	; /63/
+						.list me
+						.save
+	000672					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	000714					.psect	resdat	,ro,d,lcl,rel,con
+		000714'				$respc = .			; save the current pc
+		000650'				. = $reslast			; back to link word of previous entry
+	000650	000672'				.word	$res1			; insert address of new entry
+		000714'				. = $respc			; restore current pc
+	000520					.restore
+    127	000520				mod$res		<CONNECT 9600>	,CON9600	; set DTE to indicated speed..
+						.list me
+						.save
+	000714					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	000736					.psect	resdat	,ro,d,lcl,rel,con
+		000736'				$respc = .			; save the current pc
+		000672'				. = $reslast			; back to link word of previous entry
+	000672	000714'				.word	$res1			; insert address of new entry
+		000736'				. = $respc			; restore current pc
+	000520					.restore
+    128	000520				mod$res		<CONNECT 7200>	,CON7200	; /63/
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-20
+Finally, we can define the modems
+
+						.save
+	000736					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	000760					.psect	resdat	,ro,d,lcl,rel,con
+		000760'				$respc = .			; save the current pc
+		000714'				. = $reslast			; back to link word of previous entry
+	000714	000736'				.word	$res1			; insert address of new entry
+		000760'				. = $respc			; restore current pc
+	000520					.restore
+    129	000520				mod$res		<CONNECT 4800>	,CON4800
+						.list me
+						.save
+	000760					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001002					.psect	resdat	,ro,d,lcl,rel,con
+		001002'				$respc = .			; save the current pc
+		000736'				. = $reslast			; back to link word of previous entry
+	000736	000760'				.word	$res1			; insert address of new entry
+		001002'				. = $respc			; restore current pc
+	000520					.restore
+    130	000520				mod$res		<CONNECT 2400>	,CON2400
+						.list me
+						.save
+	001002					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001024					.psect	resdat	,ro,d,lcl,rel,con
+		001024'				$respc = .			; save the current pc
+		000760'				. = $reslast			; back to link word of previous entry
+	000760	001002'				.word	$res1			; insert address of new entry
+		001024'				. = $respc			; restore current pc
+	000520					.restore
+    131	000520				mod$res		<CONNECT 1200>	,CON1200
+						.list me
+						.save
+	001024					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001046					.psect	resdat	,ro,d,lcl,rel,con
+		001046'				$respc = .			; save the current pc
+		001002'				. = $reslast			; back to link word of previous entry
+	001002	001024'				.word	$res1			; insert address of new entry
+		001046'				. = $respc			; restore current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-21
+Finally, we can define the modems
+
+	000520					.restore
+    132	000520				mod$res		<CONNECT 300>	,CON300		; /63/
+						.list me
+						.save
+	001046					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001066					.psect	resdat	,ro,d,lcl,rel,con
+		001066'				$respc = .			; save the current pc
+		001024'				. = $reslast			; back to link word of previous entry
+	001024	001046'				.word	$res1			; insert address of new entry
+		001066'				. = $respc			; restore current pc
+	000520					.restore
+    133	000520				mod$res		<CONNECT>	,CON300		; 300 is implied here
+						.list me
+						.save
+	001066					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001102					.psect	resdat	,ro,d,lcl,rel,con
+		001102'				$respc = .			; save the current pc
+		001046'				. = $reslast			; back to link word of previous entry
+	001046	001066'				.word	$res1			; insert address of new entry
+		001102'				. = $respc			; restore current pc
+	000520					.restore
+    134	000520				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	001102					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001114					.psect	resdat	,ro,d,lcl,rel,con
+		001114'				$respc = .			; save the current pc
+		001066'				. = $reslast			; back to link word of previous entry
+	001066	001102'				.word	$res1			; insert address of new entry
+		001114'				. = $respc			; restore current pc
+	000520					.restore
+    135	000520				mod$res		<NO ANSWER>	,FAILED
+						.list me
+						.save
+	001114					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001132					.psect	resdat	,ro,d,lcl,rel,con
+		001132'				$respc = .			; save the current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-22
+Finally, we can define the modems
+
+		001102'				. = $reslast			; back to link word of previous entry
+	001102	001114'				.word	$res1			; insert address of new entry
+		001132'				. = $respc			; restore current pc
+	000520					.restore
+    136	000520				mod$res		<NO CARRIER>	,FAILED
+						.list me
+						.save
+	001132					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001152					.psect	resdat	,ro,d,lcl,rel,con
+		001152'				$respc = .			; save the current pc
+		001114'				. = $reslast			; back to link word of previous entry
+	001114	001132'				.word	$res1			; insert address of new entry
+		001152'				. = $respc			; restore current pc
+	000520					.restore
+    137	000520				mod$res		<NO DIALTONE>	,FAILED		; true Hayes
+						.list me
+						.save
+	001152					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001172					.psect	resdat	,ro,d,lcl,rel,con
+		001172'				$respc = .			; save the current pc
+		001132'				. = $reslast			; back to link word of previous entry
+	001132	001152'				.word	$res1			; insert address of new entry
+		001172'				. = $respc			; restore current pc
+	000520					.restore
+    138	000520				mod$res		<NO DIAL TONE>	,FAILED		; many clones
+						.list me
+						.save
+	001172					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001214					.psect	resdat	,ro,d,lcl,rel,con
+		001214'				$respc = .			; save the current pc
+		001152'				. = $reslast			; back to link word of previous entry
+	001152	001172'				.word	$res1			; insert address of new entry
+		001214'				. = $respc			; restore current pc
+	000520					.restore
+    139	000520				mod$res		<RING>		,RING		; includes "RINGING"
+						.list me
+						.save
+	001214					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-23
+Finally, we can define the modems
+
+						.save
+	001226					.psect	resdat	,ro,d,lcl,rel,con
+		001226'				$respc = .			; save the current pc
+		001172'				. = $reslast			; back to link word of previous entry
+	001172	001214'				.word	$res1			; insert address of new entry
+		001226'				. = $respc			; restore current pc
+	000520					.restore
+    140	000520				mod$res		<RRING>		,RING		; Telebit-style rringing
+						.list me
+						.save
+	001226					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001240					.psect	resdat	,ro,d,lcl,rel,con
+		001240'				$respc = .			; save the current pc
+		001214'				. = $reslast			; back to link word of previous entry
+	001214	001226'				.word	$res1			; insert address of new entry
+		001240'				. = $respc			; restore current pc
+	000520					.restore
+    141	000520				mod$res		<VOICE>		,FAILED
+						.list me
+						.save
+	001240					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000520					.restore
+						.list me
+						.save
+	001252					.psect	resdat	,ro,d,lcl,rel,con
+		001252'				$respc = .			; save the current pc
+		001226'				. = $reslast			; back to link word of previous entry
+	001226	001240'				.word	$res1			; insert address of new entry
+		001252'				. = $respc			; restore current pc
+	000520					.restore
+    142
+    143	000520				define		hayes.mnp ,<HAYES-MNP>		; /BBS/ added from above..
+						.list me
+						.save
+	000541					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000541'				$$ = .				; save location of
+	000541	   110 	   101 	   131 		.asciz	"HAYES-MNP"			; the modem type string
+	000544	   105 	   123 	   055
+	000547	   115 	   116 	   120
+	000552	   000
+						.even
+	000520					.restore
+    144	000610				mod$comment	<Hayes Generic V.42/MNP - Lock DTE speed before using!>
+						.list me
+						.save
+	000554					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000562'				. = $$current+mod.com
+	000562	000554'				.word	$$addr			; where to find it..
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-24
+Finally, we can define the modems
+
+	000610					.restore
+    145	000610				wake$string	<AT E1 Q0 S0=0 S7=255 V1 %X ^M>
+						.list me
+						.save
+	000642					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000526'				. = $$current+wake.string
+	000526	000642'				.word	$$addr			; where to find it..
+	000610					.restore
+    146	000610				wake$prompt	<OK>
+						.list me
+						.save
+	000677					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000532'				. = $$current+wake.prompt
+	000532	000677'				.word	$$addr			; where to find it..
+	000610					.restore
+    147	000610				dial$string	<AT %X %A D%M %S ^M>
+						.list me
+						.save
+	000702					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000540'				. = $$current+dial.string
+	000540	000702'				.word	$$addr			; where to find it..
+	000610					.restore
+    148	000610				dial$echo	1
+						.list me
+						.save
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000560'				. = $$current+dial.echo		; it goes here..
+	000560	000001 				.word	1
+	000610					.restore
+    149	000610				init$once	1
+						.list me
+						.save
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000576'				. = $$current+init.once		; it goes here..
+	000576	000001 				.word	1
+	000610					.restore
+    150	000610				dial$pulse	<P>
+						.list me
+						.save
+	000724					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000572'				. = $$current+dial.pulse
+	000572	000724'				.word	$$addr			; where to find it..
+	000610					.restore
+    151	000610				dial$nopulse	<T>
+						.list me
+						.save
+	000726					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-25
+Finally, we can define the modems
+
+		000574'				. = $$current+dial.nopulse
+	000574	000726'				.word	$$addr			; where to find it..
+	000610					.restore
+    152	000610				dial$xabort	<^M>
+						.list me
+						.save
+	000730					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000566'				. = $$current+dial.xabort
+	000566	000730'				.word	$$addr			; where to find it..
+	000610					.restore
+    153	000610				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	000732					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000570'				. = $$current+dial.idle
+	000570	000732'				.word	$$addr			; where to find it..
+	000610					.restore
+    154	000610				dial$time	60.
+						.list me
+						.save
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000524'				. = $$current+dial.time		; it goes here..
+	000524	000074 				.word	60.
+	000610					.restore
+    155	000610				time$settle	<25.>
+						.list me
+						.save
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000600'				. = $$current+time.settle		; it goes here..
+	000600	000031 				.word	25.
+	000610					.restore
+    156	000610				x$result	<4>
+						.list me
+						.save
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000602'				. = $$current+x.result		; it goes here..
+	000602	000004 				.word	4
+	000610					.restore
+    157	000610				ph$answer	<S0=1>				; /62/
+						.list me
+						.save
+	000741					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000604'				. = $$current+ph.answer
+	000604	000741'				.word	$$addr			; where to find it..
+	000610					.restore
+    158	000610				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	000746					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-26
+Finally, we can define the modems
+
+		000606'				. = $$current+ph.noanswer
+	000606	000746'				.word	$$addr			; where to find it..
+	000610					.restore
+    159	000610				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	001252					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	000610					.psect	modinf	,ro,d,lcl,rel,con
+		000564'				. = $$current+res.head		; it goes here..
+	000564	001252'				.word	$res1
+	000610					.restore
+    160	000610				mod$res		<CONNECT>	,CONNECT
+						.list me
+						.save
+	001264					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001300					.psect	resdat	,ro,d,lcl,rel,con
+		001300'				$respc = .			; save the current pc
+		001252'				. = $reslast			; back to link word of previous entry
+	001252	001264'				.word	$res1			; insert address of new entry
+		001300'				. = $respc			; restore current pc
+	000610					.restore
+    161	000610				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	001300					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001312					.psect	resdat	,ro,d,lcl,rel,con
+		001312'				$respc = .			; save the current pc
+		001264'				. = $reslast			; back to link word of previous entry
+	001264	001300'				.word	$res1			; insert address of new entry
+		001312'				. = $respc			; restore current pc
+	000610					.restore
+    162	000610				mod$res		<NO ANSWER>	,FAILED
+						.list me
+						.save
+	001312					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001330					.psect	resdat	,ro,d,lcl,rel,con
+		001330'				$respc = .			; save the current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-27
+Finally, we can define the modems
+
+		001300'				. = $reslast			; back to link word of previous entry
+	001300	001312'				.word	$res1			; insert address of new entry
+		001330'				. = $respc			; restore current pc
+	000610					.restore
+    163	000610				mod$res		<NO CARRIER>	,FAILED
+						.list me
+						.save
+	001330					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001350					.psect	resdat	,ro,d,lcl,rel,con
+		001350'				$respc = .			; save the current pc
+		001312'				. = $reslast			; back to link word of previous entry
+	001312	001330'				.word	$res1			; insert address of new entry
+		001350'				. = $respc			; restore current pc
+	000610					.restore
+    164	000610				mod$res		<NO DIALTONE>	,FAILED
+						.list me
+						.save
+	001350					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001370					.psect	resdat	,ro,d,lcl,rel,con
+		001370'				$respc = .			; save the current pc
+		001330'				. = $reslast			; back to link word of previous entry
+	001330	001350'				.word	$res1			; insert address of new entry
+		001370'				. = $respc			; restore current pc
+	000610					.restore
+    165	000610				mod$res		<NO DIAL TONE>	,FAILED
+						.list me
+						.save
+	001370					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001412					.psect	resdat	,ro,d,lcl,rel,con
+		001412'				$respc = .			; save the current pc
+		001350'				. = $reslast			; back to link word of previous entry
+	001350	001370'				.word	$res1			; insert address of new entry
+		001412'				. = $respc			; restore current pc
+	000610					.restore
+    166	000610				mod$res		<RING>		,RING
+						.list me
+						.save
+	001412					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-28
+Finally, we can define the modems
+
+						.save
+	001424					.psect	resdat	,ro,d,lcl,rel,con
+		001424'				$respc = .			; save the current pc
+		001370'				. = $reslast			; back to link word of previous entry
+	001370	001412'				.word	$res1			; insert address of new entry
+		001424'				. = $respc			; restore current pc
+	000610					.restore
+    167	000610				mod$res		<RRING>		,RING
+						.list me
+						.save
+	001424					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001436					.psect	resdat	,ro,d,lcl,rel,con
+		001436'				$respc = .			; save the current pc
+		001412'				. = $reslast			; back to link word of previous entry
+	001412	001424'				.word	$res1			; insert address of new entry
+		001436'				. = $respc			; restore current pc
+	000610					.restore
+    168	000610				mod$res		<VOICE>		,FAILED
+						.list me
+						.save
+	001436					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000610					.restore
+						.list me
+						.save
+	001450					.psect	resdat	,ro,d,lcl,rel,con
+		001450'				$respc = .			; save the current pc
+		001424'				. = $reslast			; back to link word of previous entry
+	001424	001436'				.word	$res1			; insert address of new entry
+		001450'				. = $respc			; restore current pc
+	000610					.restore
+    169
+    170	000610				define		microcom ,<MICROCOM>
+						.list me
+						.save
+	000753					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		000753'				$$ = .				; save location of
+	000753	   115 	   111 	   103 		.asciz	"MICROCOM"			; the modem type string
+	000756	   122 	   117 	   103
+	000761	   117 	   115 	   000
+						.even
+	000610					.restore
+    171	000700				mod$comment	<MicroCom SX1200>
+						.list me
+						.save
+	000764					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000652'				. = $$current+mod.com
+	000652	000764'				.word	$$addr			; where to find it..
+	000700					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-29
+Finally, we can define the modems
+
+    172	000700				wake$string	<4445^MSE2^MS1C0^MSCE ON^M>
+						.list me
+						.save
+	001004					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000616'				. = $$current+wake.string
+	000616	001004'				.word	$$addr			; where to find it..
+	000700					.restore
+    173	000700				wake$rate	10
+						.list me
+						.save
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000620'				. = $$current+wake.rate		; it goes here..
+	000620	000010 				.word	10
+	000700					.restore
+    174	000700				wake$prompt	<!>
+						.list me
+						.save
+	001032					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000622'				. = $$current+wake.prompt
+	000622	001032'				.word	$$addr			; where to find it..
+	000700					.restore
+    175	000700				dial$string	<D%S^M>
+						.list me
+						.save
+	001034					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000630'				. = $$current+dial.string
+	000630	001034'				.word	$$addr			; where to find it..
+	000700					.restore
+    176	000700				dial$rate	10
+						.list me
+						.save
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000632'				. = $$current+dial.rate		; it goes here..
+	000632	000010 				.word	10
+	000700					.restore
+    177	000700				dial$echo	1
+						.list me
+						.save
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000650'				. = $$current+dial.echo		; it goes here..
+	000650	000001 				.word	1
+	000700					.restore
+    178	000700				dial$time	35.
+						.list me
+						.save
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000614'				. = $$current+dial.time		; it goes here..
+	000614	000043 				.word	35.
+	000700					.restore
+    179	000700				mod$res		<!>		,FAILED
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-30
+Finally, we can define the modems
+
+						.save
+	001450					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000700					.restore
+						.list me
+						.save
+	000700					.psect	modinf	,ro,d,lcl,rel,con
+		000654'				. = $$current+res.head		; it goes here..
+	000654	001450'				.word	$res1
+	000700					.restore
+    180	000700				mod$res		<CONNECT>	,CONNECT
+						.list me
+						.save
+	001456					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000700					.restore
+						.list me
+						.save
+	001472					.psect	resdat	,ro,d,lcl,rel,con
+		001472'				$respc = .			; save the current pc
+		001450'				. = $reslast			; back to link word of previous entry
+	001450	001456'				.word	$res1			; insert address of new entry
+		001472'				. = $respc			; restore current pc
+	000700					.restore
+    181	000700				mod$res		<NO CONNECT>	,FAILED
+						.list me
+						.save
+	001472					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000700					.restore
+						.list me
+						.save
+	001512					.psect	resdat	,ro,d,lcl,rel,con
+		001512'				$respc = .			; save the current pc
+		001456'				. = $reslast			; back to link word of previous entry
+	001456	001472'				.word	$res1			; insert address of new entry
+		001512'				. = $respc			; restore current pc
+	000700					.restore
+    182
+    183	000700				define		r212a	,<R212A>		; added by edit RTM01
+						.list me
+						.save
+	001041					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		001041'				$$ = .				; save location of
+	001041	   122 	   062 	   061 		.asciz	"R212A"			; the modem type string
+	001044	   062 	   101 	   000
+						.even
+	000700					.restore
+    184	000770				mod$comment	<Rixon R212A>
+						.list me
+						.save
+	001050					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-31
+Finally, we can define the modems
+
+		000742'				. = $$current+mod.com
+	000742	001050'				.word	$$addr			; where to find it..
+	000770					.restore
+    185	000770				wake$string	<^M^M>
+						.list me
+						.save
+	001064					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000706'				. = $$current+wake.string
+	000706	001064'				.word	$$addr			; where to find it..
+	000770					.restore
+    186	000770				wake$rate	10				; wait 8. ticks
+						.list me
+						.save
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000710'				. = $$current+wake.rate		; it goes here..
+	000710	000010 				.word	10
+	000770					.restore
+    187	000770				wake$prompt	<$>
+						.list me
+						.save
+	001067					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000712'				. = $$current+wake.prompt
+	000712	001067'				.word	$$addr			; where to find it..
+	000770					.restore
+    188	000770				dmod$string	<K>
+						.list me
+						.save
+	001071					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000714'				. = $$current+dmod.string
+	000714	001071'				.word	$$addr			; where to find it..
+	000770					.restore
+    189	000770				dmod$prompt	<NUMBER:>
+						.list me
+						.save
+	001073					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000716'				. = $$current+dmod.prompt
+	000716	001073'				.word	$$addr			; where to find it..
+	000770					.restore
+    190	000770				dial$string	<%S^M>
+						.list me
+						.save
+	001103					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000720'				. = $$current+dial.string
+	000720	001103'				.word	$$addr			; where to find it..
+	000770					.restore
+    191	000770				dial$rate	10
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-32
+Finally, we can define the modems
+
+						.save
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000722'				. = $$current+dial.rate		; it goes here..
+	000722	000010 				.word	10
+	000770					.restore
+    192	000770				dial$go		<DIALING:>
+						.list me
+						.save
+	001107					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000734'				. = $$current+dial.go
+	000734	001107'				.word	$$addr			; where to find it..
+	000770					.restore
+    193	000770				dial$echo	1
+						.list me
+						.save
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000740'				. = $$current+dial.echo		; it goes here..
+	000740	000001 				.word	1
+	000770					.restore
+    194	000770				dial$time	60.				; long time-out for overseas
+						.list me
+						.save
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000704'				. = $$current+dial.time		; it goes here..
+	000704	000074 				.word	60.
+	000770					.restore
+    195	000770				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	001512					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000770					.restore
+						.list me
+						.save
+	000770					.psect	modinf	,ro,d,lcl,rel,con
+		000744'				. = $$current+res.head		; it goes here..
+	000744	001512'				.word	$res1
+	000770					.restore
+    196	000770				mod$res		<DEAD LINE>	,FAILED
+						.list me
+						.save
+	001524					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000770					.restore
+						.list me
+						.save
+	001542					.psect	resdat	,ro,d,lcl,rel,con
+		001542'				$respc = .			; save the current pc
+		001512'				. = $reslast			; back to link word of previous entry
+	001512	001524'				.word	$res1			; insert address of new entry
+		001542'				. = $respc			; restore current pc
+	000770					.restore
+    197	000770				mod$res		<ON LINE>	,CONNECT
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-33
+Finally, we can define the modems
+
+						.list me
+						.save
+	001542					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000770					.restore
+						.list me
+						.save
+	001556					.psect	resdat	,ro,d,lcl,rel,con
+		001556'				$respc = .			; save the current pc
+		001524'				. = $reslast			; back to link word of previous entry
+	001524	001542'				.word	$res1			; insert address of new entry
+		001556'				. = $respc			; restore current pc
+	000770					.restore
+    198	000770				mod$res		<ON-LINE>	,CONNECT
+						.list me
+						.save
+	001556					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000770					.restore
+						.list me
+						.save
+	001572					.psect	resdat	,ro,d,lcl,rel,con
+		001572'				$respc = .			; save the current pc
+		001542'				. = $reslast			; back to link word of previous entry
+	001542	001556'				.word	$res1			; insert address of new entry
+		001572'				. = $respc			; restore current pc
+	000770					.restore
+    199	000770				mod$res		<NO ANSWER>	,FAILED
+						.list me
+						.save
+	001572					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000770					.restore
+						.list me
+						.save
+	001610					.psect	resdat	,ro,d,lcl,rel,con
+		001610'				$respc = .			; save the current pc
+		001556'				. = $reslast			; back to link word of previous entry
+	001556	001572'				.word	$res1			; insert address of new entry
+		001610'				. = $respc			; restore current pc
+	000770					.restore
+    200	000770				mod$res		<RINGING>	,RING
+						.list me
+						.save
+	001610					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	000770					.restore
+						.list me
+						.save
+	001624					.psect	resdat	,ro,d,lcl,rel,con
+		001624'				$respc = .			; save the current pc
+		001572'				. = $reslast			; back to link word of previous entry
+	001572	001610'				.word	$res1			; insert address of new entry
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-34
+Finally, we can define the modems
+
+		001624'				. = $respc			; restore current pc
+	000770					.restore
+    201
+    202	000770				define		T2500	,<T2500>		; /BBS/ added..
+						.list me
+						.save
+	001120					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		001120'				$$ = .				; save location of
+	001120	   124 	   062 	   065 		.asciz	"T2500"			; the modem type string
+	001123	   060 	   060 	   000
+						.even
+	000770					.restore
+    203	001060				mod$comment	^~Telebit w/o error correction - DTE follows DCE speed~
+						.list me
+						.save
+	001126					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001032'				. = $$current+mod.com
+	001032	001126'				.word	$$addr			; where to find it..
+	001060					.restore
+    204	001060				wake$string	<AT E1 Q0 S0=0 S7=255 S66=0 S95=0 S97=0 S106=0 V1 %X ^M>
+						.list me
+						.save
+	001213					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		000776'				. = $$current+wake.string
+	000776	001213'				.word	$$addr			; where to find it..
+	001060					.restore
+    205	001060				wake$prompt	<OK>
+						.list me
+						.save
+	001301					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001002'				. = $$current+wake.prompt
+	001002	001301'				.word	$$addr			; where to find it..
+	001060					.restore
+    206	001060				dial$string	<AT %X %A D%M %S ^M>
+						.list me
+						.save
+	001304					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001010'				. = $$current+dial.string
+	001010	001304'				.word	$$addr			; where to find it..
+	001060					.restore
+    207	001060				dial$echo	1
+						.list me
+						.save
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001030'				. = $$current+dial.echo		; it goes here..
+	001030	000001 				.word	1
+	001060					.restore
+    208	001060				init$once	1
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-35
+Finally, we can define the modems
+
+						.save
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001046'				. = $$current+init.once		; it goes here..
+	001046	000001 				.word	1
+	001060					.restore
+    209	001060				dial$pulse	<P>
+						.list me
+						.save
+	001326					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001042'				. = $$current+dial.pulse
+	001042	001326'				.word	$$addr			; where to find it..
+	001060					.restore
+    210	001060				dial$nopulse	<T>
+						.list me
+						.save
+	001330					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001044'				. = $$current+dial.nopulse
+	001044	001330'				.word	$$addr			; where to find it..
+	001060					.restore
+    211	001060				dial$xabort	<^M>
+						.list me
+						.save
+	001332					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001036'				. = $$current+dial.xabort
+	001036	001332'				.word	$$addr			; where to find it..
+	001060					.restore
+    212	001060				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	001334					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001040'				. = $$current+dial.idle
+	001040	001334'				.word	$$addr			; where to find it..
+	001060					.restore
+    213	001060				dial$time	45.
+						.list me
+						.save
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		000774'				. = $$current+dial.time		; it goes here..
+	000774	000055 				.word	45.
+	001060					.restore
+    214	001060				x$result	<3>
+						.list me
+						.save
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001052'				. = $$current+x.result		; it goes here..
+	001052	000003 				.word	3
+	001060					.restore
+    215	001060				ph$answer	<S0=1>				; /62/
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-36
+Finally, we can define the modems
+
+						.save
+	001343					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001054'				. = $$current+ph.answer
+	001054	001343'				.word	$$addr			; where to find it..
+	001060					.restore
+    216	001060				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	001350					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001056'				. = $$current+ph.noanswer
+	001056	001350'				.word	$$addr			; where to find it..
+	001060					.restore
+    217	001060				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	001624					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	001060					.psect	modinf	,ro,d,lcl,rel,con
+		001034'				. = $$current+res.head		; it goes here..
+	001034	001624'				.word	$res1
+	001060					.restore
+    218	001060				mod$res		<CONNECT FAST>	,CON19200	; /63/
+						.list me
+						.save
+	001636					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	001660					.psect	resdat	,ro,d,lcl,rel,con
+		001660'				$respc = .			; save the current pc
+		001624'				. = $reslast			; back to link word of previous entry
+	001624	001636'				.word	$res1			; insert address of new entry
+		001660'				. = $respc			; restore current pc
+	001060					.restore
+    219	001060				mod$res		<CONNECT 19200>	,CON19200
+						.list me
+						.save
+	001660					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	001702					.psect	resdat	,ro,d,lcl,rel,con
+		001702'				$respc = .			; save the current pc
+		001636'				. = $reslast			; back to link word of previous entry
+	001636	001660'				.word	$res1			; insert address of new entry
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-37
+Finally, we can define the modems
+
+		001702'				. = $respc			; restore current pc
+	001060					.restore
+    220	001060				mod$res		<CONNECT 9600>	,CON9600
+						.list me
+						.save
+	001702					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	001724					.psect	resdat	,ro,d,lcl,rel,con
+		001724'				$respc = .			; save the current pc
+		001660'				. = $reslast			; back to link word of previous entry
+	001660	001702'				.word	$res1			; insert address of new entry
+		001724'				. = $respc			; restore current pc
+	001060					.restore
+    221	001060				mod$res		<CONNECT 4800>	,CON4800
+						.list me
+						.save
+	001724					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	001746					.psect	resdat	,ro,d,lcl,rel,con
+		001746'				$respc = .			; save the current pc
+		001702'				. = $reslast			; back to link word of previous entry
+	001702	001724'				.word	$res1			; insert address of new entry
+		001746'				. = $respc			; restore current pc
+	001060					.restore
+    222	001060				mod$res		<CONNECT 2400>	,CON2400
+						.list me
+						.save
+	001746					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	001770					.psect	resdat	,ro,d,lcl,rel,con
+		001770'				$respc = .			; save the current pc
+		001724'				. = $reslast			; back to link word of previous entry
+	001724	001746'				.word	$res1			; insert address of new entry
+		001770'				. = $respc			; restore current pc
+	001060					.restore
+    223	001060				mod$res		<CONNECT 1200>	,CON1200
+						.list me
+						.save
+	001770					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	002012					.psect	resdat	,ro,d,lcl,rel,con
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-38
+Finally, we can define the modems
+
+		002012'				$respc = .			; save the current pc
+		001746'				. = $reslast			; back to link word of previous entry
+	001746	001770'				.word	$res1			; insert address of new entry
+		002012'				. = $respc			; restore current pc
+	001060					.restore
+    224	001060				mod$res		<CONNECT 300>	,CON300		; /63/
+						.list me
+						.save
+	002012					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	002032					.psect	resdat	,ro,d,lcl,rel,con
+		002032'				$respc = .			; save the current pc
+		001770'				. = $reslast			; back to link word of previous entry
+	001770	002012'				.word	$res1			; insert address of new entry
+		002032'				. = $respc			; restore current pc
+	001060					.restore
+    225	001060				mod$res		<CONNECT>	,CON300
+						.list me
+						.save
+	002032					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	002046					.psect	resdat	,ro,d,lcl,rel,con
+		002046'				$respc = .			; save the current pc
+		002012'				. = $reslast			; back to link word of previous entry
+	002012	002032'				.word	$res1			; insert address of new entry
+		002046'				. = $respc			; restore current pc
+	001060					.restore
+    226	001060				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	002046					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	002060					.psect	resdat	,ro,d,lcl,rel,con
+		002060'				$respc = .			; save the current pc
+		002032'				. = $reslast			; back to link word of previous entry
+	002032	002046'				.word	$res1			; insert address of new entry
+		002060'				. = $respc			; restore current pc
+	001060					.restore
+    227	001060				mod$res		<NO ANSWER>	,FAILED
+						.list me
+						.save
+	002060					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-39
+Finally, we can define the modems
+
+						.list	,FAILED
+						.list me
+						.save
+	002076					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	002116					.psect	resdat	,ro,d,lcl,rel,con
+		002116'				$respc = .			; save the current pc
+		002060'				. = $reslast			; back to link word of previous entry
+	002060	002076'				.word	$res1			; insert address of new entry
+		002116'				. = $respc			; restore current pc
+	001060					.restore
+    229	001060				mod$res		<NO DIAL TONE>	,FAILED
+						.list me
+						.save
+	002116					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	002140					.psect	resdat	,ro,d,lcl,rel,con
+		002140'				$respc = .			; save the current pc
+		002076'				. = $reslast			; back to link word of previous entry
+	002076	002116'				.word	$res1			; insert address of new entry
+		002140'				. = $respc			; restore current pc
+	001060					.restore
+    230	001060				mod$res		<RRING>		,RING
+						.list me
+						.save
+	002140					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001060					.restore
+						.list me
+						.save
+	002152					.psect	resdat	,ro,d,lcl,rel,con
+		002152'				$respc = .			; save the current pc
+		002116'				. = $reslast			; back to link word of previous entry
+	002116	002140'				.word	$res1			; insert address of new entry
+		002152'				. = $respc			; restore current pc
+	001060					.restore
+    231
+    232	001060				define		T2500MNP ,<T2500MNP>		; /BBS/ added..
+						.list me
+						.save
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-40
+Finally, we can define the modems
+
+	001355					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		001355'				$$ = .				; save location of
+	001355	   124 	   062 	   065 		.asciz	"T2500MNP"			; the modem type string
+	001360	   060 	   060 	   115
+	001363	   116 	   120 	   000
+						.even
+	001060					.restore
+    233	001150				mod$comment	<Telebit MNP only - Locks DTE speed>
+						.list me
+						.save
+	001366					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001122'				. = $$current+mod.com
+	001122	001366'				.word	$$addr			; where to find it..
+	001150					.restore
+    234	001150				wake$string	<AT E1 Q0 S0=0 S7=255 S66=1 S95=2 S97=0 S106=0 V1 %X ^M>
+						.list me
+						.save
+	001431					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001066'				. = $$current+wake.string
+	001066	001431'				.word	$$addr			; where to find it..
+	001150					.restore
+    235	001150				wake$prompt	<OK>
+						.list me
+						.save
+	001517					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001072'				. = $$current+wake.prompt
+	001072	001517'				.word	$$addr			; where to find it..
+	001150					.restore
+    236	001150				dial$string	<AT %X %A D%M %S ^M>
+						.list me
+						.save
+	001522					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001100'				. = $$current+dial.string
+	001100	001522'				.word	$$addr			; where to find it..
+	001150					.restore
+    237	001150				dial$echo	1
+						.list me
+						.save
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001120'				. = $$current+dial.echo		; it goes here..
+	001120	000001 				.word	1
+	001150					.restore
+    238	001150				init$once	1
+						.list me
+						.save
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001136'				. = $$current+init.once		; it goes here..
+	001136	000001 				.word	1
+	001150					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-41
+Finally, we can define the modems
+
+    239	001150				dial$pulse	<P>
+						.list me
+						.save
+	001544					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001132'				. = $$current+dial.pulse
+	001132	001544'				.word	$$addr			; where to find it..
+	001150					.restore
+    240	001150				dial$nopulse	<T>
+						.list me
+						.save
+	001546					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001134'				. = $$current+dial.nopulse
+	001134	001546'				.word	$$addr			; where to find it..
+	001150					.restore
+    241	001150				dial$xabort	<^M>
+						.list me
+						.save
+	001550					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001126'				. = $$current+dial.xabort
+	001126	001550'				.word	$$addr			; where to find it..
+	001150					.restore
+    242	001150				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	001552					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001130'				. = $$current+dial.idle
+	001130	001552'				.word	$$addr			; where to find it..
+	001150					.restore
+    243	001150				dial$time	60.
+						.list me
+						.save
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001064'				. = $$current+dial.time		; it goes here..
+	001064	000074 				.word	60.
+	001150					.restore
+    244	001150				x$result	<3>
+						.list me
+						.save
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001142'				. = $$current+x.result		; it goes here..
+	001142	000003 				.word	3
+	001150					.restore
+    245	001150				ph$answer	<S0=1>				; /62/
+						.list me
+						.save
+	001561					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001144'				. = $$current+ph.answer
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-42
+Finally, we can define the modems
+
+	001144	001561'				.word	$$addr			; where to find it..
+	001150					.restore
+    246	001150				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	001566					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001146'				. = $$current+ph.noanswer
+	001146	001566'				.word	$$addr			; where to find it..
+	001150					.restore
+    247	001150				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	002152					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001150					.restore
+						.list me
+						.save
+	001150					.psect	modinf	,ro,d,lcl,rel,con
+		001124'				. = $$current+res.head		; it goes here..
+	001124	002152'				.word	$res1
+	001150					.restore
+    248	001150				mod$res		<CONNECT>	,CONNECT	; includes all CONNECT msgs
+						.list me
+						.save
+	002164					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001150					.restore
+						.list me
+						.save
+	002200					.psect	resdat	,ro,d,lcl,rel,con
+		002200'				$respc = .			; save the current pc
+		002152'				. = $reslast			; back to link word of previous entry
+	002152	002164'				.word	$res1			; insert address of new entry
+		002200'				. = $respc			; restore current pc
+	001150					.restore
+    249	001150				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	002200					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001150					.restore
+						.list me
+						.save
+	002212					.psect	resdat	,ro,d,lcl,rel,con
+		002212'				$respc = .			; save the current pc
+		002164'				. = $reslast			; back to link word of previous entry
+	002164	002200'				.word	$res1			; insert address of new entry
+		002212'				. = $respc			; restore current pc
+	001150					.restore
+    250	001150				mod$res		<NO ANSWER>	,FAILED
+						.list me
+						.save
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-43
+Finally, we can define the modems
+
+	002212					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001150					.restore
+						.list me
+						.save
+	002230					.psect	resdat	,ro,d,lcl,rel,con
+		002230'				$respc = .			; save the current pc
+		002200'				. = $reslast			; back to link word of previous entry
+	002200	002212'				.word	$res1			; insert address of new entry
+		002230'				. = $respc			; restore current pc
+	001150					.restore
+    251	001150				mod$res		<NO CARRIER>	,FAILED
+						.list me
+						.save
+	002230					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001150					.restore
+						.list me
+						.save
+	002250					.psect	resdat	,ro,d,lcl,rel,con
+		002250'				$respc = .			; save the current pc
+		002212'				. = $reslast			; back to link word of previous entry
+	002212	002230'				.word	$res1			; insert address of new entry
+		002250'				. = $respc			; restore current pc
+	001150					.restore
+    252	001150				mod$res		<NO DIAL TONE>	,FAILED
+						.list me
+						.save
+	002250					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001150					.restore
+						.list me
+						.save
+	002272					.psect	resdat	,ro,d,lcl,rel,con
+		002272'				$respc = .			; save the current pc
+		002230'				. = $reslast			; back to link word of previous entry
+	002230	002250'				.word	$res1			; insert address of new entry
+		002272'				. = $respc			; restore current pc
+	001150					.restore
+    253	001150				mod$res		<RRING>		,RING
+						.list me
+						.save
+	002272					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001150					.restore
+						.list me
+						.save
+	002304					.psect	resdat	,ro,d,lcl,rel,con
+		002304'				$respc = .			; save the current pc
+		002250'				. = $reslast			; back to link word of previous entry
+	002250	002272'				.word	$res1			; insert address of new entry
+		002304'				. = $respc			; restore current pc
+	001150					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-44
+Finally, we can define the modems
+
+    254
+    255	001150				define		T2500V.42 ,<T2500V.42>		; /BBS/ added..
+						.list me
+						.save
+	001573					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		001573'				$$ = .				; save location of
+	001573	   124 	   062 	   065 		.asciz	"T2500V.42"			; the modem type string
+	001576	   060 	   060 	   126
+	001601	   056 	   064 	   062
+	001604	   000
+						.even
+	001150					.restore
+    256	001240				mod$comment	<Telebit V.42/MNP - Locks DTE speed>
+						.list me
+						.save
+	001606					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001212'				. = $$current+mod.com
+	001212	001606'				.word	$$addr			; where to find it..
+	001240					.restore
+    257	001240				wake$string	<AT E1 Q0 S0=0 S7=255 S66=1 S95=2 S97=0 S106=1 V1 %X ^M>
+						.list me
+						.save
+	001651					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001156'				. = $$current+wake.string
+	001156	001651'				.word	$$addr			; where to find it..
+	001240					.restore
+    258	001240				wake$prompt	<OK>
+						.list me
+						.save
+	001737					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001162'				. = $$current+wake.prompt
+	001162	001737'				.word	$$addr			; where to find it..
+	001240					.restore
+    259	001240				dial$string	<AT %X %A D%M %S ^M>
+						.list me
+						.save
+	001742					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001170'				. = $$current+dial.string
+	001170	001742'				.word	$$addr			; where to find it..
+	001240					.restore
+    260	001240				dial$echo	1
+						.list me
+						.save
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001210'				. = $$current+dial.echo		; it goes here..
+	001210	000001 				.word	1
+	001240					.restore
+    261	001240				init$once	1
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-45
+Finally, we can define the modems
+
+						.save
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001226'				. = $$current+init.once		; it goes here..
+	001226	000001 				.word	1
+	001240					.restore
+    262	001240				dial$pulse	<P>
+						.list me
+						.save
+	001764					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001222'				. = $$current+dial.pulse
+	001222	001764'				.word	$$addr			; where to find it..
+	001240					.restore
+    263	001240				dial$nopulse	<T>
+						.list me
+						.save
+	001766					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001224'				. = $$current+dial.nopulse
+	001224	001766'				.word	$$addr			; where to find it..
+	001240					.restore
+    264	001240				dial$xabort	<^M>
+						.list me
+						.save
+	001770					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001216'				. = $$current+dial.xabort
+	001216	001770'				.word	$$addr			; where to find it..
+	001240					.restore
+    265	001240				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	001772					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001220'				. = $$current+dial.idle
+	001220	001772'				.word	$$addr			; where to find it..
+	001240					.restore
+    266	001240				dial$time	60.
+						.list me
+						.save
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001154'				. = $$current+dial.time		; it goes here..
+	001154	000074 				.word	60.
+	001240					.restore
+    267	001240				x$result	<3>
+						.list me
+						.save
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001232'				. = $$current+x.result		; it goes here..
+	001232	000003 				.word	3
+	001240					.restore
+    268	001240				ph$answer	<S0=1>				; /62/
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-46
+Finally, we can define the modems
+
+						.save
+	002001					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001234'				. = $$current+ph.answer
+	001234	002001'				.word	$$addr			; where to find it..
+	001240					.restore
+    269	001240				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	002006					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001236'				. = $$current+ph.noanswer
+	001236	002006'				.word	$$addr			; where to find it..
+	001240					.restore
+    270	001240				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	002304					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001240					.restore
+						.list me
+						.save
+	001240					.psect	modinf	,ro,d,lcl,rel,con
+		001214'				. = $$current+res.head		; it goes here..
+	001214	002304'				.word	$res1
+	001240					.restore
+    271	001240				mod$res		<CONNECT>	,CONNECT
+						.list me
+						.save
+	002316					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001240					.restore
+						.list me
+						.save
+	002332					.psect	resdat	,ro,d,lcl,rel,con
+		002332'				$respc = .			; save the current pc
+		002304'				. = $reslast			; back to link word of previous entry
+	002304	002316'				.word	$res1			; insert address of new entry
+		002332'				. = $respc			; restore current pc
+	001240					.restore
+    272	001240				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	002332					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001240					.restore
+						.list me
+						.save
+	002344					.psect	resdat	,ro,d,lcl,rel,con
+		002344'				$respc = .			; save the current pc
+		002316'				. = $reslast			; back to link word of previous entry
+	002316	002332'				.word	$res1			; insert address of new entry
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-47
+Finally, we can define the modems
+
+		002344'				. = $respc			; restore current pc
+	001240					.restore
+    273	001240				mod$res		<NO ANSWER>	,FAILED
+						.list me
+						.save
+	002344					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001240					.restore
+						.list me
+						.save
+	002362					.psect	resdat	,ro,d,lcl,rel,con
+		002362'				$respc = .			; save the current pc
+		002332'				. = $reslast			; back to link word of previous entry
+	002332	002344'				.word	$res1			; insert address of new entry
+		002362'				. = $respc			; restore current pc
+	001240					.restore
+    274	001240				mod$res		<NO CARRIER>	,FAILED
+						.list me
+						.save
+	002362					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001240					.restore
+						.list me
+						.save
+	002402					.psect	resdat	,ro,d,lcl,rel,con
+		002402'				$respc = .			; save the current pc
+		002344'				. = $reslast			; back to link word of previous entry
+	002344	002362'				.word	$res1			; insert address of new entry
+		002402'				. = $respc			; restore current pc
+	001240					.restore
+    275	001240				mod$res		<NO DIAL TONE>	,FAILED
+						.list me
+						.save
+	002402					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001240					.restore
+						.list me
+						.save
+	002424					.psect	resdat	,ro,d,lcl,rel,con
+		002424'				$respc = .			; save the current pc
+		002362'				. = $reslast			; back to link word of previous entry
+	002362	002402'				.word	$res1			; insert address of new entry
+		002424'				. = $respc			; restore current pc
+	001240					.restore
+    276	001240				mod$res		<RRING>		,RING
+						.list me
+						.save
+	002424					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001240					.restore
+						.list me
+						.save
+	002436					.psect	resdat	,ro,d,lcl,rel,con
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-48
+Finally, we can define the modems
+
+		002436'				$respc = .			; save the current pc
+		002402'				. = $reslast			; back to link word of previous entry
+	002402	002424'				.word	$res1			; insert address of new entry
+		002436'				. = $respc			; restore current pc
+	001240					.restore
+    277
+    278	001240				define		T3000	,<T3000>		; /62/ added..
+						.list me
+						.save
+	002013					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		002013'				$$ = .				; save location of
+	002013	   124 	   063 	   060 		.asciz	"T3000"			; the modem type string
+	002016	   060 	   060 	   000
+						.even
+	001240					.restore
+    279	001330				mod$comment	^~Telebit w/o V.42/MNP - DTE follows DCE - XOFF restraint~
+						.list me
+						.save
+	002022					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001302'				. = $$current+mod.com
+	001302	002022'				.word	$$addr			; where to find it..
+	001330					.restore
+    280	001330				wake$string	<AT E1 Q S0=0 S7=255 S58=3 S180=0 S181=0 V1 %X ^M> ; /63/
+						.list me
+						.save
+	002112					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001246'				. = $$current+wake.string
+	001246	002112'				.word	$$addr			; where to find it..
+	001330					.restore
+    281	001330				wake$prompt	<OK>
+						.list me
+						.save
+	002172					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001252'				. = $$current+wake.prompt
+	001252	002172'				.word	$$addr			; where to find it..
+	001330					.restore
+    282	001330				dial$string	<AT %X %A D%M %S ^M>
+						.list me
+						.save
+	002175					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001260'				. = $$current+dial.string
+	001260	002175'				.word	$$addr			; where to find it..
+	001330					.restore
+    283	001330				dial$echo	1
+						.list me
+						.save
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001300'				. = $$current+dial.echo		; it goes here..
+	001300	000001 				.word	1
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-49
+Finally, we can define the modems
+
+	001330					.restore
+    284	001330				init$once	1
+						.list me
+						.save
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001316'				. = $$current+init.once		; it goes here..
+	001316	000001 				.word	1
+	001330					.restore
+    285	001330				dial$pulse	<P>
+						.list me
+						.save
+	002217					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001312'				. = $$current+dial.pulse
+	001312	002217'				.word	$$addr			; where to find it..
+	001330					.restore
+    286	001330				dial$nopulse	<T>
+						.list me
+						.save
+	002221					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001314'				. = $$current+dial.nopulse
+	001314	002221'				.word	$$addr			; where to find it..
+	001330					.restore
+    287	001330				dial$xabort	<^M>
+						.list me
+						.save
+	002223					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001306'				. = $$current+dial.xabort
+	001306	002223'				.word	$$addr			; where to find it..
+	001330					.restore
+    288	001330				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	002225					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001310'				. = $$current+dial.idle
+	001310	002225'				.word	$$addr			; where to find it..
+	001330					.restore
+    289	001330				dial$time	45.
+						.list me
+						.save
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001244'				. = $$current+dial.time		; it goes here..
+	001244	000055 				.word	45.
+	001330					.restore
+    290	001330				time$settle	<35.>				; the T3000 is SLOW to recover
+						.list me
+						.save
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001320'				. = $$current+time.settle		; it goes here..
+	001320	000043 				.word	35.
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-50
+Finally, we can define the modems
+
+	001330					.restore
+    291	001330				x$result	<12.>
+						.list me
+						.save
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001322'				. = $$current+x.result		; it goes here..
+	001322	000014 				.word	12.
+	001330					.restore
+    292	001330				ph$answer	<S0=1>				; /62/
+						.list me
+						.save
+	002234					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001324'				. = $$current+ph.answer
+	001324	002234'				.word	$$addr			; where to find it..
+	001330					.restore
+    293	001330				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	002241					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001326'				. = $$current+ph.noanswer
+	001326	002241'				.word	$$addr			; where to find it..
+	001330					.restore
+    294	001330				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	002436					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	001330					.psect	modinf	,ro,d,lcl,rel,con
+		001304'				. = $$current+res.head		; it goes here..
+	001304	002436'				.word	$res1
+	001330					.restore
+    295					;mod$res	<CONNECT FAST>	,CON38400	; /63/ use this if you can, or
+    296	001330				mod$res		<CONNECT FAST>	,CON19200	; this if 19.2 is max speed..
+						.list me
+						.save
+	002450					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002472					.psect	resdat	,ro,d,lcl,rel,con
+		002472'				$respc = .			; save the current pc
+		002436'				. = $reslast			; back to link word of previous entry
+	002436	002450'				.word	$res1			; insert address of new entry
+		002472'				. = $respc			; restore current pc
+	001330					.restore
+    297	001330				mod$res		<CONNECT 38400>	,CON38400
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-51
+Finally, we can define the modems
+
+						.save
+	002472					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002514					.psect	resdat	,ro,d,lcl,rel,con
+		002514'				$respc = .			; save the current pc
+		002450'				. = $reslast			; back to link word of previous entry
+	002450	002472'				.word	$res1			; insert address of new entry
+		002514'				. = $respc			; restore current pc
+	001330					.restore
+    298	001330				mod$res		<CONNECT 19200>	,CON19200
+						.list me
+						.save
+	002514					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002536					.psect	resdat	,ro,d,lcl,rel,con
+		002536'				$respc = .			; save the current pc
+		002472'				. = $reslast			; back to link word of previous entry
+	002472	002514'				.word	$res1			; insert address of new entry
+		002536'				. = $respc			; restore current pc
+	001330					.restore
+    299	001330				mod$res		<CONNECT 14400>	,CON19200	; /63/
+						.list me
+						.save
+	002536					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002560					.psect	resdat	,ro,d,lcl,rel,con
+		002560'				$respc = .			; save the current pc
+		002514'				. = $reslast			; back to link word of previous entry
+	002514	002536'				.word	$res1			; insert address of new entry
+		002560'				. = $respc			; restore current pc
+	001330					.restore
+    300	001330				mod$res		<CONNECT 12000>	,CON19200	; /63/
+						.list me
+						.save
+	002560					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002602					.psect	resdat	,ro,d,lcl,rel,con
+		002602'				$respc = .			; save the current pc
+		002536'				. = $reslast			; back to link word of previous entry
+	002536	002560'				.word	$res1			; insert address of new entry
+		002602'				. = $respc			; restore current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-52
+Finally, we can define the modems
+
+	001330					.restore
+    301	001330				mod$res		<CONNECT 9600>	,CON9600
+						.list me
+						.save
+	002602					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002624					.psect	resdat	,ro,d,lcl,rel,con
+		002624'				$respc = .			; save the current pc
+		002560'				. = $reslast			; back to link word of previous entry
+	002560	002602'				.word	$res1			; insert address of new entry
+		002624'				. = $respc			; restore current pc
+	001330					.restore
+    302	001330				mod$res		<CONNECT 7200>	,CON7200
+						.list me
+						.save
+	002624					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002646					.psect	resdat	,ro,d,lcl,rel,con
+		002646'				$respc = .			; save the current pc
+		002602'				. = $reslast			; back to link word of previous entry
+	002602	002624'				.word	$res1			; insert address of new entry
+		002646'				. = $respc			; restore current pc
+	001330					.restore
+    303	001330				mod$res		<CONNECT 4800>	,CON4800
+						.list me
+						.save
+	002646					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002670					.psect	resdat	,ro,d,lcl,rel,con
+		002670'				$respc = .			; save the current pc
+		002624'				. = $reslast			; back to link word of previous entry
+	002624	002646'				.word	$res1			; insert address of new entry
+		002670'				. = $respc			; restore current pc
+	001330					.restore
+    304	001330				mod$res		<CONNECT 2400>	,CON2400
+						.list me
+						.save
+	002670					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002712					.psect	resdat	,ro,d,lcl,rel,con
+		002712'				$respc = .			; save the current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-53
+Finally, we can define the modems
+
+		002646'				. = $reslast			; back to link word of previous entry
+	002646	002670'				.word	$res1			; insert address of new entry
+		002712'				. = $respc			; restore current pc
+	001330					.restore
+    305	001330				mod$res		<CONNECT 1200>	,CON1200
+						.list me
+						.save
+	002712					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002734					.psect	resdat	,ro,d,lcl,rel,con
+		002734'				$respc = .			; save the current pc
+		002670'				. = $reslast			; back to link word of previous entry
+	002670	002712'				.word	$res1			; insert address of new entry
+		002734'				. = $respc			; restore current pc
+	001330					.restore
+    306	001330				mod$res		<CONNECT>	,CON300
+						.list me
+						.save
+	002734					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002750					.psect	resdat	,ro,d,lcl,rel,con
+		002750'				$respc = .			; save the current pc
+		002712'				. = $reslast			; back to link word of previous entry
+	002712	002734'				.word	$res1			; insert address of new entry
+		002750'				. = $respc			; restore current pc
+	001330					.restore
+    307	001330				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	002750					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	002762					.psect	resdat	,ro,d,lcl,rel,con
+		002762'				$respc = .			; save the current pc
+		002734'				. = $reslast			; back to link word of previous entry
+	002734	002750'				.word	$res1			; insert address of new entry
+		002762'				. = $respc			; restore current pc
+	001330					.restore
+    308	001330				mod$res		<NO CARRIER>	,FAILED
+						.list me
+						.save
+	002762					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-54
+Finally, we can define the modems
+
+						.save
+	003002					.psect	resdat	,ro,d,lcl,rel,con
+		003002'				$respc = .			; save the current pc
+		002750'				. = $reslast			; back to link word of previous entry
+	002750	002762'				.word	$res1			; insert address of new entry
+		003002'				. = $respc			; restore current pc
+	001330					.restore
+    309	001330				mod$res		<NO DIALTONE>	,FAILED
+						.list me
+						.save
+	003002					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	003022					.psect	resdat	,ro,d,lcl,rel,con
+		003022'				$respc = .			; save the current pc
+		002762'				. = $reslast			; back to link word of previous entry
+	002762	003002'				.word	$res1			; insert address of new entry
+		003022'				. = $respc			; restore current pc
+	001330					.restore
+    310	001330				mod$res		<NO PROMPTTONE>	,FAILED		; /63/
+						.list me
+						.save
+	003022					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	003044					.psect	resdat	,ro,d,lcl,rel,con
+		003044'				$respc = .			; save the current pc
+		003002'				. = $reslast			; back to link word of previous entry
+	003002	003022'				.word	$res1			; insert address of new entry
+		003044'				. = $respc			; restore current pc
+	001330					.restore
+    311	001330				mod$res		<RRING>		,RING
+						.list me
+						.save
+	003044					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001330					.restore
+						.list me
+						.save
+	003056					.psect	resdat	,ro,d,lcl,rel,con
+		003056'				$respc = .			; save the current pc
+		003022'				. = $reslast			; back to link word of previous entry
+	003022	003044'				.word	$res1			; insert address of new entry
+		003056'				. = $respc			; restore current pc
+	001330					.restore
+    312
+    313	001330				define		T3000V.42 ,<T3000V.42>		; /62/ added..
+						.list me
+						.save
+	002246					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-55
+Finally, we can define the modems
+
+		002246'				$$ = .				; save location of
+	002246	   124 	   063 	   060 		.asciz	"T3000V.42"			; the modem type string
+	002251	   060 	   060 	   126
+	002254	   056 	   064 	   062
+	002257	   000
+						.even
+	001330					.restore
+    314	001420				mod$comment	<Telebit V.42/MNP - DTE is locked - RTS/CTS restraint>
+						.list me
+						.save
+	002260					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001372'				. = $$current+mod.com
+	001372	002260'				.word	$$addr			; where to find it..
+	001420					.restore
+    315	001420				wake$string	<AT E1 Q S0=0 S7=255 S58=2 S180=2 S181=1 V1 %X ^M>
+						.list me
+						.save
+	002345					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001336'				. = $$current+wake.string
+	001336	002345'				.word	$$addr			; where to find it..
+	001420					.restore
+    316	001420				wake$prompt	<OK>
+						.list me
+						.save
+	002425					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001342'				. = $$current+wake.prompt
+	001342	002425'				.word	$$addr			; where to find it..
+	001420					.restore
+    317	001420				dial$string	<AT %X %A D%M %S ^M>
+						.list me
+						.save
+	002430					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001350'				. = $$current+dial.string
+	001350	002430'				.word	$$addr			; where to find it..
+	001420					.restore
+    318	001420				dial$echo	1
+						.list me
+						.save
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001370'				. = $$current+dial.echo		; it goes here..
+	001370	000001 				.word	1
+	001420					.restore
+    319	001420				init$once	1
+						.list me
+						.save
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001406'				. = $$current+init.once		; it goes here..
+	001406	000001 				.word	1
+	001420					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-56
+Finally, we can define the modems
+
+    320	001420				dial$pulse	<P>
+						.list me
+						.save
+	002452					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001402'				. = $$current+dial.pulse
+	001402	002452'				.word	$$addr			; where to find it..
+	001420					.restore
+    321	001420				dial$nopulse	<T>
+						.list me
+						.save
+	002454					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001404'				. = $$current+dial.nopulse
+	001404	002454'				.word	$$addr			; where to find it..
+	001420					.restore
+    322	001420				dial$xabort	<^M>
+						.list me
+						.save
+	002456					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001376'				. = $$current+dial.xabort
+	001376	002456'				.word	$$addr			; where to find it..
+	001420					.restore
+    323	001420				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	002460					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001400'				. = $$current+dial.idle
+	001400	002460'				.word	$$addr			; where to find it..
+	001420					.restore
+    324	001420				dial$time	60.
+						.list me
+						.save
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001334'				. = $$current+dial.time		; it goes here..
+	001334	000074 				.word	60.
+	001420					.restore
+    325	001420				time$settle	<35.>				; the T3000 is SLOW to recover
+						.list me
+						.save
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001410'				. = $$current+time.settle		; it goes here..
+	001410	000043 				.word	35.
+	001420					.restore
+    326	001420				x$result	<12.>
+						.list me
+						.save
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001412'				. = $$current+x.result		; it goes here..
+	001412	000014 				.word	12.
+	001420					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-57
+Finally, we can define the modems
+
+    327	001420				ph$answer	<S0=1>				; /62/
+						.list me
+						.save
+	002467					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001414'				. = $$current+ph.answer
+	001414	002467'				.word	$$addr			; where to find it..
+	001420					.restore
+    328	001420				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	002474					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001416'				. = $$current+ph.noanswer
+	001416	002474'				.word	$$addr			; where to find it..
+	001420					.restore
+    329	001420				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	003056					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001420					.restore
+						.list me
+						.save
+	001420					.psect	modinf	,ro,d,lcl,rel,con
+		001374'				. = $$current+res.head		; it goes here..
+	001374	003056'				.word	$res1
+	001420					.restore
+    330	001420				mod$res		<CONNECT>	,CONNECT
+						.list me
+						.save
+	003070					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001420					.restore
+						.list me
+						.save
+	003104					.psect	resdat	,ro,d,lcl,rel,con
+		003104'				$respc = .			; save the current pc
+		003056'				. = $reslast			; back to link word of previous entry
+	003056	003070'				.word	$res1			; insert address of new entry
+		003104'				. = $respc			; restore current pc
+	001420					.restore
+    331	001420				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	003104					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001420					.restore
+						.list me
+						.save
+	003116					.psect	resdat	,ro,d,lcl,rel,con
+		003116'				$respc = .			; save the current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-58
+Finally, we can define the modems
+
+		003070'				. = $reslast			; back to link word of previous entry
+	003070	003104'				.word	$res1			; insert address of new entry
+		003116'				. = $respc			; restore current pc
+	001420					.restore
+    332	001420				mod$res		<NO CARRIER>	,FAILED
+						.list me
+						.save
+	003116					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001420					.restore
+						.list me
+						.save
+	003136					.psect	resdat	,ro,d,lcl,rel,con
+		003136'				$respc = .			; save the current pc
+		003104'				. = $reslast			; back to link word of previous entry
+	003104	003116'				.word	$res1			; insert address of new entry
+		003136'				. = $respc			; restore current pc
+	001420					.restore
+    333	001420				mod$res		<NO DIALTONE>	,FAILED
+						.list me
+						.save
+	003136					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001420					.restore
+						.list me
+						.save
+	003156					.psect	resdat	,ro,d,lcl,rel,con
+		003156'				$respc = .			; save the current pc
+		003116'				. = $reslast			; back to link word of previous entry
+	003116	003136'				.word	$res1			; insert address of new entry
+		003156'				. = $respc			; restore current pc
+	001420					.restore
+    334	001420				mod$res		<NO PROMPTTONE>	,FAILED		; /63/
+						.list me
+						.save
+	003156					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001420					.restore
+						.list me
+						.save
+	003200					.psect	resdat	,ro,d,lcl,rel,con
+		003200'				$respc = .			; save the current pc
+		003136'				. = $reslast			; back to link word of previous entry
+	003136	003156'				.word	$res1			; insert address of new entry
+		003200'				. = $respc			; restore current pc
+	001420					.restore
+    335	001420				mod$res		<RRING>		,RING
+						.list me
+						.save
+	003200					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001420					.restore
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-59
+Finally, we can define the modems
+
+						.save
+	003212					.psect	resdat	,ro,d,lcl,rel,con
+		003212'				$respc = .			; save the current pc
+		003156'				. = $reslast			; back to link word of previous entry
+	003156	003200'				.word	$res1			; insert address of new entry
+		003212'				. = $respc			; restore current pc
+	001420					.restore
+    336
+    337	001420				define		T3000X.42 ,<T3000X.42>		; /63/ added..
+						.list me
+						.save
+	002501					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		002501'				$$ = .				; save location of
+	002501	   124 	   063 	   060 		.asciz	"T3000X.42"			; the modem type string
+	002504	   060 	   060 	   130
+	002507	   056 	   064 	   062
+	002512	   000
+						.even
+	001420					.restore
+    338	001510				mod$comment	<Telebit V.42/MNP - DTE is locked - XOFF restraint>
+						.list me
+						.save
+	002514					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001462'				. = $$current+mod.com
+	001462	002514'				.word	$$addr			; where to find it..
+	001510					.restore
+    339	001510				wake$string	<AT E1 Q S0=0 S7=255 S48=0 S58=3 S180=2 S181=1 V1 %X ^M>
+						.list me
+						.save
+	002576					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001426'				. = $$current+wake.string
+	001426	002576'				.word	$$addr			; where to find it..
+	001510					.restore
+    340	001510				wake$prompt	<OK>
+						.list me
+						.save
+	002664					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001432'				. = $$current+wake.prompt
+	001432	002664'				.word	$$addr			; where to find it..
+	001510					.restore
+    341	001510				dial$string	<AT %X %A D%M %S ^M>
+						.list me
+						.save
+	002667					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001440'				. = $$current+dial.string
+	001440	002667'				.word	$$addr			; where to find it..
+	001510					.restore
+    342	001510				dial$echo	1
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-60
+Finally, we can define the modems
+
+						.save
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001460'				. = $$current+dial.echo		; it goes here..
+	001460	000001 				.word	1
+	001510					.restore
+    343	001510				init$once	1
+						.list me
+						.save
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001476'				. = $$current+init.once		; it goes here..
+	001476	000001 				.word	1
+	001510					.restore
+    344	001510				dial$pulse	<P>
+						.list me
+						.save
+	002711					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001472'				. = $$current+dial.pulse
+	001472	002711'				.word	$$addr			; where to find it..
+	001510					.restore
+    345	001510				dial$nopulse	<T>
+						.list me
+						.save
+	002713					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001474'				. = $$current+dial.nopulse
+	001474	002713'				.word	$$addr			; where to find it..
+	001510					.restore
+    346	001510				dial$xabort	<^M>
+						.list me
+						.save
+	002715					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001466'				. = $$current+dial.xabort
+	001466	002715'				.word	$$addr			; where to find it..
+	001510					.restore
+    347	001510				dial$idle	<AT Z ^M>
+						.list me
+						.save
+	002717					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001470'				. = $$current+dial.idle
+	001470	002717'				.word	$$addr			; where to find it..
+	001510					.restore
+    348	001510				dial$time	60.
+						.list me
+						.save
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001424'				. = $$current+dial.time		; it goes here..
+	001424	000074 				.word	60.
+	001510					.restore
+    349	001510				time$settle	<35.>				; the T3000 is SLOW to recover
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-61
+Finally, we can define the modems
+
+						.save
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001500'				. = $$current+time.settle		; it goes here..
+	001500	000043 				.word	35.
+	001510					.restore
+    350	001510				x$result	<12.>
+						.list me
+						.save
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001502'				. = $$current+x.result		; it goes here..
+	001502	000014 				.word	12.
+	001510					.restore
+    351	001510				ph$answer	<S0=1>				; /62/
+						.list me
+						.save
+	002726					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001504'				. = $$current+ph.answer
+	001504	002726'				.word	$$addr			; where to find it..
+	001510					.restore
+    352	001510				ph$noanswer	<S0=0>				; /62/
+						.list me
+						.save
+	002733					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001506'				. = $$current+ph.noanswer
+	001506	002733'				.word	$$addr			; where to find it..
+	001510					.restore
+    353	001510				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	003212					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001510					.restore
+						.list me
+						.save
+	001510					.psect	modinf	,ro,d,lcl,rel,con
+		001464'				. = $$current+res.head		; it goes here..
+	001464	003212'				.word	$res1
+	001510					.restore
+    354	001510				mod$res		<CONNECT>	,CONNECT
+						.list me
+						.save
+	003224					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001510					.restore
+						.list me
+						.save
+	003240					.psect	resdat	,ro,d,lcl,rel,con
+		003240'				$respc = .			; save the current pc
+		003212'				. = $reslast			; back to link word of previous entry
+	003212	003224'				.word	$res1			; insert address of new entry
+		003240'				. = $respc			; restore current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-62
+Finally, we can define the modems
+
+	001510					.restore
+    355	001510				mod$res		<ERROR>		,FAILED
+						.list me
+						.save
+	003240					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001510					.restore
+						.list me
+						.save
+	003252					.psect	resdat	,ro,d,lcl,rel,con
+		003252'				$respc = .			; save the current pc
+		003224'				. = $reslast			; back to link word of previous entry
+	003224	003240'				.word	$res1			; insert address of new entry
+		003252'				. = $respc			; restore current pc
+	001510					.restore
+    356	001510				mod$res		<NO CARRIER>	,FAILED
+						.list me
+						.save
+	003252					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001510					.restore
+						.list me
+						.save
+	003272					.psect	resdat	,ro,d,lcl,rel,con
+		003272'				$respc = .			; save the current pc
+		003240'				. = $reslast			; back to link word of previous entry
+	003240	003252'				.word	$res1			; insert address of new entry
+		003272'				. = $respc			; restore current pc
+	001510					.restore
+    357	001510				mod$res		<NO DIALTONE>	,FAILED
+						.list me
+						.save
+	003272					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001510					.restore
+						.list me
+						.save
+	003312					.psect	resdat	,ro,d,lcl,rel,con
+		003312'				$respc = .			; save the current pc
+		003252'				. = $reslast			; back to link word of previous entry
+	003252	003272'				.word	$res1			; insert address of new entry
+		003312'				. = $respc			; restore current pc
+	001510					.restore
+    358	001510				mod$res		<NO PROMPTTONE>	,FAILED		; /63/
+						.list me
+						.save
+	003312					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001510					.restore
+						.list me
+						.save
+	003334					.psect	resdat	,ro,d,lcl,rel,con
+		003334'				$respc = .			; save the current pc
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-63
+Finally, we can define the modems
+
+		003272'				. = $reslast			; back to link word of previous entry
+	003272	003312'				.word	$res1			; insert address of new entry
+		003334'				. = $respc			; restore current pc
+	001510					.restore
+    359	001510				mod$res		<RRING>		,RING
+						.list me
+						.save
+	003334					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001510					.restore
+						.list me
+						.save
+	003346					.psect	resdat	,ro,d,lcl,rel,con
+		003346'				$respc = .			; save the current pc
+		003312'				. = $reslast			; back to link word of previous entry
+	003312	003334'				.word	$res1			; insert address of new entry
+		003346'				. = $respc			; restore current pc
+	001510					.restore
+    360
+    361	001510				define		vadic	,<VADIC>
+						.list me
+						.save
+	002740					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		002740'				$$ = .				; save location of
+	002740	   126 	   101 	   104 		.asciz	"VADIC"			; the modem type string
+	002743	   111 	   103 	   000
+						.even
+	001510					.restore
+    362	001600				mod$comment	<Vadic Generic VA212>
+						.list me
+						.save
+	002746					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001552'				. = $$current+mod.com
+	001552	002746'				.word	$$addr			; where to find it..
+	001600					.restore
+    363	001600				wake$string	<^E^M>
+						.list me
+						.save
+	002772					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001516'				. = $$current+wake.string
+	001516	002772'				.word	$$addr			; where to find it..
+	001600					.restore
+    364	001600				wake$rate	10
+						.list me
+						.save
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001520'				. = $$current+wake.rate		; it goes here..
+	001520	000010 				.word	10
+	001600					.restore
+    365	001600				wake$prompt	<*>
+						.list me
+						.save
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-64
+Finally, we can define the modems
+
+	002775					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001522'				. = $$current+wake.prompt
+	001522	002775'				.word	$$addr			; where to find it..
+	001600					.restore
+    366	001600				dial$string	<%S^M>
+						.list me
+						.save
+	002777					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001530'				. = $$current+dial.string
+	001530	002777'				.word	$$addr			; where to find it..
+	001600					.restore
+    367	001600				dial$rate	10
+						.list me
+						.save
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001532'				. = $$current+dial.rate		; it goes here..
+	001532	000010 				.word	10
+	001600					.restore
+    368	001600				dial$wait	<K>
+						.list me
+						.save
+	003003					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001540'				. = $$current+dial.wait
+	001540	003003'				.word	$$addr			; where to find it..
+	001600					.restore
+    369	001600				dial$ack	<^M>
+						.list me
+						.save
+	003005					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001534'				. = $$current+dial.ack
+	001534	003005'				.word	$$addr			; where to find it..
+	001600					.restore
+    370	001600				dmod$string	<D^M>
+						.list me
+						.save
+	003007					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001524'				. = $$current+dmod.string
+	001524	003007'				.word	$$addr			; where to find it..
+	001600					.restore
+    371	001600				dmod$prompt	<?>
+						.list me
+						.save
+	003012					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001526'				. = $$current+dmod.prompt
+	001526	003012'				.word	$$addr			; where to find it..
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-65
+Finally, we can define the modems
+
+	001600					.restore
+    372	001600				dial$confirm	<^M>
+						.list me
+						.save
+	003014					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001542'				. = $$current+dial.confirm
+	001542	003014'				.word	$$addr			; where to find it..
+	001600					.restore
+    373	001600				dial$go		<DIALING>
+						.list me
+						.save
+	003016					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001544'				. = $$current+dial.go
+	001544	003016'				.word	$$addr			; where to find it..
+	001600					.restore
+    374	001600				dial$echo	1
+						.list me
+						.save
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001550'				. = $$current+dial.echo		; it goes here..
+	001550	000001 				.word	1
+	001600					.restore
+    375	001600				dial$xabort	<^M>
+						.list me
+						.save
+	003026					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001556'				. = $$current+dial.xabort
+	001556	003026'				.word	$$addr			; where to find it..
+	001600					.restore
+    376	001600				dial$idle	<I^M>
+						.list me
+						.save
+	003030					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001560'				. = $$current+dial.idle
+	001560	003030'				.word	$$addr			; where to find it..
+	001600					.restore
+    377	001600				dial$time	35.
+						.list me
+						.save
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001514'				. = $$current+dial.time		; it goes here..
+	001514	000043 				.word	35.
+	001600					.restore
+    378	001600				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	003346					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-66
+Finally, we can define the modems
+
+	001600					.restore
+						.list me
+						.save
+	001600					.psect	modinf	,ro,d,lcl,rel,con
+		001554'				. = $$current+res.head		; it goes here..
+	001554	003346'				.word	$res1
+	001600					.restore
+    379	001600				mod$res		<FAILED CALL>	,FAILED
+						.list me
+						.save
+	003360					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001600					.restore
+						.list me
+						.save
+	003400					.psect	resdat	,ro,d,lcl,rel,con
+		003400'				$respc = .			; save the current pc
+		003346'				. = $reslast			; back to link word of previous entry
+	003346	003360'				.word	$res1			; insert address of new entry
+		003400'				. = $respc			; restore current pc
+	001600					.restore
+    380	001600				mod$res		<NO DIAL>	,FAILED
+						.list me
+						.save
+	003400					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001600					.restore
+						.list me
+						.save
+	003414					.psect	resdat	,ro,d,lcl,rel,con
+		003414'				$respc = .			; save the current pc
+		003360'				. = $reslast			; back to link word of previous entry
+	003360	003400'				.word	$res1			; insert address of new entry
+		003414'				. = $respc			; restore current pc
+	001600					.restore
+    381	001600				mod$res		<ON LINE>	,CONNECT
+						.list me
+						.save
+	003414					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001600					.restore
+						.list me
+						.save
+	003430					.psect	resdat	,ro,d,lcl,rel,con
+		003430'				$respc = .			; save the current pc
+		003400'				. = $reslast			; back to link word of previous entry
+	003400	003414'				.word	$res1			; insert address of new entry
+		003430'				. = $respc			; restore current pc
+	001600					.restore
+    382	001600				mod$res		<ONLINE>	,CONNECT
+						.list me
+						.save
+	003430					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-67
+Finally, we can define the modems
+
+						.even				; must do
+	001600					.restore
+						.list me
+						.save
+	003444					.psect	resdat	,ro,d,lcl,rel,con
+		003444'				$respc = .			; save the current pc
+		003414'				. = $reslast			; back to link word of previous entry
+	003414	003430'				.word	$res1			; insert address of new entry
+		003444'				. = $respc			; restore current pc
+	001600					.restore
+    383	001600				mod$res		<RINGING>	,RING
+						.list me
+						.save
+	003444					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001600					.restore
+						.list me
+						.save
+	003460					.psect	resdat	,ro,d,lcl,rel,con
+		003460'				$respc = .			; save the current pc
+		003430'				. = $reslast			; back to link word of previous entry
+	003430	003444'				.word	$res1			; insert address of new entry
+		003460'				. = $respc			; restore current pc
+	001600					.restore
+    384	001600				mod$res		<TIME OUT>	,FAILED
+						.list me
+						.save
+	003460					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001600					.restore
+						.list me
+						.save
+	003476					.psect	resdat	,ro,d,lcl,rel,con
+		003476'				$respc = .			; save the current pc
+		003444'				. = $reslast			; back to link word of previous entry
+	003444	003460'				.word	$res1			; insert address of new entry
+		003476'				. = $respc			; restore current pc
+	001600					.restore
+    385	001600				mod$res		<VOICE>		,FAILED
+						.list me
+						.save
+	003476					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001600					.restore
+						.list me
+						.save
+	003510					.psect	resdat	,ro,d,lcl,rel,con
+		003510'				$respc = .			; save the current pc
+		003460'				. = $reslast			; back to link word of previous entry
+	003460	003476'				.word	$res1			; insert address of new entry
+		003510'				. = $respc			; restore current pc
+	001600					.restore
+    386
+    387	001600				define		va42	,<VA4224>
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-68
+Finally, we can define the modems
+
+						.list me
+						.save
+	003033					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		003033'				$$ = .				; save location of
+	003033	   126 	   101 	   064 		.asciz	"VA4224"			; the modem type string
+	003036	   062 	   062 	   064
+	003041	   000
+						.even
+	001600					.restore
+    388	001670				mod$comment	<Vadic 4224>
+						.list me
+						.save
+	003042					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001642'				. = $$current+mod.com
+	001642	003042'				.word	$$addr			; where to find it..
+	001670					.restore
+    389	001670				wake$string	<^E^M>
+						.list me
+						.save
+	003055					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001606'				. = $$current+wake.string
+	001606	003055'				.word	$$addr			; where to find it..
+	001670					.restore
+    390	001670				wake$rate	10
+						.list me
+						.save
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001610'				. = $$current+wake.rate		; it goes here..
+	001610	000010 				.word	10
+	001670					.restore
+    391	001670				wake$prompt	<*>
+						.list me
+						.save
+	003060					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001612'				. = $$current+wake.prompt
+	001612	003060'				.word	$$addr			; where to find it..
+	001670					.restore
+    392	001670				dial$string	<D%M%S%B^M>
+						.list me
+						.save
+	003062					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001620'				. = $$current+dial.string
+	001620	003062'				.word	$$addr			; where to find it..
+	001670					.restore
+    393	001670				dial$rate	10
+						.list me
+						.save
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001622'				. = $$current+dial.rate		; it goes here..
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-69
+Finally, we can define the modems
+
+	001622	000010 				.word	10
+	001670					.restore
+    394	001670				dial$wait	<K>
+						.list me
+						.save
+	003073					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001630'				. = $$current+dial.wait
+	001630	003073'				.word	$$addr			; where to find it..
+	001670					.restore
+    395	001670				dial$go		<DIALING>
+						.list me
+						.save
+	003075					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001634'				. = $$current+dial.go
+	001634	003075'				.word	$$addr			; where to find it..
+	001670					.restore
+    396	001670				dial$echo	1
+						.list me
+						.save
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001640'				. = $$current+dial.echo		; it goes here..
+	001640	000001 				.word	1
+	001670					.restore
+    397	001670				dial$blind	<B>
+						.list me
+						.save
+	003105					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001626'				. = $$current+dial.blind
+	001626	003105'				.word	$$addr			; where to find it..
+	001670					.restore
+    398	001670				dial$pulse	<P>
+						.list me
+						.save
+	003107					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001652'				. = $$current+dial.pulse
+	001652	003107'				.word	$$addr			; where to find it..
+	001670					.restore
+    399	001670				dial$nopulse	<T>
+						.list me
+						.save
+	003111					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001654'				. = $$current+dial.nopulse
+	001654	003111'				.word	$$addr			; where to find it..
+	001670					.restore
+    400	001670				dial$xabort	<^M>
+						.list me
+						.save
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-70
+Finally, we can define the modems
+
+	003113					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001646'				. = $$current+dial.xabort
+	001646	003113'				.word	$$addr			; where to find it..
+	001670					.restore
+    401	001670				dial$idle	<I^M>
+						.list me
+						.save
+	003115					.psect	string	,ro,d,lcl,rel,con
+						.list me
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001650'				. = $$current+dial.idle
+	001650	003115'				.word	$$addr			; where to find it..
+	001670					.restore
+    402	001670				dial$time	35.
+						.list me
+						.save
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001604'				. = $$current+dial.time		; it goes here..
+	001604	000043 				.word	35.
+	001670					.restore
+    403	001670				mod$res		<BUSY>		,FAILED
+						.list me
+						.save
+	003510					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	001670					.psect	modinf	,ro,d,lcl,rel,con
+		001644'				. = $$current+res.head		; it goes here..
+	001644	003510'				.word	$res1
+	001670					.restore
+    404	001670				mod$res		<FAILED CALL>	,FAILED
+						.list me
+						.save
+	003522					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003542					.psect	resdat	,ro,d,lcl,rel,con
+		003542'				$respc = .			; save the current pc
+		003510'				. = $reslast			; back to link word of previous entry
+	003510	003522'				.word	$res1			; insert address of new entry
+		003542'				. = $respc			; restore current pc
+	001670					.restore
+    405	001670				mod$res		<NO DIAL>	,FAILED
+						.list me
+						.save
+	003542					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-71
+Finally, we can define the modems
+
+						.list me
+						.save
+	003556					.psect	resdat	,ro,d,lcl,rel,con
+		003556'				$respc = .			; save the current pc
+		003522'				. = $reslast			; back to link word of previous entry
+	003522	003542'				.word	$res1			; insert address of new entry
+		003556'				. = $respc			; restore current pc
+	001670					.restore
+    406	001670				mod$res		<ON LINE 2400>	,CONNECT	; /BBS/ CON2400 ?
+						.list me
+						.save
+	003556					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003600					.psect	resdat	,ro,d,lcl,rel,con
+		003600'				$respc = .			; save the current pc
+		003542'				. = $reslast			; back to link word of previous entry
+	003542	003556'				.word	$res1			; insert address of new entry
+		003600'				. = $respc			; restore current pc
+	001670					.restore
+    407	001670				mod$res		<ON LINE 1200>	,CONNECT	; /BBS/ CON1200 ?
+						.list me
+						.save
+	003600					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003622					.psect	resdat	,ro,d,lcl,rel,con
+		003622'				$respc = .			; save the current pc
+		003556'				. = $reslast			; back to link word of previous entry
+	003556	003600'				.word	$res1			; insert address of new entry
+		003622'				. = $respc			; restore current pc
+	001670					.restore
+    408	001670				mod$res		<ON LINE 300>	,CONNECT	; /BBS/ CON300 ?
+						.list me
+						.save
+	003622					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003642					.psect	resdat	,ro,d,lcl,rel,con
+		003642'				$respc = .			; save the current pc
+		003600'				. = $reslast			; back to link word of previous entry
+	003600	003622'				.word	$res1			; insert address of new entry
+		003642'				. = $respc			; restore current pc
+	001670					.restore
+    409	001670				mod$res		<ON LINE>	,CONNECT
+						.list me
+						.save
+	003642					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-72
+Finally, we can define the modems
+
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003656					.psect	resdat	,ro,d,lcl,rel,con
+		003656'				$respc = .			; save the current pc
+		003622'				. = $reslast			; back to link word of previous entry
+	003622	003642'				.word	$res1			; insert address of new entry
+		003656'				. = $respc			; restore current pc
+	001670					.restore
+    410	001670				mod$res		<ONLINE>	,CONNECT
+						.list me
+						.save
+	003656					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003672					.psect	resdat	,ro,d,lcl,rel,con
+		003672'				$respc = .			; save the current pc
+		003642'				. = $reslast			; back to link word of previous entry
+	003642	003656'				.word	$res1			; insert address of new entry
+		003672'				. = $respc			; restore current pc
+	001670					.restore
+    411	001670				mod$res		<RINGING>	,RING
+						.list me
+						.save
+	003672					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003706					.psect	resdat	,ro,d,lcl,rel,con
+		003706'				$respc = .			; save the current pc
+		003656'				. = $reslast			; back to link word of previous entry
+	003656	003672'				.word	$res1			; insert address of new entry
+		003706'				. = $respc			; restore current pc
+	001670					.restore
+    412	001670				mod$res		<TIME OUT>	,FAILED
+						.list me
+						.save
+	003706					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003724					.psect	resdat	,ro,d,lcl,rel,con
+		003724'				$respc = .			; save the current pc
+		003672'				. = $reslast			; back to link word of previous entry
+	003672	003706'				.word	$res1			; insert address of new entry
+		003724'				. = $respc			; restore current pc
+	001670					.restore
+    413	001670				mod$res		<VOICE>		,FAILED
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 9-73
+Finally, we can define the modems
+
+						.list me
+						.save
+	003724					.psect	resdat	,ro,d,lcl,rel,con ; /62/
+						.list me
+						.even				; must do
+	001670					.restore
+						.list me
+						.save
+	003736					.psect	resdat	,ro,d,lcl,rel,con
+		003736'				$respc = .			; save the current pc
+		003706'				. = $reslast			; back to link word of previous entry
+	003706	003724'				.word	$res1			; insert address of new entry
+		003736'				. = $respc			; restore current pc
+	001670					.restore
+    414
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 10
+Finally, we can define the modems
+
+      1
+      2						.sbttl	User-Defined modem
+      3
+      4					;	This one MUST be the LAST in the list.  The USER-DEFINED modem can
+      5					;	only be loaded AFTER Kermit is running by using SET DIAL commands,
+      6					;	perhaps from KRT.INI.  It lives in a buffer created by Kermit when
+      7					;	it's started, thus the individual field data macros above will not
+      8					;	work here because this buffer is NOT stored in this overlay.
+      9
+     10	001670				define	usermd	,<USER-DEFINED>	,GLOBAL
+						.list me			; modem we need to be in a
+						.save				; psect that is never swapped out
+						.globl	usermd			; GLOBAL-defined listhead must be global
+	000000					.psect	usermd	,rw,d,gbl,rel,con ; this psect is forced into the root
+						.list me
+						.save
+	003120					.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+		003120'				$$ = .				; save location of
+	003120	   125 	   123 	   105 		.asciz	"USER-DEFINED"			; the modem type string
+	003123	   122 	   055 	   104
+	003126	   105 	   106 	   111
+	003131	   116 	   105 	   104
+	003134	   000
+						.even
+	000000					.restore
+						.list me
+	001670					.restore			; exit root, come back to this overlay
+		001670'				$$$ = .
+		001600'				. = $modtail			; /BBS/ back to top of last definition
+	001600	000000'				.word	usermd			; /62/ insert link to GLOBAL-defined
+		001670'				. = $$$
+     11
+     12					;	No more modem definitions allowed past here!
+     13
+     14		000001 				.end
+KRTMDM	Modem definitions	MACRO V05.03b  00:01  Page 10-1
+Symbol table
+
+ABORTE  177776 G 	DIAL.A  000024 G 	HAYES   000430R     003	RES.BI  000036 G 	WAKE.R  000010 G
+CH1   = 000115   	DIAL.B  000026 G 	HAYES.  000520R     003	RES.HE  000044 G 	WAKE.S  000006 G
+CONCOR  000000R     003	DIAL.C  000032 G 	INFO    000000 G 	RING    000001 G 	X.RESU  000062 G
+CONNEC  000002 G 	DIAL.E  000040 G 	INIT.O  000056 G 	R212A   000700R     003	$MODTA= 001600R     003
+CON120  002260 G 	DIAL.G  000034 G 	LOAMDM  000000RG    002	TIME.S  000060 G 	$RES  = 000000
+CON192  045400 G 	DIAL.I  000050 G 	MICROC  000610R     003	T2500   000770R     003	$RESLA= 000000
+CON240  004540 G 	DIAL.N  000054 G 	MODINF  000000R     003	T2500M  001060R     003	$RESPC= 003736R     005
+CON300  000454 G 	DIAL.P  000052 G 	MOD.CO  000042 G 	T2500V  001150R     003	$RES1 = 003724R     005
+CON384  113000 G 	DIAL.R  000022 G 	MOD.NE  000000 G 	T3000   001240R     003	$$    = 003120R     004
+CON480  011300 G 	DIAL.S  000020 G 	MOD.SI  000070 G 	T3000V  001330R     003	$$ADDR= 003115R     004
+CON720  016040 G 	DIAL.T  000004 G 	MOD.ST  000002 G 	T3000X  001420R     003	$$CURR= 000000R     006
+CON960  022600 G 	DIAL.W  000030 G 	NONEIS= 000001   	USERMD  000000RG    006	$$END = 000070R     006
+CTS24   000070R     003	DIAL.X  000046 G 	NULL  = ****** GX	VADIC   001510R     003	$$PREV= 001600R     003
+DF03    000160R     003	DMOD.P  000016 G 	PH.ANS  000064 G 	VA42    001600R     003	$$TRIP= 000001
+DF100   000250R     003	DMOD.S  000014 G 	PH.NOA  000066 G 	WAKE.P  000012 G 	$$$   = 001670R     003
+DF200   000340R     003	FAILED  177777 G
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	000006    002	(RO,I,LCL,REL,CON)
+MODINF	001670    003	(RO,D,LCL,REL,CON)
+STRING	003136    004	(RO,D,LCL,REL,CON)
+RESDAT	003736    005	(RO,D,LCL,REL,CON)
+USERMD	000070    006	(RW,D,GBL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 42
+Work  file writes: 42
+Size of work file: 13513 Words  ( 53 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:02.50
+KRTMDM,KRTMDM=KRTNHD,KRTMDM

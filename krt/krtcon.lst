@@ -1,0 +1,1401 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   2	Local buffers
+    9-   2	Task scheduler data table
+   10-   3	Initialization
+   11-   2	CONNECT main_loop
+   12-   2	Shut_down and exit
+   13-   2	Scheduler's mark time completion routines
+   14-   2	Process TT input
+   15-   2	Send data from XL to TT
+   16-   2	Write one word from TT input to XL
+   16-  17	XL write completion routine
+   17-   2	Status_watcher
+   18-   2	Internal command processor
+   19-   2	CONCMD sub-routines
+   20-   2	Send a control char ala VTCOM's ^x command
+   21-   2	Strip parity and upcase	; /62/ moved this here, now shared..
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTCON	Terminal emulator
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	marktime (scheduler) completion routines are now more efficient
+      7					;	fix SET CON 8 test for emulator command chars
+      8
+      9					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     10					;
+     11					;	correct comments to indicate r3 is not preserved between tasks
+     12					;	fixed error handling for suspend/resume CONSOLE logging
+     13					;	added handling for logfile errors
+     14					;	move senbrk here
+     15					;	speed up keyboard input processing at high data rates
+     16
+     17					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     18					;
+     19					;	this module has been extensively modified and will now run fine
+     20					;	under any monitor including SJ if it's built with timer support
+     21					;
+     22					;	pulled RT-11 multi-terminal and sj monitor w/o twait stuff..
+     23					;
+     24					;	set/reset a list of "activation" chars under TSX which
+     25					;	allows non-printing chars input at the terminal, such as ^O,
+     26					;	to be passed to the remote system during the connect mode
+     27					;
+     28					;	display handler speed (fixed for 19.2k too) when connecting
+     29					;	display escape sequence when entering CONNECT
+     30					;	disallow typing TSX lead-in char to TT when running under TSX
+     31					;	allow suppression of sign-on text, for use with krttra
+     32					;	skip TT input routine once done flag is set
+     33					;	tt input now uses con8bit ala TT output
+     34					;	added MILNET option to wakeup (XON) MILNET TACs
+     35					;	added send a control char via esc_char "^x" ala VTCOM
+     36					;	added esc_char "Z" command to hose/refresh handler
+     37
+     38					;	Copyright 1986 Change Software, Inc
+     39					;
+     40					;	07-MAY-1986 10:55  Brian Nelson
+     41
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3						.mcall	.CMKT	,.MRKT	,.RSUM	,.SCCA	,.SPFUN
+      4						.mcall	.SPND	,.TTINR	,.TTOUTR,.TWAIT	,.WRITC
+      5
+      6
+      7		000202 				BRKDRV	=	202		; /62/ wc=0 ends break, else begin it
+      8		000204 				STSDRV	=	204		; low byte status, high byte version
+      9		000020 				$XLV51	=	16.		; RT-11 V5.1 XL/XC version number
+     10
+     11						.macro	beep
+     12						mov	#bell	,r0		; load a bell
+     13						.ttoutr				; try to beep, but don't wait for it..
+     14						.endm	beep
+     15
+     16						.macro	schedule  taskheader
+     17						mov	r0	,-(sp)		; this is a completion routine
+     18						mov	taskheader,r0		; top of task's entry in scheduler
+     19						mov	sp	,state(r0)	; flag task is now ready to run
+     20						mov	(sp)+	,r0
+     21						.endm	schedule
+     22
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 8
+Utility macros
+
+      1
+      2						.sbttl	Local buffers
+      3
+      4	000000					.psect	condat	,rw,d,lcl,rel,con
+      5	000000	000000 	000000 	000000 	brkwrk:	.word	0 ,0 ,0 ,0		; /62/ break mark time work area
+      6	000010	000000 	000000 	000000 	cancel:	.word	0 ,0 ,0 ,0		; .cmkt work area
+      7	000020	000000 			crflag:	.word	0			; if <> last char was a CR
+      8	000022	000000 			done:	.word	0			; set this <> to exit scheduler
+      9	000024	000000 			iopend:	.word	0			; if <> XL write completion is pending
+     10	000026	000000 			rmbuff:	.word	0			; one word buffer for writes to XL
+     11	000030	000000 			rt.v51:	.word	0			; if <> XL is from RT-11 V5.1
+     12	000032	000000 	000000 	000000 	scca:	.word	0 ,0 ,0			; trap ^C here
+     13	000040	000000 	000001 		short:	.word	0 ,1			; wait one tick
+     14	000044	000000 	000000 	000000 	stsmark:.word	0 ,0 ,0 ,0		; status watcher mark time work area
+     15	000054	000000 	000000 	000000 	ttmark:	.word	0 ,0 ,0 ,0		; ttdone mark time work area
+     16	000064	000000 	000000 		twait:	.word	0 ,0			; .twait work area
+     17	000070	000000 	000000 	000000 	xkmark:	.word	0 ,0 ,0 ,0		; xktime mark time work area
+     18	000100	000000 	000000 	000000 	xkwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; writes to handler work area
+     19
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 9
+Local buffers
+
+      1
+      2						.sbttl	Task scheduler data table
+      3
+      4					; these are NOT saved and may be used only within the then active task
+      5					;	r0	= scratch
+      6					;	r1	= scratch
+      7					;	r2	= scratch
+      8					;	r3	= not currently in use	; /62/
+      9
+     10					; this register is preserved between tasks
+     11					;	r4	= one word TT input buffer
+     12
+     13					;	r5	= pointer to CURRENT task's entry in table
+     14
+     15		000000 				TASKADDR = 0			; task's starting address
+     16		000002 				STATE	 = 2			; if <> run this task next time thru
+     17
+     18					;	       taskaddr	,state		; /62/ rmhead MUST follow tthead in
+     19	000114				tlist:					; /62/ this table, see note in rmproc
+     20	000114	001176'	000000 		xkhead::.word	xkproc	,0		; XL data out to TT
+     21	000120	000620'	000000 		tthead:	.word	ttproc	,0		; get TT input
+     22	000124	001362'	000000 		rmhead:	.word	rmproc	,0		; send it to XL
+     23	000130	001466'	000000 		sthead:	.word	stproc	,0		; check XL status
+     24	000134	000000 				.word	0			; terminate table
+     25		000004 			hdsize	=	tthead - xkhead		; each entry is this long
+     26
+     27	000000					.psect	$pdata			; /63/ consolidate local data here..
+     28					;		marktime intervals
+     29	000000	000000 	000000 		ststime:.word	0 ,0			; /62/ init puts 0.5 sec in ticks here
+     30	000004	000000 	000003 		ttwait:	.word	0 ,3			; poll TT for input every 3 ticks
+     31	000010	000000 	000002 		xktime:	.word	0 ,2			; wait to clear stuffed output buffer
+     32
+     33	000014	   103 	   157 	   156 	con.01:	.asciz	"Connecting to "
+     34	000033	   040 	   040 	   104 	con.02:	.asciz	"  DTE speed: "		; "DTE" as path speed may be different
+     35	000051	   116 	   057 	   101 	con.03:	.asciz	"N/A"
+     36	000055	   015 	   012 	   124 	con.04:	.asciz	<cr><lf>"Type ^"
+     37	000066	   103 	   040 	   164 	con.05:	.asciz	"C to return to your local machine"<cr><lf>
+     38	000132	   045 	   113 	   122 	con.06:	.asciz	"%KRTCON-W-Carrier "
+     39	000155	   154 	   157 	   163 	con.07:	.asciz	"lost"<cr><lf>
+     40	000164	   144 	   145 	   164 	con.08:	.asciz	"detected"<cr><lf>
+     41	000177	   114 	   157 	   147 	con.09:	.asciz	"Logfile is "
+     42	000213	   054 	   040 	   143 	con.10:	.asciz	", cur/max blk: "
+     43	000233	   057 	   000 		con.11:	.asciz	"/"
+     44	000235	   116 	   157 	   040 	con.12:	.asciz	"No LOGFILE is open"
+     45	000260	   015 	   012 		hlptxt:	.ascii	<cr><lf>
+     46	000262	   102 	   011 	   123 		.ascii	"B	Send a break"<cr><lf>
+     47	000302	   103 	   011 	   103 		.ascii	"C	Connect back to the local Kermit-11"<cr><lf>
+     48	000351	   111 	   011 	   104 		.ascii	"I	Drop DTR for 0.5sec (hang up) then restore it"<cr><lf>
+     49	000432	   121 	   011 	   123 		.ascii	"Q	Suspend CONSOLE logging"<cr><lf>
+     50	000465	   122 	   011 	   122 		.ascii	"R	Resume CONSOLE logging"<cr><lf>
+     51	000517	   123 	   011 	   103 		.ascii	"S	CONSOLE logging status"<cr><lf>
+     52	000551	   130 	   011 	   106 		.ascii	"X	Flow control reset"<cr><lf>
+     53	000577	   132 	   011 	   132 		.ascii	"Z	Zap (100% hose & try to unhang) the handler"<cr><lf>
+     54	000656	   136 	   170 	   011 		.ascii	'^x	Send control char "x" using A..Z[\]~? '
+     55	000727	   160 	   162 	   145 		.ascii	"prefixed with a carat"<cr><lf>	; /63/ added for clarity
+     56	000756	   122 	   125 	   102 		.asciz	"RUBOUT	Send a break"<cr><lf><cr><lf>
+     57	001006	   101 	   102 	   103 	lis.ct:	.asciz	"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 9-1
+Task scheduler data table
+
+     58						.even
+     59
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 10
+Task scheduler data table
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Initialization
+      4
+      5	000000	004767 	000000G		doconn::call	opentt			; /63/ open the link device
+      6	000004	005700 				tst	r0			; ok?
+      7	000006	001401 				beq	10$			; ya
+      8	000010	000207 				return				; nope, bail out
+      9
+     10	000012				10$:	.scca	#scca	,#scca+4	; kill ^C, this is reset by setcc
+	000012	012700 	000032'			MOV	#scca,R0
+	000016	012710 	016400 			MOV	#29.*^O400+0.,@R0
+	000022	012760 	000036'	000002 		MOV	#scca+4,2.(R0)
+	000030	104375 				EMT	^O375
+     11	000032					.cmkt	#cancel	,#40		; then dump setcc's mark timer
+	000032	012700 	000010'			MOV	#cancel,R0
+	000036	012710 	011400 			MOV	#19.*^O400+0.,@R0
+	000042	012760 	000040 	000002 		MOV	#40,2.(R0)
+	000050	005060 	000004 			CLR	4.(R0)
+	000054	104375 				EMT	^O375
+     12	000056					calls	t.ttyini,<#-1>		; init terminal (w/flag for ^W)
+	000056	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000060	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	000064	010605 				  mov	sp	,r5		; set pointer to argument list
+	000066	004767 	000000G			  jsr	pc	,t.ttyini		; call the subroutine
+	000072	005726 				  tst	(sp)+			; pop parameter list from stack
+	000074	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     13
+     14	000076	005767 	000000G			tst	conmsg			; display sign-on text?
+     15	000102	001046 				bne	40$			; nope..
+     16	000104					wrtall	#con.01			; /63/ "Connecting to "
+	000104	012746 	000014'			mov	#con.01	,-(sp)		; pass the address
+	000110	004767 	000000G			call	wrtall			; do it
+     17	000114					wrtall	#ttname			; spell out the device name
+	000114	012746 	000000G			mov	#ttname	,-(sp)		; pass the address
+	000120	004767 	000000G			call	wrtall			; do it
+     18	000124					wrtall	#con.02			; /63/ "  DTE speed: "
+	000124	012746 	000033'			mov	#con.02	,-(sp)		; pass the address
+	000130	004767 	000000G			call	wrtall			; do it
+     19	000134	004767 	000000G			call	ttspeed			; get speed
+     20	000140	005700 				tst	r0			; wuz it gettable?
+     21	000142	001005 				bne	20$			; /62/ yup..
+     22	000144					wrtall	#con.03			; /63/ "N/A"
+	000144	012746 	000051'			mov	#con.03	,-(sp)		; pass the address
+	000150	004767 	000000G			call	wrtall			; do it
+     23	000154	000402 				br	30$			; continue
+     24	000156	004767 	000000G		20$:	call	L10266			; write speed in r0 as dec num to TT
+     25	000162				30$:	wrtall	#con.04			; /63/ <cr><lf>"Type ^"
+	000162	012746 	000055'			mov	#con.04	,-(sp)		; pass the address
+	000166	004767 	000000G			call	wrtall			; do it
+     26	000172	016700 	000000G			mov	conesc	,r0		; get esc char
+     27	000176	005300 				dec	r0			; lis.ct here has no null entry
+     28	000200	116000 	001006'			movb	lis.ct(r0),r0		; make it printable
+     29	000204	004767 	000000G			call	writ1ch			; write it to TT
+     30	000210					wrtall	#con.05			; /63/ "C to return .."<cr><lf>
+	000210	012746 	000066'			mov	#con.05	,-(sp)		; pass the address
+	000214	004767 	000000G			call	wrtall			; do it
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 10-1
+Initialization
+
+     31	000220	005067 	000000G		40$:	clr	conmsg			; reset sign-on bypass flag
+     32	000224	010667 	000000G			mov	sp	,logini		; /62/ force logerr msg into the clear
+     33
+     34	000230	005004 				clr	r4			; init TT input buffer
+     35	000232	005767 	000000G			tst	milnet			; MILNET mode on?
+     36	000236	001402 				beq	50$			; no
+     37	000240	012704 	010421 			mov	#xon+<xon*400>,r4	; ya, stuff a couple XONs for remote
+     38
+     39	000244				50$:	.spfun	#rtwork,#xc.control,#stsdrv,#xcsts,#0,#1 ; /62/ get status
+	000244	012700 	000000G			MOV	#rtwork,R0
+	000250	012710 	015000G			MOV	#xc.control+<26.*^O400>,@R0
+	000254	012760 	000001 	000002 		MOV	#1,2.(R0)
+	000262	012760 	000000G	000004 		MOV	#xcsts,4.(R0)
+	000270	005060 	000006 			CLR	6.(R0)
+	000274	012760 	102377 	000010 		MOV	#stsdrv*^O400+^O377,8.(R0)
+	000302	005060 	000012 			CLR	10.(R0)
+	000306	104375 				EMT	^O375
+     40
+     41	000310	005067 	000030'			clr	rt.v51			; init version flag
+     42	000314	005767 	000000G			tst	tsxcl			; CL?
+     43	000320	001011 				bne	70$			; ya, skip this
+     44	000322	005767 	000000G			tst	km.lock			; /62/ if it's KM do it here which
+     45	000326	001004 				bne	60$			; /62/ keeps handler smaller..
+     46	000330	126727 	000001G	000020 		cmpb	xcsts+1	,#$xlv51	; does this ver of XL eat LF after CR?
+     47	000336	003002 				bgt	70$			; ya
+     48	000340	005267 	000030'		60$:	inc	rt.v51			; no, flag it has to be done here
+     49
+     50	000344	016700 	000000G		70$:	mov	clkflg	,r0		; /62/ get number of ticks/second
+     51	000350	006200 				asr	r0			; /62/ number of ticks in 1/2 second
+     52	000352	010067 	000002'			mov	r0	,ststime+2	; /62/ stuff into status check timer
+     53	000356	012700 	000114'			mov	#tlist	,r0		; init flags for each task
+     54	000362	005710 			80$:	tst	(r0)			; end of the list?
+     55	000364	001405 				beq	90$			; ya
+     56	000366	010660 	000002 			mov	sp	,state(r0)	; no, run each task to init itself
+     57	000372	062700 	000004 			add	#hdsize	,r0		; bump to head of next task
+     58	000376	000771 				br	80$			; and loop back for it
+     59
+     60	000400	005067 	000020'		90$:	clr	crflag			; no CR received from TT yet
+     61	000404	005067 	000022'			clr	done			; definitely not done
+     62	000410	012767 	000001 	000000G		mov	#1	,suspnd		; don't miss a .rsum in the init pass
+     63
+     64	000416	010667 	000000G			mov	sp	,xk.con		; direct data read from handler here
+     65	000422	105777 	000000G			tstb	@xkpoint		; anything unused in buffer?
+     66	000426	001002 				bne	100$			; ya
+     67	000430	004767 	000000G			call	readxk			; get data or set completion routine
+     68	000434					.br	100$			; /63/
+     69
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 11
+Initialization
+
+      1
+      2						.sbttl	CONNECT main_loop
+      3
+      4	000434	012705 	000114'		100$:	mov	#tlist	,r5		; get top of the task list
+      5	000440	005715 			110$:	tst	(r5)			; end of the table now?
+      6	000442	001410 				beq	130$			; ya, go away until something happens
+      7	000444	005765 	000002 			tst	state(r5)		; runnable task?
+      8	000450	001402 				beq	120$			; no
+      9	000452	004775 	000000 			jsr	pc	,@(r5)		; ya, do it
+     10	000456	062705 	000004 		120$:	add	#hdsize	,r5		; next task control block please
+     11	000462	000766 				br	110$			; loop back for it
+     12	000464	005267 	000000G		130$:	inc	suspnd			; flag a .rsum is needed
+     13	000470					.spnd				; suspend ourself
+	000470	012700 	000400 			MOV	#^O400,R0
+	000474	104374 				EMT	^O374
+     14	000476	005767 	000022'			tst	done			; time to go now?
+     15	000502	001754 				beq	100$			; no, loop again
+     16
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 12
+CONNECT main_loop
+
+      1
+      2						.sbttl	Shut_down and exit
+      3
+      4	000504	005067 	000000G			clr	xk.con			; send completed reads data to binread
+      5	000510					.cmkt	#cancel	,#0		; kill all marktime requests
+	000510	012700 	000010'			MOV	#cancel,R0
+	000514	012710 	011400 			MOV	#19.*^O400+0.,@R0
+	000520	005060 	000002 			CLR	2.(R0)
+	000524	005060 	000004 			CLR	4.(R0)
+	000530	104375 				EMT	^O375
+      6	000532	004767 	000000G			call	clostt			; /63/ close the link device
+      7	000536					.newline			; ensure exit is to a clean line
+	000536	004767 	000000G			call	l$pcrlf
+      8	000542	005067 	000000G			clr	logini			; /62/ indicate cursor on a clean line
+      9	000546	000207 				return
+     10
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 13
+Shut_down and exit
+
+      1
+      2						.sbttl	Scheduler's mark time completion routines
+      3
+      4	000550	010667 	000132'		stsdone:mov	sp	,sthead+state	; /63/ make the status test runnable
+      5	000554	000410 				br	rerun			; /63/
+      6
+      7	000556	010667 	000116'		xkredo:	mov	sp	,xkhead+state	; /63/ retry TT output, buff was full
+      8	000562	000405 				br	rerun			; /63/
+      9
+     10	000564	005767 	000022'		ttdone:	tst	done			; finished?
+     11	000570	001012 				bne	S10$			; ya, skip all this..
+     12	000572	010667 	000122'			mov	sp	,tthead+state	; /63/ no, poll TT for possible input
+     13	000576					.br	rerun			; /63/
+     14
+     15	000576	005767 	000000G		rerun:	tst	suspnd			; need to resume?  /62/ add rerun ept
+     16	000602	001405 				beq	S10$			; nope..
+     17	000604	005367 	000000G			dec	suspnd			; ya, make sure no one else does it
+     18	000610					.rsum				; get scheduler going
+	000610	012700 	001000 			MOV	#^O1000,R0
+	000614	104374 				EMT	^O374
+     19	000616	000207 			S10$:	return
+     20
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 14
+Scheduler's mark time completion routines
+
+      1
+      2						.sbttl	Process TT input
+      3
+      4	000620	005767 	000022'		ttproc:	tst	done			; finished?
+      5	000624	001163 				bne	140$			; ya, don't eat possible type ahead..
+      6	000626	005704 				tst	r4			; previous input queued to send yet?
+      7	000630	001161 				bne	140$			; no, loop until it has been
+      8
+      9	000632				10$:	.ttinr				; check for input waiting for term
+	000632	104340 				EMT	^O340
+     10	000634	103537 				bcs	130$			; nothing to do
+     11
+     12	000636	005767 	000000G			tst	con8bit			; SET CON 8?
+     13	000642	001002 				bne	20$			; ya
+     14	000644	042700 	177600 			bic	#^c<177>,r0		; no, strip any parity present
+     15	000650	120067 	000000G		20$:	cmpb	r0	,conesc		; escape sequence?
+     16	000654	001040 				bne	60$			; no, dump character as is
+     17	000656	012701 	000005 			mov	#5	,r1		; ya, wait up to five seconds
+     18	000662					mul	clkflg	,r1		; for the next char
+	000662	016746 	000000G			mov	clkflg	,-(sp)		; pass multiplier to p$mul
+	000666	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	000670	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	000674	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     19
+     20	000676				30$:	.ttinr				; try to get the next char
+	000676	104340 				EMT	^O340
+     21	000700	103013 				bcc	40$			; got something valid
+     22	000702					.twait	#twait	,#short		; nothing, wait one tick
+	000702	012700 	000064'			MOV	#twait,R0
+	000706	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	000712	012760 	000040'	000002 		MOV	#short,2.(R0)
+	000720	104375 				EMT	^O375
+     23	000722					sob	r1	,30$		; and try again
+	000722	005301 				dec	r1
+	000724	001364 				bne	30$
+     24	000726	000502 				br	130$			; exit as we did not get anything
+     25	000730	005767 	000000G		40$:	tst	con8bit			; SET CON 8?
+     26	000734	001002 				bne	50$			; ya
+     27	000736	042700 	177600 			bic	#^c<177>,r0		; strip junk from the character
+     28	000742	120067 	000000G		50$:	cmpb	r0	,conesc		; another escape character?
+     29	000746	001403 				beq	60$			; yes, dump that character as is
+     30	000750	004767 	000730 			call	concmd			; console command processor
+     31	000754	000467 				br	130$			; if n.g. concmd will beep
+     32
+     33	000756	032767 	000002 	000000G	60$:	bit	#2	,xcsts		; /62/ remote asserted flow control?
+     34	000764	001406 				beq	70$			; no
+     35	000766					save	<r0>			; /62/ ya, save the input byte
+	000766	010046 				 mov	r0	,-(sp)
+     36	000770					beep				; beep & continue, _OVERWRITING_ data
+	000770	012700 	000007 			mov	#bell	,r0		; load a bell
+	000774	104341 				EMT	^O341
+     37	000776					unsave	<r0>			; /62/ by restoring input byte and
+	000776	012600 				 mov	(sp)+	,r0
+     38	001000	005004 				clr	r4			; /62/ ensuring it's bit settable here
+     39	001002	005767 	000000G		70$:	tst	tsxsav			; running under TSX?
+     40	001006	001016 				bne	90$			; ya, skip LF processing..
+     41	001010	005767 	000030'			tst	rt.v51			; is this OLD XL/XC from RT-11 V5.1?
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 14-1
+Process TT input
+
+     42	001014	001413 				beq	90$			; no
+     43	001016	006267 	000020'			asr	crflag			; ya, see if a CR precedes a LF
+     44	001022	103003 				bcc	80$			; last char was not a CR
+     45	001024	120027 	000012 			cmpb	r0	,#lf		; ignore LINE FEEDs please, but only
+     46	001030	001700 				beq	10$			; when they follow a CR, that is..
+     47	001032	120027 	000015 		80$:	cmpb	r0	,#cr		; is this a CR?
+     48	001036	001002 				bne	90$			; no
+     49	001040	005267 	000020'			inc	crflag			; yes, flag for next pass
+     50
+     51	001044	005767 	000000G		90$:	tst	duplex			; need local echoing?
+     52	001050	001407 				beq	110$			; no
+     53	001052	005767 	000000G			tst	tsxsav			; TSX?
+     54	001056	001403 				beq	100$			; no
+     55	001060	120067 	000000G			cmpb	r0	,m.tsxr		; is it TSX lead-in char?
+     56	001064	001401 				beq	110$			; ya, don't type this to TT
+     57	001066				100$:	.ttoutr				; echo the character
+	001066	104341 				EMT	^O341
+     58
+     59	001070				110$:	setpar	r0	,r0		; set parity if enabled
+	001070	110046 				movb	r0	,-(sp)
+	001072	004767 	000000G			call	dopari
+	001076	112600 				movb	(sp)+	,r0
+     60	001100	105704 				tstb	r4			; is this byte free?
+     61	001102	001010 				bne	120$			; no, use the hi byte for this char
+     62	001104	150004 				bisb	r0	,r4		; ya, stuff the char in
+     63	001106					schedule #rmhead		; enable the send char via XL task
+	001106	010046 				mov	r0	,-(sp)		; this is a completion routine
+	001110	012700 	000124'			mov	#rmhead,r0		; top of task's entry in scheduler
+	001114	010660 	000002 			mov	sp	,state(r0)	; flag task is now ready to run
+	001120	012600 				mov	(sp)+	,r0
+     64	001122	000643 				br	10$			; and try for one more input byte
+     65
+     66	001124	000304 			120$:	swab	r4			; swap bytes to
+     67	001126	150004 				bisb	r0	,r4		; stuff second char into the hi one
+     68	001130	000304 				swab	r4			; bytes back into proper positions
+     69	001132	000207 				return				; waste no time, every inst counts..
+     70
+     71	001134	005065 	000002 		130$:	clr	state(r5)		; don't come back right away
+     72	001140					.mrkt	#ttmark,#ttwait,#ttdone,#3 ; sched another try for TT input
+	001140	012700 	000054'			MOV	#ttmark,R0
+	001144	012710 	011000 			MOV	#18.*^O400+0.,@R0
+	001150	012760 	000004'	000002 		MOV	#ttwait,2.(R0)
+	001156	012760 	000564'	000004 		MOV	#ttdone,4.(R0)
+	001164	012760 	000003 	000006 		MOV	#3,6.(R0)
+	001172	104375 				EMT	^O375
+     73	001174	000207 			140$:	return
+     74
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 15
+Process TT input
+
+      1
+      2						.sbttl	Send data from XL to TT
+      3
+      4	001176	005000 			xkproc:	clr	r0			; avoid sign extension
+      5	001200	157700 	000000G			bisb	@xkpoint,r0		; get next char
+      6	001204	001462 				beq	60$			; nothing left..
+      7	001206	005767 	000000G			tst	con8bit			; SET CON 7 or 8?
+      8	001212	001002 				bne	10$			; 8
+      9	001214	142700 	000200 			bicb	#200	,r0		; 7, strip high bit
+     10	001220	005767 	000000G		10$:	tst	tsxsav			; TSX?
+     11	001224	001403 				beq	20$			; no
+     12	001226	120067 	000000G			cmpb	r0	,m.tsxr		; lead-in char?
+     13	001232	001402 				beq	30$			; ya, don't type this to TT
+     14	001234				20$:	.ttoutr				; dump the char
+	001234	104341 				EMT	^O341
+     15	001236	103424 				bcs	50$			; buffer full, go wait a bit
+     16	001240	032767 	040002 	000000G	30$:	bit	#<log$co!log$on>,trace	; /63/ logging enabled?
+     17	001246	001415 				beq	40$			; no
+     18	001250	012701 	000000G			mov	#lun.lo	,r1		; log file chan, char is still in r0
+     19	001254	004767 	000000G			call	putcr0			; that's it folks
+     20	001260	005700 				tst	r0			; /62/ did it work?
+     21	001262	001407 				beq	40$			; /62/ ya
+     22	001264					save	<r0>			; /62/ no, save error code
+	001264	010046 				 mov	r0	,-(sp)
+     23	001266					beep				; /62/ call attention to this!
+	001266	012700 	000007 			mov	#bell	,r0		; load a bell
+	001272	104341 				EMT	^O341
+     24	001274					unsave	<r0>			; /62/ recover error code
+	001274	012600 				 mov	(sp)+	,r0
+     25	001276	004767 	000000G			call	logerr			; /62/ handle the error
+     26	001302	005267 	000000G		40$:	inc	xkpoint			; bump to next byte
+     27	001306	000733 				br	xkproc			; loop for it
+     28
+     29	001310				50$:	.mrkt	#xkmark,#xktime,#xkredo,#13 ; output ring buffer is FULL
+	001310	012700 	000070'			MOV	#xkmark,R0
+	001314	012710 	011000 			MOV	#18.*^O400+0.,@R0
+	001320	012760 	000010'	000002 		MOV	#xktime,2.(R0)
+	001326	012760 	000556'	000004 		MOV	#xkredo,4.(R0)
+	001334	012760 	000013 	000006 		MOV	#13,6.(R0)
+	001342	104375 				EMT	^O375
+     30	001344	005065 	000002 			clr	state(r5)		; wait for mark time to expire
+     31	001350	000207 				return
+     32
+     33	001352	005065 	000002 		60$:	clr	state(r5)		; no longer runnable
+     34	001356	000167 	000000G			jmp	readxk			; /63/ get more data from XL
+     35
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 16
+Send data from XL to TT
+
+      1
+      2						.sbttl	Write one word from TT input to XL
+      3
+      4	001362	005767 	000024'		rmproc:	tst	iopending		; we still waiting for XL?
+      5	001366	001027 				bne	10$			; /62/ ya, don't wait too long..
+      6	001370	010467 	000026'			mov	r4	,rmbuff		; copy the data
+      7	001374	001426 				beq	20$			; nothing to do
+      8	001376	005004 				clr	r4			; make TT input buffer available again
+      9	001400	010667 	000024'			mov	sp	,iopending	; flag I/O is not yet completed
+     10	001404					.writc	#xkwork,#lun.xk,#rmbuff,#1,#30$,#1 ; queue the write
+	001404	012700 	000100'			MOV	#xkwork,R0
+	001410	012710 	004400G			MOV	#lun.xk+<9.*^O400>,@R0
+	001414	012760 	000001 	000002 		MOV	#1,2.(R0)
+	001422	012760 	000026'	000004 		MOV	#rmbuff,4.(R0)
+	001430	012760 	000001 	000006 		MOV	#1,6.(R0)
+	001436	012760 	001460'	000010 		MOV	#30$,8.(R0)
+	001444	104375 				EMT	^O375
+     11	001446	000167 	177124 		10$:	jmp	rerun			; /62/ check for more, rerun ttproc
+     12
+     13	001452	005065 	000002 		20$:	clr	state(r5)		; done, no longer runnable
+     14	001456	000207 				return
+     15
+     16
+     17						.sbttl	XL write completion routine
+     18
+     19	001460	005067 	000024'		30$:	clr	iopending		; I/O no longer pending
+     20	001464	000207 				return
+     21
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 17
+XL write completion routine
+
+      1
+      2						.sbttl	Status_watcher
+      3
+      4	001466	016702 	000000G		stproc:	mov	xcsts	,r2		; /62/ save prior status
+      5	001472					.spfun	#rtwork,#xc.control,#stsdrv,#xcsts,#0,#1 ; /62/ present status
+	001472	012700 	000000G			MOV	#rtwork,R0
+	001476	012710 	015000G			MOV	#xc.control+<26.*^O400>,@R0
+	001502	012760 	000001 	000002 		MOV	#1,2.(R0)
+	001510	012760 	000000G	000004 		MOV	#xcsts,4.(R0)
+	001516	005060 	000006 			CLR	6.(R0)
+	001522	012760 	102377 	000010 		MOV	#stsdrv*^O400+^O377,8.(R0)
+	001530	005060 	000012 			CLR	10.(R0)
+	001534	104375 				EMT	^O375
+      6	001536	103441 				bcs	30$			; failed
+      7	001540	016701 	000000G			mov	xcsts	,r1		; /62/ copy of current status
+      8	001544	005767 	000000G			tst	tsxcl			; which handler is it?
+      9	001550	001002 				bne	10$			; CL uses bit 2
+     10	001552	006201 				asr	r1			; KM, XC and XL use bit 3
+     11	001554	006202 				asr	r2			; make it 2 here
+     12	001556	042702 	177773 		10$:	bic	#^c<4>	,r2		; recover the carrier
+     13	001562	042701 	177773 			bic	#^c<4>	,r1		; detect bits
+     14	001566	020102 				cmp	r1	,r2		; any change?
+     15	001570	001424 				beq	30$			; no
+     16	001572					beep				; ya, make a small noise
+	001572	012700 	000007 			mov	#bell	,r0		; load a bell
+	001576	104341 				EMT	^O341
+     17	001600					wrtall	#con.06			; /63/ "%KRTCON-W-Carrier "
+	001600	012746 	000132'			mov	#con.06	,-(sp)		; pass the address
+	001604	004767 	000000G			call	wrtall			; do it
+     18	001610	005701 				tst	r1			; did we loose it?
+     19	001612	001007 				bne	20$			; no, must have just gotten it
+     20	001614					wrtall	#con.07			; /63/ "lost"
+	001614	012746 	000155'			mov	#con.07	,-(sp)		; pass the address
+	001620	004767 	000000G			call	wrtall			; do it
+     21	001624	004767 	000000G			call	ttxon			; clear the driver just in case
+     22	001630	000404 				br	30$
+     23	001632				20$:	wrtall	#con.08			; /63/ "detected"
+	001632	012746 	000164'			mov	#con.08	,-(sp)		; pass the address
+	001636	004767 	000000G			call	wrtall			; do it
+     24	001642	005065 	000002 		30$:	clr	state(r5)			; no longer runnable
+     25	001646					.mrkt	#stsmark,#ststime,#stsdone,#7	; reschedule us
+	001646	012700 	000044'			MOV	#stsmark,R0
+	001652	012710 	011000 			MOV	#18.*^O400+0.,@R0
+	001656	012760 	000000'	000002 		MOV	#ststime,2.(R0)
+	001664	012760 	000550'	000004 		MOV	#stsdone,4.(R0)
+	001672	012760 	000007 	000006 		MOV	#7,6.(R0)
+	001700	104375 				EMT	^O375
+     26	001702	000207 				return
+     27
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 18
+Status_watcher
+
+      1
+      2						.sbttl	Internal command processor
+      3
+      4	001704	004767 	000610 		concmd:	call	strip0			; /62/ strip parity, upcase if alpha
+      5	001710					scan	r0	,#C10$		; look for a match
+	001710	012746 	001046'			mov	#C10$	,-(sp)
+	001714	005046 				clr	-(sp)
+	001716	150016 				bisb	r0	,@sp
+	001720	004767 	000000G			call	scanch
+      6	001724	006300 				asl	r0			; word offsets
+      7	001726	000170 	001064'			jmp	@C20$(r0)		; /62/ dispatch to the correct routine
+      8
+      9						.save
+     10	001046					.psect	$pdata			; /62/ pull lower case stuff..
+     11	001046	   057 	   077 	   102 	C10$:	.byte	'/	,'?	,'B&137	,'C&137	,'H&137	,'I&137
+     12	001054	   121 	   122 	   123 		.byte	'Q&137	,'R&137	,'S&137	,'X&137	,'Z&137	,'^	,177
+     13	001063	   000 				.byte	0
+     14						.even
+     15
+     16	001064	001732'			C20$:	.word	con.$
+     17	001066	002332'	002332'	002160'		.word	con.hl	,con.hl	,con.br	,con.c	,con.hl	,con.i
+     18	001102	001754'	001774'	002014'		.word	con.q	,con.r	,con.s	,con.x	,con.z	,con.ctr,con.br
+     19	001732					.restore
+     20
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 19
+Internal command processor
+
+      1
+      2						.sbttl	CONCMD sub-routines
+      3
+      4	001732				con.$:	beep				; bad command, ring the bell
+	001732	012700 	000007 			mov	#bell	,r0		; load a bell
+	001736	104341 				EMT	^O341
+      5	001740	000207 				return
+      6
+      7	001742	010667 	000022'		con.c:	mov	sp	,done		; set flag to exit the emulator
+      8	001746	000207 				return
+      9
+     10	001750	000167 	000000G		con.i:	jmp	ttyhang			; /62/ go toggle DTR
+     11
+     12	001754	032767 	100000 	000000G	con.q:	bit	#log$op	,trace		; /62/ file open?
+     13	001762	001763 				beq	con.$			; /62/ no, go make a beep
+     14	001764	042767 	000002 	000000G		bic	#log$co	,trace		; turn off console logging
+     15	001772	000207 				return
+     16
+     17	001774	032767 	100000 	000000G	con.r:	bit	#log$op	,trace		; file open?
+     18	002002	001753 				beq	con.$			; /62/ no, go make a beep
+     19	002004	052767 	000002 	000000G		bis	#log$co	,trace		; yes, resume console logging
+     20	002012	000207 				return
+     21
+     22	002014				con.s:	.newline			; /63/ added debug status
+	002014	004767 	000000G			call	l$pcrlf
+     23	002020	032767 	100000 	000000G	con.s0:	bit	#log$op	,trace		; is a file open?
+     24	002026	001437 				beq	10$			; no
+     25	002030					wrtall	#con.09			; "Logfile is "
+	002030	012746 	000177'			mov	#con.09	,-(sp)		; pass the address
+	002034	004767 	000000G			call	wrtall			; do it
+     26	002040					wrtall	#logfil			; include file name
+	002040	012746 	000000G			mov	#logfil	,-(sp)		; pass the address
+	002044	004767 	000000G			call	wrtall			; do it
+     27	002050					wrtall	#con.10			; ", cur/max blk: "
+	002050	012746 	000213'			mov	#con.10	,-(sp)		; pass the address
+	002054	004767 	000000G			call	wrtall			; do it
+     28	002060	012701 	000000G			mov	#lun.lo	,r1		; logfile lun
+     29	002064	006301 				asl	r1			; word indexing
+     30	002066	016100 	000000G			mov	blknum(r1),r0		; recover current block number
+     31	002072	004767 	000000G			call	L10266			; dump it to TT
+     32	002076					wrtall	#con.11			; "/"
+	002076	012746 	000233'			mov	#con.11	,-(sp)		; pass the address
+	002102	004767 	000000G			call	wrtall			; do it
+     33	002106	016100 	000000G			mov	sizof(r1),r0		; recover file size
+     34	002112	004767 	000000G			call	L10266			; dump that to TT too
+     35	002116	032767 	000002 	000000G		bit	#log$co	,trace		; yes, resume console logging
+     36	002124	000404 				br	20$
+     37	002126				10$:	wrtall	#con.12			; "No LOGFILE is open"
+	002126	012746 	000235'			mov	#con.12	,-(sp)		; pass the address
+	002132	004767 	000000G			call	wrtall			; do it
+     38	002136				20$:	.newline
+	002136	004767 	000000G			call	l$pcrlf
+     39	002142					.newline
+	002142	004767 	000000G			call	l$pcrlf
+     40	002146	000207 				return
+     41
+     42	002150	004767 	000000G		con.z:	call	hose			; zap handler, then
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 19-1
+CONCMD sub-routines
+
+     43	002154	000167 	000000G		con.x:	jmp	ttxon			; /62/ reset XOFF and send an XON
+     44
+     45	002160				con.br:	.spfun	#rtwork,#xc.control,#brkdrv,#0,#1,#1 ; /62/ turn break on
+	002160	012700 	000000G			MOV	#rtwork,R0
+	002164	012710 	015000G			MOV	#xc.control+<26.*^O400>,@R0
+	002170	012760 	000001 	000002 		MOV	#1,2.(R0)
+	002176	005060 	000004 			CLR	4.(R0)
+	002202	012760 	000001 	000006 		MOV	#1,6.(R0)
+	002210	012760 	101377 	000010 		MOV	#brkdrv*^O400+^O377,8.(R0)
+	002216	005060 	000012 			CLR	10.(R0)
+	002222	104375 				EMT	^O375
+     46	002224					.mrkt	#brkwrk,#break,#20$,#20	; /62/ queue this to turn it off
+	002224	012700 	000000'			MOV	#brkwrk,R0
+	002230	012710 	011000 			MOV	#18.*^O400+0.,@R0
+	002234	012760 	000000G	000002 		MOV	#break,2.(R0)
+	002242	012760 	002262'	000004 		MOV	#20$,4.(R0)
+	002250	012760 	000020 	000006 		MOV	#20,6.(R0)
+	002256	104375 				EMT	^O375
+     47	002260	000207 				return
+     48
+     49	002262				20$:	save	<r0>			; /62/ this is a completion routine
+	002262	010046 				 mov	r0	,-(sp)
+     50	002264					.spfun	#rtwork,#xc.control,#brkdrv,#0,#0,#1 ; /62/ turn break off
+	002264	012700 	000000G			MOV	#rtwork,R0
+	002270	012710 	015000G			MOV	#xc.control+<26.*^O400>,@R0
+	002274	012760 	000001 	000002 		MOV	#1,2.(R0)
+	002302	005060 	000004 			CLR	4.(R0)
+	002306	005060 	000006 			CLR	6.(R0)
+	002312	012760 	101377 	000010 		MOV	#brkdrv*^O400+^O377,8.(R0)
+	002320	005060 	000012 			CLR	10.(R0)
+	002324	104375 				EMT	^O375
+     51	002326					unsave	<r0>
+	002326	012600 				 mov	(sp)+	,r0
+     52	002330	000207 				return
+     53
+     54	002332				con.hl:	wrtall	#hlptxt			; dump help text to terminal
+	002332	012746 	000260'			mov	#hlptxt	,-(sp)		; pass the address
+	002336	004767 	000000G			call	wrtall			; do it
+     55	002342	000167 	177452 			jmp	con.s0			; /63/ sho debug status
+     56
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 20
+CONCMD sub-routines
+
+      1
+      2						.sbttl	Send a control char ala VTCOM's ^x command
+      3
+      4	002346	012701 	000005 		con.ctrl:mov	#5	,r1		; wait five seconds
+      5	002352					mul	clkflg	,r1		; for the next char
+	002352	016746 	000000G			mov	clkflg	,-(sp)		; pass multiplier to p$mul
+	002356	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	002360	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	002364	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+      6
+      7	002366				10$:	.ttinr				; get possible ctrl character
+	002366	104340 				EMT	^O340
+      8	002370	103013 				bcc	20$			; got something valid
+      9	002372					.twait	#twait	,#short		; nothing, wait one tick
+	002372	012700 	000064'			MOV	#twait,R0
+	002376	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	002402	012760 	000040'	000002 		MOV	#short,2.(R0)
+	002410	104375 				EMT	^O375
+     10	002412					sob	r1	,10$		; next please
+	002412	005301 				dec	r1
+	002414	001364 				bne	10$
+     11	002416	000437 				br	60$			; exit as we did not get any data
+     12	002420	004767 	000074 		20$:	call	strip0			; /62/ strip parity, upcase if alpha
+     13	002424					scan	r0	,#lis.ctrl	; a control char symbol?
+	002424	012746 	001006'			mov	#lis.ctrl	,-(sp)
+	002430	005046 				clr	-(sp)
+	002432	150016 				bisb	r0	,@sp
+	002434	004767 	000000G			call	scanch
+     14	002440	005700 				tst	r0
+     15	002442	001004 				bne	30$			; ya
+     16	002444					beep				; no, beep for a n.g. char
+	002444	012700 	000007 			mov	#bell	,r0		; load a bell
+	002450	104341 				EMT	^O341
+     17	002452	000421 				br	60$
+     18
+     19	002454				30$:	setpar	r0	,r0		; set parity if enabled
+	002454	110046 				movb	r0	,-(sp)
+	002456	004767 	000000G			call	dopari
+	002462	112600 				movb	(sp)+	,r0
+     20	002464	105704 				tstb	r4			; is this byte free?
+     21	002466	001002 				bne	40$			; no
+     22	002470	150004 				bisb	r0	,r4		; ya, stuff the char in
+     23	002472	000403 				br	50$			; and try for another one
+     24
+     25	002474	000304 			40$:	swab	r4			; swap bytes to
+     26	002476	150004 				bisb	r0	,r4		; stuff second char into the hi one
+     27	002500	000304 				swab	r4			; bytes back into proper positions
+     28
+     29	002502				50$:	schedule #rmhead		; dump the data down the line
+	002502	010046 				mov	r0	,-(sp)		; this is a completion routine
+	002504	012700 	000124'			mov	#rmhead,r0		; top of task's entry in scheduler
+	002510	010660 	000002 			mov	sp	,state(r0)	; flag task is now ready to run
+	002514	012600 				mov	(sp)+	,r0
+     30	002516	000207 			60$:	return
+     31
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 21
+Send a control char ala VTCOM's ^x command
+
+      1
+      2						.sbttl	Strip parity and upcase	; /62/ moved this here, now shared..
+      3
+      4	002520	042700 	177600 		strip0:	bic	#^c<177>,r0		; strip parity
+      5	002524	020027 	000141 			cmp	r0	,#'a!40		; convert
+      6	002530	103405 				blo	10$			; char
+      7	002532	020027 	000172 			cmp	r0	,#'z!40		; to
+      8	002536	101002 				bhi	10$			; upper
+      9	002540	042700 	000040 			bic	#40	,r0		; case
+     10	002544	000207 			10$:	return
+     11
+     12		000001 				.end
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 21-1
+Symbol table
+
+ALSIZE= 001000   	CON.02  000033R     003	KM.LOC= ****** GX	P.NPAD= 000002   	TLIST   000114R     004
+AT.ALL  000177   	CON.03  000051R     003	KRTINC= 000001   	P.PADC= 000003   	TRACE = ****** GX
+AT.CDT  000001   	CON.04  000055R     003	LF    = 000012   	P.QBIN= 000006   	TSXCL = ****** GX
+AT.INF  000002   	CON.05  000066R     003	LIS.CT  001006R     003	P.QCTL= 000005   	TSXSAV= ****** GX
+AT.LEN  000004   	CON.06  000132R     003	LN$CNT= 000003   	P.REPT= 000010   	TTDONE  000564R     002
+AT.ON   100000   	CON.07  000155R     003	LN$MAX= 000120   	P.SPSI= 000000   	TTHEAD  000120R     004
+AT.PRO  000010   	CON.08  000164R     003	LOGERR= ****** GX	P.TIME= 000001   	TTMARK  000054R     004
+AT.SYS  000020   	CON.09  000177R     003	LOGFIL= ****** GX	P.VEND= 000017   	TTNAME= ****** GX
+AT.TYP  000040   	CON.10  000213R     003	LOGINI= ****** GX	P.WIND= 000012   	TTPROC  000620R     002
+AT.XLE  000100   	CON.11  000233R     003	LOG$AL= 000003   	READXK= ****** GX	TTSPEE= ****** GX
+BELL  = 000007   	CON.12  000235R     003	LOG$CO= 000002   	RERUN   000576R     002	TTWAIT  000004R     003
+BINARY  000001   	CON8BI= ****** GX	LOG$DE= 000020   	RMBUFF  000026R     004	TTXON = ****** GX
+BLKNUM= ****** GX	CR    = 000015   	LOG$IO= 000010   	RMHEAD  000124R     004	TTY   = 000001
+BREAK = ****** GX	CRFLAG  000020R     004	LOG$ON= 040000   	RMPROC  001362R     002	TTYHAN= ****** GX
+BRKDRV= 000202   	CTRL$N= 000016   	LOG$OP= 100000   	RTWORK= ****** GX	TWAIT   000064R     004
+BRKWRK  000000R     004	CTRL$O= 000017   	LOG$PA= 000001   	RT.V51  000030R     004	T.TTYI= ****** GX
+BS    = 000010   	C.CRLF= 000004   	LOG$RP= 000004   	SCANCH= ****** GX	USERRB= 000053
+CANCEL  000010R     004	C.LCUC= 000040   	LUN.LO= ****** GX	SCCA    000032R     004	VT100 = 000002
+CAPA.A= 000010   	C.LSPA= 000010   	LUN.XK= ****** GX	SCOLON= 000073   	VT200 = 000003
+CAPA.L= 000002   	C.SSPA= 000020   	L$PCRL= ****** GX	SEVER$= 000010   	WARN$ = 000002
+CAPA.S= 000004   	C.TSPA= 000200   	L10266= ****** GX	SHORT   000040R     004	WRIT1C= ****** GX
+CLKFLG= ****** GX	C10$    001046R     003	MAXLNG= 001130   	SIZOF = ****** GX	WRTALL= ****** GX
+CLOSTT= ****** GX	C20$    001064R     003	MAXPAK  000136   	SOH   = 000001   	XCSTS = ****** GX
+COMMA = 000054   	DECNAT  000002   	MILNET= ****** GX	SPACE = 000040   	XC.CON= ****** GX
+CONCMD  001704R     002	DEL   = 000177   	M.TSXR= ****** GX	STATE = 000002   	XKHEAD  000114RG    004
+CONESC= ****** GX	DOCONN  000000RG    002	NONEIS= 000001   	STHEAD  000130R     004	XKMARK  000070R     004
+CONMSG= ****** GX	DONE    000022R     004	NOSCOP= 000000   	STPROC  001466R     002	XKPOIN= ****** GX
+CON$ES= 000034   	DOPARI= ****** GX	OPENTT= ****** GX	STRIP0  002520R     002	XKPROC  001176R     002
+CON.BR  002160R     002	DOT   = 000056   	PAR$EV  000002   	STSDON  000550R     002	XKREDO  000556R     002
+CON.C   001742R     002	DUPLEX= ****** GX	PAR$MA  000003   	STSDRV= 000204   	XKTIME  000010R     003
+CON.CT  002346R     002	ERBFSI= 000170   	PAR$NO  000000   	STSMAR  000044R     004	XKWORK  000100R     004
+CON.HL  002332R     002	ERRBYT= 000052   	PAR$OD  000001   	STSTIM  000000R     003	XK.CON= ****** GX
+CON.I   001750R     002	ERROR$= 000004   	PAR$SP  000004   	SUCCS$= 000001   	XOFF  = 000023
+CON.Q   001754R     002	ESC   = 000033   	PUTCR0= ****** GX	SUSPND= ****** GX	XON   = 000021
+CON.R   001774R     002	FATAL$= 000020   	P$MUL = ****** GX	S10$    000616R     002	$ALLSI= 001144
+CON.S   002014R     002	FF    = 000014   	P.CAPA= 000011   	TAB   = 000011   	$XLV51= 000020
+CON.S0  002020R     002	HDSIZE= 000004   	P.CHKT= 000007   	TASKAD= 000000   	$$    = 000001
+CON.X   002154R     002	HLPTXT  000260R     003	P.EOL = 000004   	TERMIN  177777   	$$5   = 000027
+CON.Z   002150R     002	HOSE  = ****** GX	P.MXL1= 000013   	TEXT    000000   	...V1 = 000003
+CON.$   001732R     002	IOPEND  000024R     004	P.MXL2= 000014   	TILDE = 000176   	...V2 = 000027
+CON.01  000014R     003	JSW   = 000044
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	002546    002	(RO,I,LCL,REL,CON)
+$PDATA	001120    003	(RO,D,LCL,REL,CON)
+CONDAT	000136    004	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 39
+Work  file writes: 46
+Size of work file: 14320 Words  ( 56 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+KRTCON	Terminal emulator	MACRO V05.03b  00:01  Page 21-2
+Symbol table
+
+
+Elapsed time: 00:00:00.27
+KRTCON,KRTCON=KRTNHD,KRTCON

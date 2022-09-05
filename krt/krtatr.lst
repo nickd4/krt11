@@ -1,0 +1,1453 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   3	Send all attributes in a single packet	; /BBS/ modified to..
+    9-   2	Send system type
+   10-   2	Send generic file type
+   11-   2	Send file protection	; /BBS/ fixed for RT-11
+   12-   2	Send file length	; /BBS/
+   13-   2	Send system specific info	; /52/ added /BBS/ cleaned up
+   14-   2	Get file creation date/time	; /BBS/ added this..
+   15-   2	Send file length in bytes  ; /BBS/ all new
+   16-   2	Received attribute packet processing
+   17-   2	Null attribute handler
+   18-   2	Process received length specified in 1024. byte blocks
+   19-   2	Received file type
+   20-   2	Put create date/time where close can get them later ; /BBS/
+   21-   2	Put file protection code where close can get it later ; /BBS/
+   22-   2	Received system type
+   23-   2	Receive system specific info
+   24-   2	Exact file size in bytes (type "1")
+   25-   2	Determine if other system is a PDP-11
+   26-   2	Clear attributes
+   27-   2	32-bit multiply from RSX SYSLIB.OLB
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTATR	Process attribute packets
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5
+      6					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      7					;
+      8					;	add 25% to rec'd length for text files from non RT-11/TSX systems
+      9
+     10					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     11					;
+     12					;	modified rx.cdt,sn.cdt to do the "#" date/time attribute
+     13					;	hosed unused stuff, added rx.pro,sn.pro for protected file attribute
+     14					;
+     15					;	added support for date/time/prot file attributes
+     16					;	patched open, close and I/O data table to support it..
+     17					;
+     18					;	modified w$attr to send all attributes in a single packet
+     19					;	rx.xle result in at$len no longer overwritten by rx.len
+     20					;	added send exact file length in bytes
+     21					;	call binary files "BINARY" not "IMAGE" so MS-Kermit is happy
+     22
+     23					;	Copyright 1984 Change Software, Inc.
+     24					;
+     25					;	18-Apr-84  11:20:59 Brian Nelson
+     26					;	24-Mar-86  12:00:56 BDN	Major revision which has some rather
+     27					;				unpleasant compatibility problems with
+     28					;				older Kermit-11's.
+     29					;	12-Sep-86  10:37:04 BDN Convert for I/D space
+     30
+     31					;	 This module is intended to be placed into an overlay
+     32					;	which MUST be the "ERROR" cotree as the server, which
+     33					;	is overlaid in the  "UTILTY"  cotree  can  indirectly
+     34					;	call the module through the packet control routines.
+     35
+     36					;	 The receiving Kermit should ALWAYS get the SYSTEM and
+     37					;	EXECUTIVE type attribute packet first so it can decide
+     38					;	if it should use the data being sent.
+     39
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3						.mcall	.DATE	,.GTIM		; /BBS/
+      4
+      5
+      6	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+      7	000000	000000 			atrctx::.word	0			; /E64/ send attrs context (index)
+      8	000002				curatr:	.blkb	200			; current attribute scratch buffer
+      9	000202	000000 			day.x:	.word	0			; /BBS/ integer file create day
+     10	000204	   000 	   000 	   000 	day.y:	.byte	0 ,0 ,0 ,0		; /BBS/ ascii file create day
+     11	000210	000000 			mon.x:	.word	0			; /BBS/ integer file create month
+     12	000212	   000 	   000 	   000 	mon.y:	.byte	0 ,0 ,0 ,0		; /BBS/ ascii file create month
+     13	000216	   000 	   000 	   000 	sizbuf:	.byte	0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ; /BBS/ sn.xle ascii size
+     14	000232	000000 	000000 		xblock:	.word	0 ,0			; /BBS/ buffer for sn.xle, .gtim
+     15	000236	000000 			yr.x:	.word	0			; /BBS/ integer file create year
+     16	000240	   000 	   000 	   000 	yr.y:	.byte	0 ,0 ,0 ,0 ,0 ,0	; /BBS/ ascii file create year
+     17
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 8
+Utility macros
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Send all attributes in a single packet	; /BBS/ modified to..
+      4
+      5					;	W $ A T T R
+      6					;
+      7					;	input:	 (r5)	= file lun
+      8					;		2(r5)	= output packet buffer address
+      9					;	output:	  r1	> 0 is packet length, 0 = receiver can't do attributes
+     10
+     11	000000				w$attr::save	<r2,r3,r4>
+	000000	010246 				 mov	r2	,-(sp)
+	000002	010346 				 mov	r3	,-(sp)
+	000004	010446 				 mov	r4	,-(sp)
+     12	000006	005001 				clr	r1			; preset in case other system
+     13	000010	132767 	000010 	000011G		bitb	#capa.a	,conpar+p.capas	; can't handle attributes
+     14	000016	001434 				beq	40$			; it can't
+     15	000020	032767 	100000 	000000G		bit	#at.on	,doattr		; /63/ are attributes enabled?
+     16	000026	001430 				beq	40$			; /63/ no
+     17	000030	016504 	000002 			mov	2(r5)	,r4		; point to the packet
+     18	000034	005067 	000000'			clr	atrctx			; init index
+     19
+     20	000040	016700 	000000'		10$:	mov	atrctx	,r0		; dispatch on what to send next
+     21	000044	006300 				asl	r0			; word indexing
+     22	000046	005760 	000000'			tst	watt(r0)		; all done?
+     23	000052	001411 				beq	30$			; yes, finish up
+     24	000054	036067 	000020'	000000G		bit	at.tx(r0),doattr	; /62/ is this attribute enabled?
+     25	000062	001402 				beq	20$			; /62/ no
+     26	000064	004770 	000000'			jsr	pc	,@watt(r0)	; do it
+     27	000070	005267 	000000'		20$:	inc	atrctx			; index to next subroutine
+     28	000074	000761 				br	10$			; loop back for it
+     29
+     30	000076				30$:	strlen	2(r5)			; get the length and return it
+	000076	016500 	000002 			mov	2(r5)	,r0
+	000102	004767 	000000G			call	l$len
+     31	000106	010001 				mov	r0	,r1		; and say that this packet is for real
+     32	000110	005000 			40$:	clr	r0			; no error possible
+     33	000112					unsave	<r4,r3,r2>
+	000112	012604 				 mov	(sp)+	,r4
+	000114	012603 				 mov	(sp)+	,r3
+	000116	012602 				 mov	(sp)+	,r2
+     34	000120	000207 				return
+     35
+     36						.save
+     37	000000					.psect	$pdata
+     38	000000	000122'	000144'	000200'	watt:	.word	sn.sys	,sn.typ	,sn.pro	,sn.len	,sn.inf	,sn.cdt	,sn.xle
+     39	000016	000000 			at.rx:	.word	0			; /62/ also terminates watt
+     40	000020	000020 	000040 	000010 	at.tx:	.word	at.sys	,at.typ	,at.pro	,at.len	,at.inf	,at.cdt	,at.xle
+     41	000122					.restore
+     42
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 9
+Send all attributes in a single packet	; /BBS/ modified to..
+
+      1
+      2						.sbttl	Send system type
+      3
+      4	000122	112724 	000056 		sn.sys:	movb	#'.	,(r4)+		; the system id attribute
+      5	000126	112724 	000042 			movb	#42	,(r4)+		; /49/ length of what follows
+      6	000132	112724 	000104 			movb	#'D&137	,(r4)+		; return the vendor code (DEC)
+      7	000136	112724 	000102 			movb	#'B&137	,(r4)+		; /BBS/ it's RT-11 for sure here
+      8	000142	000437 				br	sn.end			; /63/ go make it .asciz
+      9
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 10
+Send system type
+
+      1
+      2						.sbttl	Send generic file type
+      3
+      4	000144	112724 	000042 		sn.typ:	movb	#42	,(r4)+		; file type attribute
+      5	000150	112724 	000041 			movb	#41	,(r4)+		; /49/ length of what follows
+      6	000154	112700 	000101 			movb	#'A&137	,r0		; /BBS/ assume ascii
+      7	000160	126727 	000000G	000001 		cmpb	image	,#binary	; is it binary or 8-bit text?
+      8	000166	002402 				blt	10$			; /63/ no
+      9	000170	112700 	000102 			movb	#'B&137	,r0		; /BBS/ yes, indicate it is..
+     10	000174	110024 			10$:	movb	r0	,(r4)+		; /BBS/ put file type in packet
+     11	000176	000421 				br	sn.end			; /63/ go make it .asciz
+     12
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 11
+Send generic file type
+
+      1
+      2						.sbttl	Send file protection	; /BBS/ fixed for RT-11
+      3
+      4	000200				sn.pro:					;	bit_0	=  read
+      5										;	bit_1	=  write
+      6					; protection codes from "Kermit, A		bit_2	=  execute
+      7					; File Transfer Protocol," 1987, for		bit_3	=  append
+      8					; the "-" (octal 55) attribute			bit_4	=  delete
+      9										;	bit_5	=  directory
+     10	000200	112724 	000055 			movb	#55	,(r4)+		; public file protection
+     11	000204	112724 	000041 			movb	#41	,(r4)+		; length of what follows
+     12	000210	011500 				mov	(r5)	,r0		; get lun
+     13	000212	006300 				asl	r0			; word indexing
+     14	000214	005760 	000000G			tst	prot.a(r0)		; is it protected?
+     15	000220	001003 				bne	10$			; ya
+     16	000222	012700 	000077 			mov	#<1!2!4!10!20!40>,r0	; no, set bits 0 thru 5
+     17	000226	000402 				br	20$			; continue
+     18	000230	012700 	000045 		10$:	mov	#<1!4!40>,r0		; protected, set bits 0,2,5 only
+     19	000234	062700 	000040 		20$:	add	#40	,r0		; tochar r0
+     20	000240	110024 				movb	r0	,(r4)+		; put it into packet
+     21	000242	105014 			sn.end:	clrb	@r4			; .asciz
+     22	000244	000207 				return
+     23
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 12
+Send file protection	; /BBS/ fixed for RT-11
+
+      1
+      2						.sbttl	Send file length	; /BBS/
+      3
+      4	000246	011501 			sn.len:	mov	(r5)	,r1		; lun open to the file
+      5	000250	006301 				asl	r1			; word indexing
+      6	000252	016101 	000000G			mov	sizof(r1),r1		; get file size
+      7	000256	005201 				inc	r1			; accommodate rounding to
+      8	000260	006201 				asr	r1			; 1024. byte blocks, not 512.
+      9	000262	001001 				bne	10$			; /BBS/ something is left of size..
+     10	000264	005201 				inc	r1			; /BBS/ no, make it at least one block
+     11	000266	112724 	000041 		10$:	movb	#41	,(r4)+		; attribute type (file size)
+     12	000272	112724 	000045 			movb	#45	,(r4)+		; length of the number
+     13	000276					deccvt	r1	,r4	,#5	; convert to ascii
+	000276	010546 				mov	r5	,-(sp)
+	000300	012746 	000005 			mov	#5	,-(sp)
+	000304	010146 				mov	r1	,-(sp)
+	000306	010446 				mov	r4	,-(sp)
+	000310	010605 				mov	sp	,r5
+	000312	004767 	000000G			call	l$cvtnum
+	000316	062706 	000006 			add	#6	,sp
+	000322	012605 				mov	(sp)+	,r5
+     14	000324	012700 	000005 			mov	#5	,r0		; for 5 chars
+     15	000330	121427 	000040 		20$:	cmpb	@r4	,#space		; if a space, then make it a "0"
+     16	000334	001002 				bne	30$			; not a space
+     17	000336	112714 	000060 			movb	#'0	,@r4		; it was a space
+     18	000342	005204 			30$:	inc	r4			; next
+     19	000344					sob	r0	,20$		; please
+	000344	005300 				dec	r0
+	000346	001370 				bne	20$
+     20	000350	000734 			40$:	br	sn.end			; /63/ go make it .asciz
+     21
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 13
+Send file length	; /BBS/
+
+      1
+      2						.sbttl	Send system specific info	; /52/ added /BBS/ cleaned up
+      3
+      4	000352	112724 	000060 		sn.inf:	movb	#'0	,(r4)+		; DEC-specific file type
+      5	000356	112724 	000042 			movb	#42	,(r4)+		; length of data to follow
+      6	000362	112724 	000042 			movb	#42	,(r4)+		; sending extended file type
+      7	000366	016700 	000000G			mov	image	,r0		; use this to index to it
+      8	000372	116024 	000036'			movb	sn$inf(r0),(r4)+	; /63/ insert it
+      9	000376	000721 				br	sn.end			; /63/ go make it .asciz
+     10
+     11						.save
+     12	000036					.psect	$pdata
+     13	000036	   101 	   111 	   116 	sn$inf:	.byte	'A&137	,'I&137	,'N&137
+     14						.even
+     15	000400					.restore
+     16
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 14
+Send system specific info	; /52/ added /BBS/ cleaned up
+
+      1
+      2						.sbttl	Get file creation date/time	; /BBS/ added this..
+      3
+      4	000400				sn.cdt:	save	<r4>			; pointer to current position in buff
+	000400	010446 				 mov	r4	,-(sp)
+      5	000402	011504 				mov	(r5)	,r4		; channel
+      6	000404	006304 				asl	r4			; word offsets
+      7	000406	016400 	000000G			mov	date.a(r4),r0		; recover current file's date
+      8	000412	012701 	000002'			mov	#curatr	,r1		; the result address
+      9
+     10	000416	010003 				mov	r0	,r3		; copy the date to extract
+     11	000420	042703 	177740 			bic	#^c<37>	,r3		; the year
+     12	000424	062703 	003664 			add	#1972.	,r3		; plus the bias please
+     13	000430	010002 				mov	r0	,r2		; copy the date
+     14	000432	042702 	037777 			bic	#^c<140000>,r2		; extend max year w/two hi bits
+     15	000436	000302 				swab	r2			; two hi bits now are bits 7,6
+     16	000440	006202 				asr	r2			; shift to bits 6,5 (true value)
+     17	000442	060203 				add	r2	,r3		; add to total years
+     18	000444	004767 	000000G			call	i4toa			; do all 4 digits of year
+     19
+     20	000450	010003 				mov	r0	,r3		; copy to extract months
+     21	000452	000303 				swab	r3			; get the month to bits 7..2
+     22	000454	006203 				asr	r3			; now bits 6..1
+     23	000456	006203 				asr	r3			; now bits 5..0
+     24	000460	042703 	177740 			bic	#^c<37>	,r3		; hose everything else
+     25	000464	004767 	000000G			call	i2toa			; write ascii to out buff
+     26
+     27	000470	010003 				mov	r0	,r3		; copy to extract day of month
+     28	000472					ash	#3	,r3		; /62/ shift left 3 places
+	000472	006303 				.iif gt <$$type>  asl	r3
+	000474	006303 				.iif gt <$$type>  asl	r3
+	000476	006303 				.iif gt <$$type>  asl	r3
+     29	000500	000303 				swab	r3			; then swap bytes to get
+     30	000502	042703 	177740 			bic	#^c<37>	,r3		; the date
+     31	000506	004767 	000000G			call	i2toa			; write ascii to out buff
+     32
+     33	000512	005767 	000000G			tst	tsxsav			; only do file time under TSX
+     34	000516	001450 				beq	10$			; it's not TSX
+     35	000520	112721 	000040 			movb	#space	,(r1)+		; a space delimiter between date,time
+     36
+     37	000524	016403 	000000G			mov	time.a(r4),r3		; recover current file's time
+     38	000530	005002 				clr	r2			; clear hi word for upcoming divide
+     39	000532					div	#20.	,r2		; get # of 3-sec units since midnight
+	000532	012746 	000024 			mov	#20.	,-(sp)		; divisor
+	000536	010346 				mov	r3	,-(sp)
+	000540	010246 				mov	r2	,-(sp)
+	000542	004767 	000000G			call	p$div			; divide
+	000546	012603 				mov	(sp)+	,r3
+	000550	012602 				mov	(sp)+	,r2
+     40	000552	010346 				mov	r3	,-(sp)		; put on stack
+     41	000554	006303 				asl	r3			; 2x secs
+     42	000556	060316 				add	r3	,(sp)		; plus 1x = 3x = number_of_seconds
+     43	000560	010203 				mov	r2	,r3		; get rest of time
+     44	000562	005002 				clr	r2			; set up for next divide
+     45	000564					div	#60.	,r2		; get number of minutes
+	000564	012746 	000074 			mov	#60.	,-(sp)		; divisor
+	000570	010346 				mov	r3	,-(sp)
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 14-1
+Get file creation date/time	; /BBS/ added this..
+
+	000572	010246 				mov	r2	,-(sp)
+	000574	004767 	000000G			call	p$div			; divide
+	000600	012603 				mov	(sp)+	,r3
+	000602	012602 				mov	(sp)+	,r2
+     46	000604	010346 				mov	r3	,-(sp)		; and save on stack
+     47	000606	010203 				mov	r2	,r3		; this is the number of hours
+     48	000610	004767 	000000G			call	i2toa			; write ascii to out buff
+     49	000614	112721 	000072 			movb	#':	,(r1)+		; a colon into the buffer
+     50	000620	012603 				mov	(sp)+	,r3		; recover minutes
+     51	000622	004767 	000000G			call	i2toa			; write ascii to out buff
+     52	000626	112721 	000072 			movb	#':	,(r1)+		; a colon into the buffer
+     53	000632	012603 				mov	(sp)+	,r3		; recover secs
+     54	000634	004767 	000000G			call	i2toa			; write ascii to out buff
+     55
+     56	000640	105011 			10$:	clrb	@r1			; .asciz
+     57	000642					unsave	<r4>			; recover packet buffer pointer
+	000642	012604 				 mov	(sp)+	,r4
+     58	000644	012701 	000002'			mov	#curatr	,r1		; pointer to string just built
+     59	000650					strlen	r1			; get length of string
+	000650	010100 				mov	r1	,r0
+	000652	004767 	000000G			call	l$len
+     60	000656	062700 	000040 			add	#40	,r0		; encode length (tochar..)
+     61	000662	112724 	000043 			movb	#'#	,(r4)+		; file create time/date data
+     62	000666	110024 				movb	r0	,(r4)+		; put length into packet buffer
+     63	000670	112124 			20$:	movb	(r1)+	,(r4)+		; then copy data into it
+     64	000672	001376 				bne	20$			; until null
+     65	000674	005304 				dec	r4			; bump pointer back to the null
+     66	000676	000207 				return
+     67
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 15
+Get file creation date/time	; /BBS/ added this..
+
+      1
+      2						.sbttl	Send file length in bytes  ; /BBS/ all new
+      3
+      4	000700	011503 			sn.xle:	mov	(r5)	,r3		; file open on this chan
+      5	000702	006303 				asl	r3			; word indexing
+      6	000704	005002 				clr	r2			; double precision, init high word
+      7	000706	016303 	000000G			mov	sizof(r3),r3		; size in the accumulator low word
+      8	000712	001001 				bne	10$			; something is there
+      9	000714	005203 				inc	r3			; make it at least one block
+     10	000716	012700 	001000 		10$:	mov	#512.	,r0		; setup call to $dmul, size*512.
+     11	000722	004767 	001624 			call	$dmul			; double precision multiply
+     12	000726	010067 	000232'			mov	r0	,xblock		; save hi word
+     13	000732	010167 	000234'			mov	r1	,xblock+2	; save low word
+     14	000736	005002 				clr	r2			; suppress leading zeros in output
+     15	000740	012701 	000232'			mov	#xblock	,r1		; address of 32-bit number
+     16	000744	012700 	000216'			mov	#sizbuf	,r0		; address of out buff for ascii
+     17	000750	004767 	000000G			call	$cddmg			; convert 32-bit integer to ascii
+     18	000754	105010 				clrb	@r0			; null terminate the string
+     19	000756	122767 	000052 	000216'		cmpb	#'*	,sizbuf		; did $cddmg overflow?
+     20	000764	001415 				beq	30$			; ya, bail out..
+     21	000766					strlen	#sizbuf			; get its length
+	000766	012700 	000216'			mov	#sizbuf	,r0
+	000772	004767 	000000G			call	l$len
+     22	000776	112724 	000061 			movb	#61	,(r4)+		; attribute type (exact size in bytes)
+     23	001002	062700 	000040 			add	#40	,r0		; tochar the string length
+     24	001006	110024 				movb	r0	,(r4)+		; stuff into the attribute string
+     25	001010	012700 	000216'			mov	#sizbuf	,r0		; get pointer to the length string
+     26	001014	112024 			20$:	movb	(r0)+	,(r4)+		; then copy ascii'd length into attr$
+     27	001016	001376 				bne	20$			; until hitting the null terminator
+     28	001020	000207 			30$:	return
+     29
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 16
+Send file length in bytes  ; /BBS/ all new
+
+      1
+      2						.sbttl	Received attribute packet processing
+      3
+      4					;	R $ A T T R
+      5					;
+      6					;	input:	 (r5)	= packet buffer address
+      7					;	output:	  r0	= if <>, error code
+      8
+      9	001022				r$attr::save	<r1,r2,r5>		; /BBS/ cleaned this up a bit..
+	001022	010146 				 mov	r1	,-(sp)
+	001024	010246 				 mov	r2	,-(sp)
+	001026	010546 				 mov	r5	,-(sp)
+     10	001030	032767 	100000 	000000G		bit	#at.on	,doattr		; /63/ attribute processing enabled?
+     11	001036	001500 				beq	70$			; /62/ nope
+     12	001040	011505 				mov	@r5	,r5		; /49/ get packet data address
+     13
+     14	001042	112500 			10$:	movb	(r5)+	,r0		; /49/ attribute type code
+     15	001044	001450 				beq	60$			; /49/ nothing there..
+     16	001046	112501 				movb	(r5)+	,r1		; /49/ get length field next
+     17	001050	001446 				beq	60$			; /49/ nothing there..
+     18	001052	120027 	000056 			cmpb	r0	,#'.		; /49/ if this is an OLD Kermit-11
+     19	001056	001006 				bne	20$			; /49/ with the invalid system type
+     20	001060	120127 	000104 			cmpb	r1	,#'D&137	; /49/ format then we have to fix it
+     21	001064	001003 				bne	20$			; /49/ it is not..
+     22	001066	005305 				dec	r5			; /49/ it is, we'd been forgetting to
+     23	001070	012701 	000042 			mov	#42	,r1		; /49/ include the length field
+     24
+     25	001074	162701 	000040 		20$:	sub	#40	,r1		; /49/ convert length to integer
+     26	001100	003432 				ble	60$			; /BBS/ nothing there
+     27	001102	012702 	000002'			mov	#curatr	,r2		; /49/ copy current attribute argument
+     28	001106	112522 			30$:	movb	(r5)+	,(r2)+		; /49/ over to a save area now
+     29	001110					sob	r1	,30$		; /49/ next please
+	001110	005301 				dec	r1
+	001112	001375 				bne	30$
+     30	001114	105022 				clrb	(r2)+			; /49/ ensure .asciz please
+     31	001116	010546 				mov	r5	,-(sp)		; /49/ make sure the r5 context saved
+     32	001120					scan	r0	,#attrty	; look for the attribute packet type?
+	001120	012746 	000042'			mov	#attrty	,-(sp)
+	001124	005046 				clr	-(sp)
+	001126	150016 				bisb	r0	,@sp
+	001130	004767 	000000G			call	scanch
+     33	001134	006300 				asl	r0			; simple to do
+     34	001136	036067 	000016'	000000G		bit	at.rx(r0),doattr	; /62/ is this attribute enabled?
+     35	001144	001002 				bne	40$			; /62/ ya
+     36	001146	005000 				clr	r0			; /62/ no, check for
+     37	001150	000402 				br	50$			; /62/ more attributes
+     38	001152	004770 	000052'		40$:	jsr	pc	,@attrds(r0)	; process the attribute packet now
+     39	001156	012605 			50$:	mov	(sp)+	,r5		; /49/ restore the r5 context now
+     40	001160	005700 				tst	r0			; success?
+     41	001162	001727 				beq	10$			; yes
+     42	001164	000426 				br	80$			; no, exit with error in r0
+     43
+     44	001166	004767 	001314 		60$:	call	ispdp			; /62/ if other end is RT-11 or TSX..
+     45	001172	020027 	000004 			cmp	r0	,#4		; /62/ well?
+     46	001176	001420 				beq	70$			; /62/ it is, so file sizes are exact
+     47	001200	026727 	000000G	000001 		cmp	image	,#binary	; /62/ then if file type isn't binary
+     48	001206	001414 				beq	70$			; /62/ it is, image size is always ok
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 16-1
+Received attribute packet processing
+
+     49	001210	016700 	000000G			mov	at$len	,r0		; /62/ otherwise save the passed size
+     50	001214	001412 				beq	80$			; /62/ nothing was there, r0 is clear
+     51	001216	006200 				asr	r0			; /62/ divide by two
+     52	001220	006200 				asr	r0			; /62/ now it's by four, 25% of total
+     53	001222	005200 				inc	r0			; /62/ bump one more block to be sure
+     54	001224	060067 	000000G			add	r0	,at$len		; /62/ now bump requested space by 25%
+     55	001230	103003 				bcc	70$			; /62/ result didn't overflow
+     56	001232	012767 	177731 	000000G		mov	#65497.	,at$len		; /62/ it did, try the max possible..
+     57	001240	005000 			70$:	clr	r0			; packet format error or end of data
+     58	001242				80$:	unsave	<r5,r2,r1>
+	001242	012605 				 mov	(sp)+	,r5
+	001244	012602 				 mov	(sp)+	,r2
+	001246	012601 				 mov	(sp)+	,r1
+     59	001250	000207 				return
+     60
+     61						.save
+     62	000042					.psect	$pdata
+     63	000042	   056 	   042 	   055 	attrty:	.byte	56	,42	,55	,41	,60	,43	,61
+     64	000051	   000 				.byte	0
+     65						.even
+     66	000052	001252'			attrds:	.word	rx.$$			; /62/ must conform to at.rx
+     67	000054	002270'	001350'	002234'		.word	rx.sys	,rx.typ	,rx.pro	,rx.len	,rx.inf	,rx.cdt	,rx.xle
+     68	001252					.restore
+     69
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 17
+Received attribute packet processing
+
+      1
+      2						.sbttl	Null attribute handler
+      3
+      4	001252	005000 			rx.$$:	clr	r0			; /49/ ignore unknown attribute types
+      5	001254	000207 				return
+      6
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 18
+Null attribute handler
+
+      1
+      2						.sbttl	Process received length specified in 1024. byte blocks
+      3
+      4	001256	005767 	000000G		rx.len:	tst	at$len			; /BBS/ size from rx.xle already here?
+      5	001262	001030 				bne	40$			; /BBS/ ya, use it instead of this
+      6	001264	012702 	000002'			mov	#curatr	,r2		; /49/ where we saved attributes
+      7	001270	005001 				clr	r1			; init the accumulator
+      8	001272	105712 			10$:	tstb	@r2			; EOL?
+      9	001274	001420 				beq	30$			; yep
+     10	001276	121227 	000040 			cmpb	@r2	,#space		; ignore leading spaces please
+     11	001302	001413 				beq	20$			; yes, a space
+     12	001304	005046 				clr	-(sp)			; avoid sxt
+     13	001306	151216 				bisb	@r2	,@sp		; get the next digit please
+     14	001310	162716 	000060 			sub	#'0	,@sp		; and convert to decimal
+     15	001314					mul	#12	,r1		; shift accum over 10.
+	001314	012746 	000012 			mov	#12	,-(sp)		; pass multiplier to p$mul
+	001320	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	001322	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	001326	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     16	001330	062601 				add	(sp)+	,r1		; add in the current digit
+     17	001332	005202 			20$:	inc	r2			; next ch please
+     18	001334	000756 				br	10$			; /49/ Next please
+     19	001336	006301 			30$:	asl	r1			; convert 1024. blocks to 512. blocks
+     20	001340	010167 	000000G			mov	r1	,at$len		; save it please
+     21	001344	005000 			40$:	clr	r0			; success
+     22	001346	000207 				return
+     23
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 19
+Process received length specified in 1024. byte blocks
+
+      1
+      2						.sbttl	Received file type
+      3
+      4	001350	005767 	000000G		rx.typ:	tst	doauto			; /BBS/ auto file type enabled?
+      5	001354	001004 				bne	10$			; /BBS/ ya
+      6	001356	016767 	000000G	000000G		mov	$image	,image		; /BBS/ no, use what's SET
+      7	001364	000413 				br	30$
+      8	001366	126727 	000002'	000102 	10$:	cmpb	curatr	,#'B&137	; binary?
+      9	001374	001404 				beq	20$			; yes
+     10	001376	126727 	000002'	000111 		cmpb	curatr	,#'I&137	; image?
+     11	001404	001003 				bne	30$			; no
+     12	001406	012767 	000001 	000000G	20$:	mov	#binary	,image		; flag for image mode
+     13	001414	005000 			30$:	clr	r0			; success
+     14	001416	000207 				return
+     15
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 20
+Received file type
+
+      1
+      2						.sbttl	Put create date/time where close can get them later ; /BBS/
+      3
+      4	001420	005046 			rx.cdt:	clr	-(sp)			; init 2 digit year flag
+      5	001422					scan	#space	,#curatr	; find the space between date and time
+	001422	012746 	000002'			mov	#curatr	,-(sp)
+	001426	005046 				clr	-(sp)
+	001430	152716 	000040 			bisb	#space	,@sp
+	001434	004767 	000000G			call	scanch
+      6	001440	005700 				tst	r0			; get it?
+      7	001442	001010 				bne	10$			; ya..
+      8	001444					strlen	#curatr			; no time is there
+	001444	012700 	000002'			mov	#curatr	,r0
+	001450	004767 	000000G			call	l$len
+      9	001454	020027 	000007 			cmp	r0	,#7		; 2 or 4 digit year?
+     10	001460	003004 				bgt	20$			; it's 4
+     11	001462	000404 				br	30$			; it's 2
+     12
+     13	001464	020027 	000010 		10$:	cmp	r0	,#10		; 2 or 4 digit year?
+     14	001470	002401 				blt	30$			; 2 digits
+     15	001472	010616 			20$:	mov	sp	,(sp)		; 4 digits, set flag
+     16	001474	012701 	000002'		30$:	mov	#curatr	,r1		; pointer to date/time packet data
+     17	001500	012700 	000240'			mov	#yr.y	,r0		; extract the ascii year here
+     18	001504	004767 	000452 			call	mov2b			; copy two bytes
+     19	001510	005726 				tst	(sp)+			; two or four digit year string?
+     20	001512	001402 				beq	40$			; just two
+     21	001514	004767 	000442 			call	mov2b			; copy two bytes
+     22	001520	012700 	000212'		40$:	mov	#mon.y	,r0		; extract the ascii month here
+     23	001524	004767 	000432 			call	mov2b			; copy two bytes
+     24	001530	012700 	000204'			mov	#day.y	,r0		; extract the ascii day here
+     25	001534	004767 	000422 			call	mov2b			; copy two bytes
+     26
+     27	001540					save	<r1>			; save pointer to time string
+	001540	010146 				 mov	r1	,-(sp)
+     28
+     29	001542	012703 	000240'			mov	#yr.y	,r3		; recover ascii year
+     30	001546	004767 	000420 			call	gnum			; make it an integer
+     31	001552	010167 	000236'			mov	r1	,yr.x		; and save it here
+     32	001556	012703 	000212'			mov	#mon.y	,r3		; recover ascii month
+     33	001562	004767 	000404 			call	gnum			; make it an integer
+     34	001566	010167 	000210'			mov	r1	,mon.x		; and save it here
+     35	001572	012703 	000204'			mov	#day.y	,r3		; recover ascii day
+     36	001576	004767 	000370 			call	gnum			; make it an integer
+     37	001602	010167 	000202'			mov	r1	,day.x		; and save it here
+     38
+     39						;  2_bits<year_ext> ,4_bits<mon> ,5_bits<day> ,5_bits<year-1972>
+     40	001606	016701 	000210'			mov	mon.x	,r1		; recover month
+     41	001612					ash	#5	,r1		; partial shift towards final location
+	001612	006301 				.iif gt <$$type>  asl	r1
+	001614	006301 				.iif gt <$$type>  asl	r1
+	001616	006301 				.iif gt <$$type>  asl	r1
+	001620	006301 				.iif gt <$$type>  asl	r1
+	001622	006301 				.iif gt <$$type>  asl	r1
+     42	001624	066701 	000202'			add	day.x	,r1		; recover days
+     43	001630					ash	#5	,r1		; shift days/months to final positions
+	001630	006301 				.iif gt <$$type>  asl	r1
+	001632	006301 				.iif gt <$$type>  asl	r1
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 20-1
+Put create date/time where close can get them later ; /BBS/
+
+	001634	006301 				.iif gt <$$type>  asl	r1
+	001636	006301 				.iif gt <$$type>  asl	r1
+	001640	006301 				.iif gt <$$type>  asl	r1
+     44	001642	016746 	000236'			mov	yr.x	,-(sp)		; recover year
+     45	001646	021627 	000144 			cmp	(sp)	,#100.		; is it two digits only?
+     46	001652	002040 				bge	60$			; no
+     47	001654	021627 	000107 			cmp	(sp)	,#71.		; ya but ambiguity impossible 'til '72
+     48	001660	003433 				ble	50$			; it has to be 21st century
+     49
+     50						; if two-digit year extend to four-digits based on the current century
+     51	001662					.gtim	#rtwork	,#xblock	; ensure clock rollover..
+	001662	012700 	000000G			MOV	#rtwork,R0
+	001666	012710 	010400 			MOV	#17.*^O400+0.,@R0
+	001672	012760 	000232'	000002 		MOV	#xblock,2.(R0)
+	001700	104375 				EMT	^O375
+     52	001702					.date				; ya, which century is it now?
+	001702	012700 	005000 			MOV	#^O5000,R0
+	001706	104374 				EMT	^O374
+     53	001710	010003 				mov	r0	,r3		; copy the date
+     54	001712	042703 	177740 			bic	#^c<37>	,r3		; the year
+     55	001716	062703 	003664 			add	#1972.	,r3		; plus the bias
+     56	001722	042700 	037777 			bic	#^c<140000>,r0		; extend max year w/two hi bits
+     57	001726	000300 				swab	r0			; two hi bits now are bits 7,6
+     58	001730	006200 				asr	r0			; shift to bits 6,5 (true value)
+     59	001732	060003 				add	r0	,r3		; now it's the total years
+     60	001734	020327 	003717 			cmp	r3	,#1999.		; well?
+     61	001740	003003 				bgt	50$			; it's 2000 A.D. or above
+     62	001742	062716 	003554 			add	#1900.	,(sp)		; not 2000 A.D. yet ..
+     63	001746	000402 				br	60$			; and continue
+     64	001750	062716 	003720 		50$:	add	#2000.	,(sp)		; default to current century
+     65
+     66	001754	162716 	003664 		60$:	sub	#1972.	,(sp)		; RT-11 dates begin at 1972..
+     67	001760	002002 				bge	70$			; an ok date for RT-11
+     68	001762	005001 				clr	r1			; a bad date, so hose it
+     69	001764	000411 				br	80$			; and continue..
+     70
+     71	001766	011600 			70$:	mov	(sp)	,r0		; copy to..
+     72	001770	042700 	177637 			bic	#^c<100!40>,r0		; ..extract bits 6,5
+     73	001774	006300 				asl	r0			; shift them to bits 7,6
+     74	001776	000300 				swab	r0			; now they are the two hi bits
+     75	002000	042716 	177740 			bic	#^c<37>	,(sp)		; hose possible hi bits in here
+     76	002004	061601 				add	(sp)	,r1		; and add it into the date word
+     77	002006	050001 				bis	r0	,r1		; then insert year extension bits
+     78
+     79	002010	005726 			80$:	tst	(sp)+			; pop buffer
+     80	002012	012700 	000000G			mov	#lun.ou	,r0		; assume it's the output file
+     81	002016	006300 				asl	r0			; word indexing
+     82	002020	010160 	000000G			mov	r1	,date.a(r0)	; save date for use when closing file
+     83
+     84	002024					unsave	<r1>			; recover pointer to time string
+	002024	012601 				 mov	(sp)+	,r1
+     85	002026	105721 				tstb	(r1)+			; bump past space delimiter
+     86	002030	001452 				beq	100$			; no time supplied
+     87
+     88	002032	010103 				mov	r1	,r3		; now do time..  copy pointer
+     89	002034	004767 	000132 			call	gnum			; convert hours to integer
+     90	002040					mul	#<60.*20.>,r1		; and to 3-sec intervals
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 20-2
+Put create date/time where close can get them later ; /BBS/
+
+	002040	012746 	002260 			mov	#<60.*20.>	,-(sp)		; pass multiplier to p$mul
+	002044	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	002046	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	002052	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     91	002054	010146 				mov	r1	,-(sp)		; save them
+     92	002056	005203 				inc	r3			; bump past colon
+     93	002060	004767 	000106 			call	gnum			; convert mins to integer
+     94	002064					mul	#20.	,r1		; and to 3-sec intervals
+	002064	012746 	000024 			mov	#20.	,-(sp)		; pass multiplier to p$mul
+	002070	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	002072	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	002076	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     95	002100	010146 				mov	r1	,-(sp)		; save them
+     96	002102	005001 				clr	r1			; preset in case no seconds supplied
+     97	002104	122327 	000072 			cmpb	(r3)+	,#':		; if not a colon, there's no secs
+     98	002110	001013 				bne	90$			; done
+     99	002112	004767 	000054 			call	gnum			; convert secs to integer
+    100	002116	005000 				clr	r0			; prep for divide
+    101	002120					div	#3	,r0		; and to 3-sec intervals
+	002120	012746 	000003 			mov	#3	,-(sp)		; divisor
+	002124	010146 				mov	r1	,-(sp)		; dividend low word
+	002126	010046 				mov	r0	,-(sp)		; dividend high word
+	002130	004767 	000000G			call	p$div			; divide
+	002134	012601 				mov	(sp)+	,r1		; remainder
+	002136	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+    102	002140	062600 			90$:	add	(sp)+	,r0		; add in minutes data
+    103	002142	062600 				add	(sp)+	,r0		; add in hours data
+    104	002144	012701 	000000G			mov	#lun.ou	,r1		; assume it's the output file
+    105	002150	006301 				asl	r1			; word indexing
+    106	002152	010061 	000000G			mov	r0	,time.a(r1)	; save time for use when closing file
+    107	002156	005000 			100$:	clr	r0			; success
+    108	002160	000207 				return
+    109
+    110	002162	112120 			mov2b:	movb	(r1)+	,(r0)+		; move two bytes
+    111	002164	112120 				movb	(r1)+	,(r0)+
+    112	002166	105010 				clrb	(r0)			; null terminate
+    113	002170	000207 				return
+    114
+    115	002172	005001 			gnum:	clr	r1			; the answer  ; return the next number
+    116	002174	112300 			110$:	movb	(r3)+	,r0		; next char
+    117	002176	162700 	000072 			sub	#'9+1	,r0		; convert ascii byte
+    118	002202	062700 	000012 			add	#9.+1	,r0		; to an integer
+    119	002206	103010 				bcc	120$			; not a number
+    120	002210					mul	#10.	,r1		; bump accumulator by 10s
+	002210	012746 	000012 			mov	#10.	,-(sp)		; pass multiplier to p$mul
+	002214	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	002216	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	002222	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+    121	002224	060001 				add	r0	,r1		; add in result from this pass
+    122	002226	000762 				br	110$			; then try the next byte
+    123	002230	105743 			120$:	tstb	-(r3)			; park on first non-numeric byte
+    124	002232	000207 				return
+    125
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 21
+Put create date/time where close can get them later ; /BBS/
+
+      1
+      2						.sbttl	Put file protection code where close can get it later ; /BBS/
+      3
+      4	002234	012701 	000000G		rx.pro:	mov	#lun.ou	,r1		; assume output file
+      5	002240	006301 				asl	r1			; word indexing
+      6	002242	142767 	000345 	000002'		bicb	#<1!4!40!100!200>,curatr ; hose bits 0,2,5 and unused bits 6,7
+      7	002250	001403 				beq	10$
+      8	002252	005061 	000000G			clr	prot.a(r1)		; it's read-write
+      9	002256	000402 				br	20$
+     10	002260	010661 	000000G		10$:	mov	sp	,prot.a(r1)	; it's read-only
+     11	002264	005000 			20$:	clr	r0			; success
+     12	002266	000207 				return
+     13
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 22
+Put file protection code where close can get it later ; /BBS/
+
+      1
+      2						.sbttl	Received system type
+      3
+      4	002270	116767 	000002'	000000G	rx.sys:	movb	curatr	,at$sys		; save major vendor type
+      5	002276	116767 	000003'	000001G		movb	curatr+1,at$sys+1	; save the operating system type
+      6	002304	005000 				clr	r0			; success
+      7	002306	000207 				return
+      8
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 23
+Received system type
+
+      1
+      2						.sbttl	Receive system specific info
+      3
+      4	002310	004767 	000172 		rx.inf:	call	ispdp			; are we
+      5	002314	005700 				tst	r0			; compatible today?
+      6	002316	001422 				beq	10$			; no, ignore the system dep attr's
+      7	002320	012700 	000002'			mov	#curatr	,r0		; /BBS/ current attribute data
+      8	002324	122027 	000042 			cmpb	(r0)+	,#42		; /53/ file type subfunction?
+      9	002330	001015 				bne	10$			; /53/ no, ignore for now
+     10	002332	005767 	000000G			tst	doauto			; /BBS/ auto file type enabled?
+     11	002336	001412 				beq	10$			; /BBS/ no, ignore this stuff..
+     12	002340					scan	(r0)	,#rx$in0	; /63/ get IFAB file attributes data
+	002340	012746 	000072'			mov	#rx$in0	,-(sp)
+	002344	005046 				clr	-(sp)
+	002346	151016 				bisb	(r0)	,@sp
+	002350	004767 	000000G			call	scanch
+     13	002354	006300 				asl	r0			; /53/ word addressing
+     14	002356	016067 	000100'	000000G		mov	rx$in1(r0),image	; /63/ set it
+     15	002364	005000 			10$:	clr	r0
+     16	002366	000207 				return
+     17
+     18						.save
+     19	000072					.psect	$pdata
+     20	000072	   101 	   102 	   111 	rx$in0:	.byte	'A&137	,'B&137	,'I&137	,'N&137	; /63/ add "B" type
+     21	000076	   000 				.byte	0
+     22						.even
+     23	000100	000000 			rx$in1:	.word	TEXT			; if not in this list call it text
+     24	000102	000000 	000001 	000001 		.word	TEXT	,BINARY	,BINARY	,DECNAT
+     25	002370					.restore
+     26
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 24
+Receive system specific info
+
+      1
+      2						.sbttl	Exact file size in bytes (type "1")
+      3
+      4	002370	012705 	000002'		rx.xle:	mov	#curatr	,r5		; /49/ point to attribute save area
+      5	002374	005003 				clr	r3			; /49/ init the accumulator (low word)
+      6	002376	005002 				clr	r2			; /49/ double precision (high word)
+      7	002400	105715 			10$:	tstb	@r5			; /49/ EOL?
+      8	002402	001421 				beq	30$			; /49/ yep
+      9	002404	121527 	000040 			cmpb	@r5	,#space		; /49/ ignore leading spaces please
+     10	002410	001414 				beq	20$			; /49/ yes, a space
+     11	002412	012700 	000012 			mov	#12	,r0		; /49/ setup for call to $dmul
+     12	002416	004767 	000130 			call	$dmul			; /49/ do it please
+     13	002422	010002 				mov	r0	,r2		; /49/ restore accumulator values now
+     14	002424	010103 				mov	r1	,r3		; /49/ ditto...
+     15	002426	005046 				clr	-(sp)			; /49/ get the next digit please
+     16	002430	151516 				bisb	@r5	,@sp		; /BBS/ convert to decimal
+     17	002432	162716 	000060 			sub	#'0	,@sp		; /49/ got it
+     18	002436	062603 				add	(sp)+	,r3		; /49/ add in the current digit
+     19	002440	005502 				adc	r2			; /49/ add carry bit in also please
+     20	002442	005205 			20$:	inc	r5			; /49/ next ch please
+     21	002444	000755 				br	10$			; /49/ next please
+     22	002446				30$:	div	#1000	,r2		; /BBS/ convert to 512 byte blocks now
+	002446	012746 	001000 			mov	#1000	,-(sp)		; divisor
+	002452	010346 				mov	r3	,-(sp)
+	002454	010246 				mov	r2	,-(sp)
+	002456	004767 	000000G			call	p$div			; divide
+	002462	012603 				mov	(sp)+	,r3
+	002464	012602 				mov	(sp)+	,r2
+     23	002466	010267 	000000G			mov	r2	,at$len		; /49/ save it please
+     24	002472	005703 				tst	r3			; /BBS/ was there a remainder?
+     25	002474	001402 				beq	40$			; /49/ no, exit
+     26	002476	005267 	000000G			inc	at$len			; /49/ yes, len++
+     27	002502	005000 			40$:	clr	r0			; success
+     28	002504	000207 				return
+     29
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 25
+Exact file size in bytes (type "1")
+
+      1
+      2						.sbttl	Determine if other system is a PDP-11
+      3
+      4					;	I S P D P
+      5					;
+      6					;	output:	r0 = 5	other system running POS
+      7					;		     4	RT-11 or TSX+
+      8					;		     3	RSTS
+      9					;		     2	IAS
+     10					;		     1	RSX
+     11					;		     0	it's something else..
+     12
+     13		000070 				PD$RSX	= '8
+     14		000071 				PD$IAS	= '9
+     15		000101 				PD$RSTS	= 'A&137
+     16		000102 				PD$RT	= 'B&137		; includes TSX
+     17		000103 				PD$POS	= 'C&137
+     18
+     19	002506	005000 			ispdp:	clr	r0			; presume failure
+     20	002510	126727 	000000G	000104 		cmpb	at$sys	,#'D&137	; a DEC system?
+     21	002516	001007 				bne	10$			; no, exit
+     22	002520					scan	<at$sys+1>,#pdplst	; ya, determine operating system type
+	002520	012746 	000112'			mov	#pdplst	,-(sp)
+	002524	005046 				clr	-(sp)
+	002526	156716 	000001G			bisb	at$sys+1	,@sp
+	002532	004767 	000000G			call	scanch
+     23	002536	000207 			10$:	return
+     24
+     25						.save
+     26	000112					.psect	$pdata
+     27	000112	   070 	   071 	   101 	pdplst:	.byte	pd$rsx	,pd$ias	,pd$rsts,pd$rt	,pd$pos	,0
+     28						.even
+     29	002540					.restore
+     30
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 26
+Determine if other system is a PDP-11
+
+      1
+      2						.sbttl	Clear attributes
+      3
+      4	002540	005067 	000000G		clratr::clr	at$len			; clear the file length
+      5	002544	005067 	000000G			clr	at$sys			; clear the system type
+      6	002550	000207 				return
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 27
+Clear attributes
+
+      1
+      2						.sbttl	32-bit multiply from RSX SYSLIB.OLB
+      3
+      4	002552	010046 			$DMUL:	MOV	R0	,-(SP)
+      5	002554	005000 				CLR	R0
+      6	002556	005001 				CLR	R1
+      7	002560	005716 			10$:	TST	(SP)
+      8	002562	001410 				BEQ	30$
+      9	002564	006016 				ROR	(SP)
+     10	002566	103003 				BCC	20$
+     11	002570	060301 				ADD	R3	,R1
+     12	002572	005500 				ADC	R0
+     13	002574	060200 				ADD	R2	,R0
+     14	002576	006303 			20$:	ASL	R3
+     15	002600	006102 				ROL	R2
+     16	002602	000766 				BR	10$
+     17	002604	005726 			30$:	TST	(SP)+
+     18	002606	000207 				RETURN
+     19
+     20		000001 				.end
+KRTATR	Process attribute packe	MACRO V05.03b  00:01  Page 27-1
+Symbol table
+
+ALSIZE= 001000   	C.LSPA= 000010   	LOG$PA= 000001   	P.QBIN= 000006   	SN.XLE  000700R     002
+ATRCTX  000000RG    004	C.SSPA= 000020   	LOG$RP= 000004   	P.QCTL= 000005   	SOH   = 000001
+ATTRDS  000052R     003	C.TSPA= 000200   	LUN.OU= ****** GX	P.REPT= 000010   	SPACE = 000040
+ATTRTY  000042R     003	DATE.A= ****** GX	L$CVTN= ****** GX	P.SPSI= 000000   	SUCCS$= 000001
+AT$LEN= ****** GX	DAY.X   000202R     004	L$LEN = ****** GX	P.TIME= 000001   	TAB   = 000011
+AT$SYS= ****** GX	DAY.Y   000204R     004	MAXLNG= 001130   	P.VEND= 000017   	TERMIN  177777
+AT.ALL  000177   	DECNAT  000002   	MAXPAK  000136   	P.WIND= 000012   	TEXT    000000
+AT.CDT  000001   	DEL   = 000177   	MON.X   000210R     004	RTWORK= ****** GX	TILDE = 000176
+AT.INF  000002   	DOATTR= ****** GX	MON.Y   000212R     004	RX$IN0  000072R     003	TIME.A= ****** GX
+AT.LEN  000004   	DOAUTO= ****** GX	MOV2B   002162R     002	RX$IN1  000100R     003	TSXSAV= ****** GX
+AT.ON   100000   	DOT   = 000056   	NONEIS= 000001   	RX.CDT  001420R     002	TTY   = 000001
+AT.PRO  000010   	ERBFSI= 000170   	NOSCOP= 000000   	RX.INF  002310R     002	USERRB= 000053
+AT.RX   000016R     003	ERRBYT= 000052   	PAR$EV  000002   	RX.LEN  001256R     002	VT100 = 000002
+AT.SYS  000020   	ERROR$= 000004   	PAR$MA  000003   	RX.PRO  002234R     002	VT200 = 000003
+AT.TX   000020R     003	ESC   = 000033   	PAR$NO  000000   	RX.SYS  002270R     002	WARN$ = 000002
+AT.TYP  000040   	FATAL$= 000020   	PAR$OD  000001   	RX.TYP  001350R     002	WATT    000000R     003
+AT.XLE  000100   	FF    = 000014   	PAR$SP  000004   	RX.XLE  002370R     002	W$ATTR  000000RG    002
+BELL  = 000007   	GNUM    002172R     002	PDPLST  000112R     003	RX.$$   001252R     002	XBLOCK  000232R     004
+BINARY  000001   	IMAGE = ****** GX	PD$IAS= 000071   	R$ATTR  001022RG    002	XOFF  = 000023
+BS    = 000010   	ISPDP   002506R     002	PD$POS= 000103   	SCANCH= ****** GX	XON   = 000021
+CAPA.A= 000010   	I2TOA = ****** GX	PD$RST= 000101   	SCOLON= 000073   	YR.X    000236R     004
+CAPA.L= 000002   	I4TOA = ****** GX	PD$RSX= 000070   	SEVER$= 000010   	YR.Y    000240R     004
+CAPA.S= 000004   	JSW   = 000044   	PD$RT = 000102   	SIZBUF  000216R     004	$ALLSI= 001144
+CLRATR  002540RG    002	KRTINC= 000001   	PROT.A= ****** GX	SIZOF = ****** GX	$C    = 000005
+COMMA = 000054   	LF    = 000012   	P$DIV = ****** GX	SN$INF  000036R     003	$CDDMG= ****** GX
+CONPAR= ****** GX	LN$CNT= 000003   	P$MUL = ****** GX	SN.CDT  000400R     002	$DMUL   002552R     002
+CON$ES= 000034   	LN$MAX= 000120   	P.CAPA= 000011   	SN.END  000242R     002	$IMAGE= ****** GX
+CR    = 000015   	LOG$AL= 000003   	P.CHKT= 000007   	SN.INF  000352R     002	$$    = 000002
+CTRL$N= 000016   	LOG$CO= 000002   	P.EOL = 000004   	SN.LEN  000246R     002	$$SIZE= 000005
+CTRL$O= 000017   	LOG$DE= 000020   	P.MXL1= 000013   	SN.PRO  000200R     002	$$TYPE= 000001
+CURATR  000002R     004	LOG$IO= 000010   	P.MXL2= 000014   	SN.SYS  000122R     002	$$$0  = 000027
+C.CRLF= 000004   	LOG$ON= 040000   	P.NPAD= 000002   	SN.TYP  000144R     002	...V1 = 000003
+C.LCUC= 000040   	LOG$OP= 100000   	P.PADC= 000003
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	002610    002	(RO,I,LCL,REL,CON)
+$PDATA	000120    003	(RO,D,LCL,REL,CON)
+$RWDAT	000246    004	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 11
+Work  file writes: 15
+Size of work file: 13368 Words  ( 53 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.11
+KRTATR,KRTATR=KRTNHD,KRTATR

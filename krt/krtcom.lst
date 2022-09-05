@@ -1,0 +1,1515 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   1	KRTCDF	Define command macro
+   11-   2	Local data		; /63/ consolidate data here..
+   12-   3	Define the main_loop commands
+   13-   2	Define the REMOTE commands
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTCOM	Main_loop and REMOTE command lists overlay
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	consolidate local data..
+      7					;	add DAYTIME
+      8					;	allow CD, CWD and REMOTE CD, CWD to operate without an argument
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11
+     12					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     13					;
+     14					;	modify SHOW to work with null arg, as RT-11 does for devices
+     15					;	pull unused argtyp stuff
+     16
+     17					;	08-Mar-84  10:48:20  Brian Nelson
+     18					;	23-Oct-85  09:44:20  BDN	Break LOASET out for new overlay.
+     19					;
+     20					;	Copyright 1984 Change Software, Inc.
+     21					;
+     22					;	 Place the main command list in an overlay.
+     23					;	Call  LOACMD  to get the overlay loaded and
+     24					;	return the command list address in r0.  The
+     25					;	same thing is done for REMOTE commands by a
+     26					;	call to LOAREM.
+     27
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2						.include "IN:KRTCDF.MAC"
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 8
+KRTCDF	Define command macro
+
+      1						.sbttl	KRTCDF	Define command macro
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	modify optional prompt arg to use address of prompt string
+      7					;	allows longer strings to be used and eliminates redundancy
+      8					;	drop $CMGLOBAL
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	$$trip hack to avoid "ndf/df" tests blowing up .LST output
+     13
+     14					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     15					;
+     16					;	dump unused argtyp
+     17
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 9
+KRTCDF	Define command macro
+
+      1
+      2					;	usage example:
+      3					;
+      4					;	command	cmdlst	SEND ,3 ,c$send ,optional_prompt_addr
+      5					;
+      6					;	Would define the SEND command with a minimum length of
+      7					;	three characters, and dispatch it to c$send.  Use of a
+      8					;	prompt will cause  same  to appear when the command is
+      9					;	given without argument(s).  cmdlst is the listhead for
+     10					;	all commands and is  only  used once, but must be used
+     11					;	in all entries to keep other arguments in place.
+     12
+     13
+     14		000001 				KRTCDF	=  1			; used to detect an .include error
+     15		000004 				$LISTL	== 4			; number of args stuffed in list here
+     16		000000 				$$TRIP	=  0			; /62/ init trip counter
+     17
+     18						.macro	command	list ,name ,min ,address ,arg
+     19						.list me
+     20						.save
+     21						.nlist me
+     22						.if b <name>			; command name supplied this time?
+     23						.list me
+     24						.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of list
+     25						.nlist me
+     26						.word	0			; /62/ mark it with a null
+     27						.list me			; /63/
+     28						.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+     29						.even				; /63/ doing this at the end of a list
+     30						.nlist me			; /63/
+     31						$$trip	= 0			; /62/ reset trip counter for next cmd
+     32						.iff	; b <name>		; ya, process args into command data
+     33						.list me
+     34						.psect	cmdtxt	,ro,d,lcl,rel,con
+     35						.nlist me
+     36						$$name	= .
+     37						.asciz	#name#			; store the command name
+     38						.psect	cmddsp	,ro,d,lcl,rel,con
+     39						.nlist me
+     40						  .if eq $$trip			; /62/ if first pass label listhead
+     41					'list:					; global flag was not set
+     42						  $$trip = 1			; /62/ not first time through anymore
+     43						  .endc				; no
+     44						.word	$$name			; store address of command name text
+     45						.word	min			; min number of chars to match
+     46						.word	address			; the command routine's address
+     47						  .if b <arg>			; /63/ optional_prompt address given?
+     48						  .word	0			; /63/ no, say so with a null here
+     49						  .iff
+     50						  .word	arg			; /63/ ya, stuff in its location
+     51						  .endc
+     52						.endc	; b <name>
+     53						.list me
+     54						.restore
+     55						.nlist me
+     56						.endm
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 10
+KRTCDF	Define command macro
+
+      1						.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
+      2
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 11
+KRTCDF	Define command macro
+
+      1
+      2						.sbttl	Local data		; /63/ consolidate data here..
+      3
+      4	000000					.psect	$pdata
+      5	000000	   106 	   151 	   154 	com.01:	.asciz	"File: "
+      6	000007	   106 	   162 	   157 	com.02:	.asciz	"From: "
+      7	000016	   116 	   165 	   155 	com.03:	.asciz	"Number: "
+      8	000027	   123 	   171 	   155 	com.04:	.asciz	"Symbol or address: "
+      9	000053	   106 	   151 	   154 	com.05:	.asciz	"Files: "
+     10	000063	   103 	   157 	   155 	com.06:	.asciz	"Command: "
+     11	000075	   127 	   150 	   141 	com.07:	.asciz	"What: "
+     12	000104	   125 	   163 	   145 	com.08:	.asciz	"Username Password: "
+     13						.even
+     14
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12
+Local data		; /63/ consolidate data here..
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Define the main_loop commands
+      4
+      5	000000	012700 	000000'		loacmd::mov	#cmdlst	,r0		; calling this also loads this overlay
+      6	000004	000207 				return
+      7
+      8	000006					command	cmdlst	,@		,1	,c$take  ,com.01
+						.list me
+						.save
+						.list me
+	000000					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000000	   100 	   000 			.asciz	#@#			; store the command @
+	000000	000000'				.word	$$name			; store c$take of command @ text
+	000002	000001 				.word	1			; 1 number of chars to match
+	000004	000000G				.word	c$take			; the command routine's c$take
+	000006	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+      9	000006					command	cmdlst	,ASSIGN		,1	,c$assign
+						.list me
+						.save
+						.list me
+	000002					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000002	   101 	   123 	   123 		.asciz	#ASSIGN#			; store the command ASSIGN
+	000010	000002'				.word	$$name			; store c$assign of command ASSIGN text
+	000012	000001 				.word	1			; 1 number of chars to match
+	000014	000000G				.word	c$assign			; the command routine's c$assign
+	000016	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     10	000006					command	cmdlst	,BUG		,2	,c$bug
+						.list me
+						.save
+						.list me
+	000011					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000011	   102 	   125 	   107 		.asciz	#BUG#			; store the command BUG
+	000020	000011'				.word	$$name			; store c$bug of command BUG text
+	000022	000002 				.word	2			; 2 number of chars to match
+	000024	000000G				.word	c$bug			; the command routine's c$bug
+	000026	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     11	000006					command	cmdlst	,BYE		,2	,c$bye
+						.list me
+						.save
+						.list me
+	000015					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000015	   102 	   131 	   105 		.asciz	#BYE#			; store the command BYE
+	000030	000015'				.word	$$name			; store c$bye of command BYE text
+	000032	000002 				.word	2			; 2 number of chars to match
+	000034	000000G				.word	c$bye			; the command routine's c$bye
+	000036	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     12	000006					command	cmdlst	,CD		,2	,c$cwd   ; /63/ allow no dir
+						.list me
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-1
+Define the main_loop commands
+
+						.save
+						.list me
+	000021					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000021	   103 	   104 	   000 		.asciz	#CD#			; store the command CD
+	000040	000021'				.word	$$name			; store c$cwd of command CD text
+	000042	000002 				.word	2			; 2 number of chars to match
+	000044	000000G				.word	c$cwd			; the command routine's c$cwd
+	000046	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     13	000006					command	cmdlst	,CLS		,3	,c$cls
+						.list me
+						.save
+						.list me
+	000024					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000024	   103 	   114 	   123 		.asciz	#CLS#			; store the command CLS
+	000050	000024'				.word	$$name			; store c$cls of command CLS text
+	000052	000003 				.word	3			; 3 number of chars to match
+	000054	000000G				.word	c$cls			; the command routine's c$cls
+	000056	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     14	000006					command	cmdlst	,CLX		,3	,c$clx
+						.list me
+						.save
+						.list me
+	000030					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000030	   103 	   114 	   130 		.asciz	#CLX#			; store the command CLX
+	000060	000030'				.word	$$name			; store c$clx of command CLX text
+	000062	000003 				.word	3			; 3 number of chars to match
+	000064	000000G				.word	c$clx			; the command routine's c$clx
+	000066	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     15	000006					command	cmdlst	,CONNECT	,1	,c$conn
+						.list me
+						.save
+						.list me
+	000034					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000034	   103 	   117 	   116 		.asciz	#CONNECT#			; store the command CONNECT
+	000070	000034'				.word	$$name			; store c$conn of command CONNECT text
+	000072	000001 				.word	1			; 1 number of chars to match
+	000074	000000G				.word	c$conn			; the command routine's c$conn
+	000076	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     16	000006					command	cmdlst	,COPY		,3	,c$copy  ,com.02
+						.list me
+						.save
+						.list me
+	000044					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000044	   103 	   117 	   120 		.asciz	#COPY#			; store the command COPY
+	000100	000044'				.word	$$name			; store c$copy of command COPY text
+	000102	000003 				.word	3			; 3 number of chars to match
+	000104	000000G				.word	c$copy			; the command routine's c$copy
+	000106	000007'				  .word	com.02			; /63/ ya, stuff in its location
+						.list me
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-2
+Define the main_loop commands
+
+	000006					.restore
+     17	000006					command	cmdlst	,CWD		,2	,c$cwd   ; /63/ allow no dir
+						.list me
+						.save
+						.list me
+	000051					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000051	   103 	   127 	   104 		.asciz	#CWD#			; store the command CWD
+	000110	000051'				.word	$$name			; store c$cwd of command CWD text
+	000112	000002 				.word	2			; 2 number of chars to match
+	000114	000000G				.word	c$cwd			; the command routine's c$cwd
+	000116	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     18	000006					command	cmdlst	,DATE		,2	,sho$da
+						.list me
+						.save
+						.list me
+	000055					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000055	   104 	   101 	   124 		.asciz	#DATE#			; store the command DATE
+	000120	000055'				.word	$$name			; store sho$da of command DATE text
+	000122	000002 				.word	2			; 2 number of chars to match
+	000124	000000G				.word	sho$da			; the command routine's sho$da
+	000126	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     19	000006					command	cmdlst	,DAYTIME	,3	,sho$dy	; /63/
+						.list me
+						.save
+						.list me
+	000062					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000062	   104 	   101 	   131 		.asciz	#DAYTIME#			; store the command DAYTIME
+	000130	000062'				.word	$$name			; store sho$dy of command DAYTIME text
+	000132	000003 				.word	3			; 3 number of chars to match
+	000134	000000G				.word	sho$dy			; the command routine's sho$dy
+	000136	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     20	000006					command	cmdlst	,DELETE		,6	,c$del   ,com.01
+						.list me
+						.save
+						.list me
+	000072					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000072	   104 	   105 	   114 		.asciz	#DELETE#			; store the command DELETE
+	000140	000072'				.word	$$name			; store c$del of command DELETE text
+	000142	000006 				.word	6			; 6 number of chars to match
+	000144	000000G				.word	c$del			; the command routine's c$del
+	000146	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     21	000006					command	cmdlst	,DIAL		,3	,c$dial  ,com.03
+						.list me
+						.save
+						.list me
+	000101					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000101	   104 	   111 	   101 		.asciz	#DIAL#			; store the command DIAL
+	000150	000101'				.word	$$name			; store c$dial of command DIAL text
+	000152	000003 				.word	3			; 3 number of chars to match
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-3
+Define the main_loop commands
+
+	000154	000000G				.word	c$dial			; the command routine's c$dial
+	000156	000016'				  .word	com.03			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     22	000006					command	cmdlst	,DIRECTORY	,3	,c$dir
+						.list me
+						.save
+						.list me
+	000106					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000106	   104 	   111 	   122 		.asciz	#DIRECTORY#			; store the command DIRECTORY
+	000160	000106'				.word	$$name			; store c$dir of command DIRECTORY text
+	000162	000003 				.word	3			; 3 number of chars to match
+	000164	000000G				.word	c$dir			; the command routine's c$dir
+	000166	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     23	000006					command	cmdlst	,DISCONNECT	,4	,c$hang
+						.list me
+						.save
+						.list me
+	000120					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000120	   104 	   111 	   123 		.asciz	#DISCONNECT#			; store the command DISCONNECT
+	000170	000120'				.word	$$name			; store c$hang of command DISCONNECT text
+	000172	000004 				.word	4			; 4 number of chars to match
+	000174	000000G				.word	c$hang			; the command routine's c$hang
+	000176	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     24	000006					command	cmdlst	,DISMOUNT	,3	,c$dismou
+						.list me
+						.save
+						.list me
+	000133					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000133	   104 	   111 	   123 		.asciz	#DISMOUNT#			; store the command DISMOUNT
+	000200	000133'				.word	$$name			; store c$dismou of command DISMOUNT text
+	000202	000003 				.word	3			; 3 number of chars to match
+	000204	000000G				.word	c$dismou			; the command routine's c$dismou
+	000206	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     25	000006					command	cmdlst	,EXAMINE	,3	,c$exam  ,com.04 ; /63/
+						.list me
+						.save
+						.list me
+	000144					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000144	   105 	   130 	   101 		.asciz	#EXAMINE#			; store the command EXAMINE
+	000210	000144'				.word	$$name			; store c$exam of command EXAMINE text
+	000212	000003 				.word	3			; 3 number of chars to match
+	000214	000000G				.word	c$exam			; the command routine's c$exam
+	000216	000027'				  .word	com.04			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     26	000006					command	cmdlst	,EXIT		,2	,c$exit
+						.list me
+						.save
+						.list me
+	000154					.psect	cmdtxt	,ro,d,lcl,rel,con
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-4
+Define the main_loop commands
+
+	000154	   105 	   130 	   111 		.asciz	#EXIT#			; store the command EXIT
+	000220	000154'				.word	$$name			; store c$exit of command EXIT text
+	000222	000002 				.word	2			; 2 number of chars to match
+	000224	000000G				.word	c$exit			; the command routine's c$exit
+	000226	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     27	000006					command	cmdlst	,FINISH		,1	,c$fin
+						.list me
+						.save
+						.list me
+	000161					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000161	   106 	   111 	   116 		.asciz	#FINISH#			; store the command FINISH
+	000230	000161'				.word	$$name			; store c$fin of command FINISH text
+	000232	000001 				.word	1			; 1 number of chars to match
+	000234	000000G				.word	c$fin			; the command routine's c$fin
+	000236	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     28	000006					command	cmdlst	,GET		,1	,c$get   ,com.05
+						.list me
+						.save
+						.list me
+	000170					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000170	   107 	   105 	   124 		.asciz	#GET#			; store the command GET
+	000240	000170'				.word	$$name			; store c$get of command GET text
+	000242	000001 				.word	1			; 1 number of chars to match
+	000244	000000G				.word	c$get			; the command routine's c$get
+	000246	000053'				  .word	com.05			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     29	000006					command	cmdlst	,HANGUP		,2	,c$hang
+						.list me
+						.save
+						.list me
+	000174					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000174	   110 	   101 	   116 		.asciz	#HANGUP#			; store the command HANGUP
+	000250	000174'				.word	$$name			; store c$hang of command HANGUP text
+	000252	000002 				.word	2			; 2 number of chars to match
+	000254	000000G				.word	c$hang			; the command routine's c$hang
+	000256	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     30	000006					command	cmdlst	,HELP		,1	,c$help
+						.list me
+						.save
+						.list me
+	000203					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000203	   110 	   105 	   114 		.asciz	#HELP#			; store the command HELP
+	000260	000203'				.word	$$name			; store c$help of command HELP text
+	000262	000001 				.word	1			; 1 number of chars to match
+	000264	000000G				.word	c$help			; the command routine's c$help
+	000266	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     31	000006					command	cmdlst	,HOME		,2	,c$home
+						.list me
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-5
+Define the main_loop commands
+
+						.save
+						.list me
+	000210					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000210	   110 	   117 	   115 		.asciz	#HOME#			; store the command HOME
+	000270	000210'				.word	$$name			; store c$home of command HOME text
+	000272	000002 				.word	2			; 2 number of chars to match
+	000274	000000G				.word	c$home			; the command routine's c$home
+	000276	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     32	000006					command	cmdlst	,HPRINT		,2	,c$phlp
+						.list me
+						.save
+						.list me
+	000215					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000215	   110 	   120 	   122 		.asciz	#HPRINT#			; store the command HPRINT
+	000300	000215'				.word	$$name			; store c$phlp of command HPRINT text
+	000302	000002 				.word	2			; 2 number of chars to match
+	000304	000000G				.word	c$phlp			; the command routine's c$phlp
+	000306	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     33	000006					command	cmdlst	,LOGFILE	,3	,c$logf
+						.list me
+						.save
+						.list me
+	000224					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000224	   114 	   117 	   107 		.asciz	#LOGFILE#			; store the command LOGFILE
+	000310	000224'				.word	$$name			; store c$logf of command LOGFILE text
+	000312	000003 				.word	3			; 3 number of chars to match
+	000314	000000G				.word	c$logf			; the command routine's c$logf
+	000316	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     34	000006					command	cmdlst	,LOGOUT		,4	,c$bye
+						.list me
+						.save
+						.list me
+	000234					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000234	   114 	   117 	   107 		.asciz	#LOGOUT#			; store the command LOGOUT
+	000320	000234'				.word	$$name			; store c$bye of command LOGOUT text
+	000322	000004 				.word	4			; 4 number of chars to match
+	000324	000000G				.word	c$bye			; the command routine's c$bye
+	000326	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     35	000006					command	cmdlst	,MOUNT		,1	,c$mount
+						.list me
+						.save
+						.list me
+	000243					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000243	   115 	   117 	   125 		.asciz	#MOUNT#			; store the command MOUNT
+	000330	000243'				.word	$$name			; store c$mount of command MOUNT text
+	000332	000001 				.word	1			; 1 number of chars to match
+	000334	000000G				.word	c$mount			; the command routine's c$mount
+	000336	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-6
+Define the main_loop commands
+
+	000006					.restore
+     36	000006					command	cmdlst	,PRINT		,2	,c$print ,com.01
+						.list me
+						.save
+						.list me
+	000251					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000251	   120 	   122 	   111 		.asciz	#PRINT#			; store the command PRINT
+	000340	000251'				.word	$$name			; store c$print of command PRINT text
+	000342	000002 				.word	2			; 2 number of chars to match
+	000344	000000G				.word	c$print			; the command routine's c$print
+	000346	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     37	000006					command	cmdlst	,PWD		,2	,c$pwd
+						.list me
+						.save
+						.list me
+	000257					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000257	   120 	   127 	   104 		.asciz	#PWD#			; store the command PWD
+	000350	000257'				.word	$$name			; store c$pwd of command PWD text
+	000352	000002 				.word	2			; 2 number of chars to match
+	000354	000000G				.word	c$pwd			; the command routine's c$pwd
+	000356	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     38	000006					command	cmdlst	,QUIT		,1	,c$exit
+						.list me
+						.save
+						.list me
+	000263					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000263	   121 	   125 	   111 		.asciz	#QUIT#			; store the command QUIT
+	000360	000263'				.word	$$name			; store c$exit of command QUIT text
+	000362	000001 				.word	1			; 1 number of chars to match
+	000364	000000G				.word	c$exit			; the command routine's c$exit
+	000366	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     39	000006					command	cmdlst	,RECEIVE	,1	,c$rec
+						.list me
+						.save
+						.list me
+	000270					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000270	   122 	   105 	   103 		.asciz	#RECEIVE#			; store the command RECEIVE
+	000370	000270'				.word	$$name			; store c$rec of command RECEIVE text
+	000372	000001 				.word	1			; 1 number of chars to match
+	000374	000000G				.word	c$rec			; the command routine's c$rec
+	000376	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     40	000006					command	cmdlst	,REDIAL		,3	,c$redi
+						.list me
+						.save
+						.list me
+	000300					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000300	   122 	   105 	   104 		.asciz	#REDIAL#			; store the command REDIAL
+	000400	000300'				.word	$$name			; store c$redi of command REDIAL text
+	000402	000003 				.word	3			; 3 number of chars to match
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-7
+Define the main_loop commands
+
+	000404	000000G				.word	c$redi			; the command routine's c$redi
+	000406	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     41	000006					command	cmdlst	,REMOTE		,3	,c$rem   ,com.06
+						.list me
+						.save
+						.list me
+	000307					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000307	   122 	   105 	   115 		.asciz	#REMOTE#			; store the command REMOTE
+	000410	000307'				.word	$$name			; store c$rem of command REMOTE text
+	000412	000003 				.word	3			; 3 number of chars to match
+	000414	000000G				.word	c$rem			; the command routine's c$rem
+	000416	000063'				  .word	com.06			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     42	000006					command	cmdlst	,RENAME		,3	,c$rena  ,com.02
+						.list me
+						.save
+						.list me
+	000316					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000316	   122 	   105 	   116 		.asciz	#RENAME#			; store the command RENAME
+	000420	000316'				.word	$$name			; store c$rena of command RENAME text
+	000422	000003 				.word	3			; 3 number of chars to match
+	000424	000000G				.word	c$rena			; the command routine's c$rena
+	000426	000007'				  .word	com.02			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     43	000006					command	cmdlst	,SEND		,1	,c$send  ,com.05
+						.list me
+						.save
+						.list me
+	000325					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000325	   123 	   105 	   116 		.asciz	#SEND#			; store the command SEND
+	000430	000325'				.word	$$name			; store c$send of command SEND text
+	000432	000001 				.word	1			; 1 number of chars to match
+	000434	000000G				.word	c$send			; the command routine's c$send
+	000436	000053'				  .word	com.05			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     44	000006					command	cmdlst	,SERVER		,3	,c$serv
+						.list me
+						.save
+						.list me
+	000332					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000332	   123 	   105 	   122 		.asciz	#SERVER#			; store the command SERVER
+	000440	000332'				.word	$$name			; store c$serv of command SERVER text
+	000442	000003 				.word	3			; 3 number of chars to match
+	000444	000000G				.word	c$serv			; the command routine's c$serv
+	000446	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     45	000006					command	cmdlst	,SET		,3	,c$set   ,com.07
+						.list me
+						.save
+						.list me
+	000341					.psect	cmdtxt	,ro,d,lcl,rel,con
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-8
+Define the main_loop commands
+
+	000341	   123 	   105 	   124 		.asciz	#SET#			; store the command SET
+	000450	000341'				.word	$$name			; store c$set of command SET text
+	000452	000003 				.word	3			; 3 number of chars to match
+	000454	000000G				.word	c$set			; the command routine's c$set
+	000456	000075'				  .word	com.07			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     46	000006					command	cmdlst	,SHOW		,2	,c$show
+						.list me
+						.save
+						.list me
+	000345					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000345	   123 	   110 	   117 		.asciz	#SHOW#			; store the command SHOW
+	000460	000345'				.word	$$name			; store c$show of command SHOW text
+	000462	000002 				.word	2			; 2 number of chars to match
+	000464	000000G				.word	c$show			; the command routine's c$show
+	000466	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     47	000006					command	cmdlst	,SPACE		,2	,c$spac
+						.list me
+						.save
+						.list me
+	000352					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000352	   123 	   120 	   101 		.asciz	#SPACE#			; store the command SPACE
+	000470	000352'				.word	$$name			; store c$spac of command SPACE text
+	000472	000002 				.word	2			; 2 number of chars to match
+	000474	000000G				.word	c$spac			; the command routine's c$spac
+	000476	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     48	000006					command	cmdlst	,STATUS		,2	,c$stat
+						.list me
+						.save
+						.list me
+	000360					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000360	   123 	   124 	   101 		.asciz	#STATUS#			; store the command STATUS
+	000500	000360'				.word	$$name			; store c$stat of command STATUS text
+	000502	000002 				.word	2			; 2 number of chars to match
+	000504	000000G				.word	c$stat			; the command routine's c$stat
+	000506	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     49	000006					command	cmdlst	,TAKE		,2	,c$take  ,com.01
+						.list me
+						.save
+						.list me
+	000367					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000367	   124 	   101 	   113 		.asciz	#TAKE#			; store the command TAKE
+	000510	000367'				.word	$$name			; store c$take of command TAKE text
+	000512	000002 				.word	2			; 2 number of chars to match
+	000514	000000G				.word	c$take			; the command routine's c$take
+	000516	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     50	000006					command	cmdlst	,TIME		,2	,sho$ti
+						.list me
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-9
+Define the main_loop commands
+
+						.save
+						.list me
+	000374					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000374	   124 	   111 	   115 		.asciz	#TIME#			; store the command TIME
+	000520	000374'				.word	$$name			; store sho$ti of command TIME text
+	000522	000002 				.word	2			; 2 number of chars to match
+	000524	000000G				.word	sho$ti			; the command routine's sho$ti
+	000526	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000006					.restore
+     51	000006					command	cmdlst	,TRANSMIT	,2	,c$tran  ,com.01
+						.list me
+						.save
+						.list me
+	000401					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000401	   124 	   122 	   101 		.asciz	#TRANSMIT#			; store the command TRANSMIT
+	000530	000401'				.word	$$name			; store c$tran of command TRANSMIT text
+	000532	000002 				.word	2			; 2 number of chars to match
+	000534	000000G				.word	c$tran			; the command routine's c$tran
+	000536	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     52	000006					command	cmdlst	,TYPE		,2	,c$type  ,com.05
+						.list me
+						.save
+						.list me
+	000412					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000412	   124 	   131 	   120 		.asciz	#TYPE#			; store the command TYPE
+	000540	000412'				.word	$$name			; store c$type of command TYPE text
+	000542	000002 				.word	2			; 2 number of chars to match
+	000544	000000G				.word	c$type			; the command routine's c$type
+	000546	000053'				  .word	com.05			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     53	000006					command	cmdlst	,XMODEM		,1	,c$xmodem,com.01
+						.list me
+						.save
+						.list me
+	000417					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000417	   130 	   115 	   117 		.asciz	#XMODEM#			; store the command XMODEM
+	000550	000417'				.word	$$name			; store c$xmodem of command XMODEM text
+	000552	000001 				.word	1			; 1 number of chars to match
+	000554	000000G				.word	c$xmodem			; the command routine's c$xmodem
+	000556	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000006					.restore
+     54	000006					command	cmdlst
+						.list me
+						.save
+						.list me
+	000560					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of cmdlst
+	000560	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000426					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a cmdlst
+						.list me
+	000006					.restore
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 12-10
+Define the main_loop commands
+
+     55
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 13
+Define the main_loop commands
+
+      1
+      2						.sbttl	Define the REMOTE commands
+      3
+      4	000006	012700 	000562'		loarem::mov	#remlst	,r0		; calling this also loads this overlay
+      5	000012	000207 				return
+      6
+      7	000014					command	remlst	,CD		,2	,remcwd	 ; /63/ allow no dir
+						.list me
+						.save
+						.list me
+	000426					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000426	   103 	   104 	   000 		.asciz	#CD#			; store the command CD
+	000562	000426'				.word	$$name			; store remcwd of command CD text
+	000564	000002 				.word	2			; 2 number of chars to match
+	000566	000000G				.word	remcwd			; the command routine's remcwd
+	000570	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000014					.restore
+      8	000014					command	remlst	,COPY		,2	,rmtcop  ,com.02
+						.list me
+						.save
+						.list me
+	000431					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000431	   103 	   117 	   120 		.asciz	#COPY#			; store the command COPY
+	000572	000431'				.word	$$name			; store rmtcop of command COPY text
+	000574	000002 				.word	2			; 2 number of chars to match
+	000576	000000G				.word	rmtcop			; the command routine's rmtcop
+	000600	000007'				  .word	com.02			; /63/ ya, stuff in its location
+						.list me
+	000014					.restore
+      9	000014					command	remlst	,CWD		,2	,remcwd  ; /63/ allow no dir
+						.list me
+						.save
+						.list me
+	000436					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000436	   103 	   127 	   104 		.asciz	#CWD#			; store the command CWD
+	000602	000436'				.word	$$name			; store remcwd of command CWD text
+	000604	000002 				.word	2			; 2 number of chars to match
+	000606	000000G				.word	remcwd			; the command routine's remcwd
+	000610	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000014					.restore
+     10	000014					command	remlst	,DELETE		,6	,remdel  ,com.01
+						.list me
+						.save
+						.list me
+	000442					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000442	   104 	   105 	   114 		.asciz	#DELETE#			; store the command DELETE
+	000612	000442'				.word	$$name			; store remdel of command DELETE text
+	000614	000006 				.word	6			; 6 number of chars to match
+	000616	000000G				.word	remdel			; the command routine's remdel
+	000620	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000014					.restore
+     11	000014					command	remlst	,DIRECTORY	,2	,remdir
+						.list me
+						.save
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 13-1
+Define the REMOTE commands
+
+						.list me
+	000451					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000451	   104 	   111 	   122 		.asciz	#DIRECTORY#			; store the command DIRECTORY
+	000622	000451'				.word	$$name			; store remdir of command DIRECTORY text
+	000624	000002 				.word	2			; 2 number of chars to match
+	000626	000000G				.word	remdir			; the command routine's remdir
+	000630	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000014					.restore
+     12	000014					command	remlst	,HELP		,1	,remhlp
+						.list me
+						.save
+						.list me
+	000463					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000463	   110 	   105 	   114 		.asciz	#HELP#			; store the command HELP
+	000632	000463'				.word	$$name			; store remhlp of command HELP text
+	000634	000001 				.word	1			; 1 number of chars to match
+	000636	000000G				.word	remhlp			; the command routine's remhlp
+	000640	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000014					.restore
+     13	000014					command	remlst	,HOST		,2	,remhos  ,com.06
+						.list me
+						.save
+						.list me
+	000470					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000470	   110 	   117 	   123 		.asciz	#HOST#			; store the command HOST
+	000642	000470'				.word	$$name			; store remhos of command HOST text
+	000644	000002 				.word	2			; 2 number of chars to match
+	000646	000000G				.word	remhos			; the command routine's remhos
+	000650	000063'				  .word	com.06			; /63/ ya, stuff in its location
+						.list me
+	000014					.restore
+     14	000014					command	remlst	,LOGIN		,1	,remlgi  ,com.08
+						.list me
+						.save
+						.list me
+	000475					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000475	   114 	   117 	   107 		.asciz	#LOGIN#			; store the command LOGIN
+	000652	000475'				.word	$$name			; store remlgi of command LOGIN text
+	000654	000001 				.word	1			; 1 number of chars to match
+	000656	000000G				.word	remlgi			; the command routine's remlgi
+	000660	000104'				  .word	com.08			; /63/ ya, stuff in its location
+						.list me
+	000014					.restore
+     15	000014					command	remlst	,RENAME		,1	,rmtren  ,com.02
+						.list me
+						.save
+						.list me
+	000503					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000503	   122 	   105 	   116 		.asciz	#RENAME#			; store the command RENAME
+	000662	000503'				.word	$$name			; store rmtren of command RENAME text
+	000664	000001 				.word	1			; 1 number of chars to match
+	000666	000000G				.word	rmtren			; the command routine's rmtren
+	000670	000007'				  .word	com.02			; /63/ ya, stuff in its location
+						.list me
+	000014					.restore
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 13-2
+Define the REMOTE commands
+
+     16	000014					command	remlst	,SPACE		,1	,remspa
+						.list me
+						.save
+						.list me
+	000512					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000512	   123 	   120 	   101 		.asciz	#SPACE#			; store the command SPACE
+	000672	000512'				.word	$$name			; store remspa of command SPACE text
+	000674	000001 				.word	1			; 1 number of chars to match
+	000676	000000G				.word	remspa			; the command routine's remspa
+	000700	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000014					.restore
+     17	000014					command	remlst	,TYPE		,1	,remtyp  ,com.01
+						.list me
+						.save
+						.list me
+	000520					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000520	   124 	   131 	   120 		.asciz	#TYPE#			; store the command TYPE
+	000702	000520'				.word	$$name			; store remtyp of command TYPE text
+	000704	000001 				.word	1			; 1 number of chars to match
+	000706	000000G				.word	remtyp			; the command routine's remtyp
+	000710	000000'				  .word	com.01			; /63/ ya, stuff in its location
+						.list me
+	000014					.restore
+     18	000014					command	remlst	,WHO		,1	,remwho
+						.list me
+						.save
+						.list me
+	000525					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000525	   127 	   110 	   117 		.asciz	#WHO#			; store the command WHO
+	000712	000525'				.word	$$name			; store remwho of command WHO text
+	000714	000001 				.word	1			; 1 number of chars to match
+	000716	000000G				.word	remwho			; the command routine's remwho
+	000720	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	000014					.restore
+     19	000014					command	remlst
+						.list me
+						.save
+						.list me
+	000722					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of remlst
+	000722	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000531					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a remlst
+						.list me
+	000014					.restore
+     20
+     21		000001 				.end
+KRTCOM	Main_loop and REMOTE co	MACRO V05.03b  00:01  Page 13-3
+Symbol table
+
+ALSIZE= 001000   	C$BYE = ****** GX	C$STAT= ****** GX	LOG$ON= 040000   	REMHOS= ****** GX
+AT.ALL  000177   	C$CLS = ****** GX	C$TAKE= ****** GX	LOG$OP= 100000   	REMLGI= ****** GX
+AT.CDT  000001   	C$CLX = ****** GX	C$TRAN= ****** GX	LOG$PA= 000001   	REMLST  000562R     005
+AT.INF  000002   	C$CONN= ****** GX	C$TYPE= ****** GX	LOG$RP= 000004   	REMSPA= ****** GX
+AT.LEN  000004   	C$COPY= ****** GX	C$XMOD= ****** GX	MAXLNG= 001130   	REMTYP= ****** GX
+AT.ON   100000   	C$CWD = ****** GX	C.CRLF= 000004   	MAXPAK  000136   	REMWHO= ****** GX
+AT.PRO  000010   	C$DEL = ****** GX	C.LCUC= 000040   	NONEIS= 000001   	RMTCOP= ****** GX
+AT.SYS  000020   	C$DIAL= ****** GX	C.LSPA= 000010   	NOSCOP= 000000   	RMTREN= ****** GX
+AT.TYP  000040   	C$DIR = ****** GX	C.SSPA= 000020   	PAR$EV  000002   	SCOLON= 000073
+AT.XLE  000100   	C$DISM= ****** GX	C.TSPA= 000200   	PAR$MA  000003   	SEVER$= 000010
+BELL  = 000007   	C$EXAM= ****** GX	DECNAT  000002   	PAR$NO  000000   	SHO$DA= ****** GX
+BINARY  000001   	C$EXIT= ****** GX	DEL   = 000177   	PAR$OD  000001   	SHO$DY= ****** GX
+BS    = 000010   	C$FIN = ****** GX	DOT   = 000056   	PAR$SP  000004   	SHO$TI= ****** GX
+CAPA.A= 000010   	C$GET = ****** GX	ERBFSI= 000170   	P.CAPA= 000011   	SOH   = 000001
+CAPA.L= 000002   	C$HANG= ****** GX	ERRBYT= 000052   	P.CHKT= 000007   	SPACE = 000040
+CAPA.S= 000004   	C$HELP= ****** GX	ERROR$= 000004   	P.EOL = 000004   	SUCCS$= 000001
+CMDLST  000000R     005	C$HOME= ****** GX	ESC   = 000033   	P.MXL1= 000013   	TAB   = 000011
+COMMA = 000054   	C$LOGF= ****** GX	FATAL$= 000020   	P.MXL2= 000014   	TERMIN  177777
+COM.01  000000R     003	C$MOUN= ****** GX	FF    = 000014   	P.NPAD= 000002   	TEXT    000000
+COM.02  000007R     003	C$PHLP= ****** GX	JSW   = 000044   	P.PADC= 000003   	TILDE = 000176
+COM.03  000016R     003	C$PRIN= ****** GX	KRTCDF= 000001   	P.QBIN= 000006   	TTY   = 000001
+COM.04  000027R     003	C$PWD = ****** GX	KRTINC= 000001   	P.QCTL= 000005   	USERRB= 000053
+COM.05  000053R     003	C$REC = ****** GX	LF    = 000012   	P.REPT= 000010   	VT100 = 000002
+COM.06  000063R     003	C$REDI= ****** GX	LN$CNT= 000003   	P.SPSI= 000000   	VT200 = 000003
+COM.07  000075R     003	C$REM = ****** GX	LN$MAX= 000120   	P.TIME= 000001   	WARN$ = 000002
+COM.08  000104R     003	C$RENA= ****** GX	LOACMD  000000RG    002	P.VEND= 000017   	XOFF  = 000023
+CON$ES= 000034   	C$SEND= ****** GX	LOAREM  000006RG    002	P.WIND= 000012   	XON   = 000021
+CR    = 000015   	C$SERV= ****** GX	LOG$AL= 000003   	REMCWD= ****** GX	$ALLSI= 001144
+CTRL$N= 000016   	C$SET = ****** GX	LOG$CO= 000002   	REMDEL= ****** GX	$LISTL= 000004 G
+CTRL$O= 000017   	C$SHOW= ****** GX	LOG$DE= 000020   	REMDIR= ****** GX	$$NAME= 000525R     004
+C$ASSI= ****** GX	C$SPAC= ****** GX	LOG$IO= 000010   	REMHLP= ****** GX	$$TRIP= 000000
+C$BUG = ****** GX
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	000014    002	(RO,I,LCL,REL,CON)
+$PDATA	000130    003	(RO,D,LCL,REL,CON)
+CMDTXT	000532    004	(RO,D,LCL,REL,CON)
+CMDDSP	000724    005	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 1
+Size of work file: 12572 Words  ( 50 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.44
+KRTCOM,KRTCOM=KRTNHD,KRTCOM

@@ -1,0 +1,170 @@
+===contents of nick.ini===
+set cpu 11/23+ 256K
+attach LPT lpt.txt
+
+# dl0:
+set rl0 writeenabled
+set rl0 rl02
+attach rl0 rl0.dsk
+set rl0 badblock
+
+# dl1:
+set rl1 writeenabled
+set rl1 rl02
+attach rl1 nick.dsk
+set rl1 badblock
+
+# mt0:
+set tm0 enabled
+attach tm0 nick.tap
+
+#set debug stderr
+#set tm debug=data;str
+
+boot rl0
+======
+
+===session to build krt.sav===
+nick@jane:~/rt-11$ ./pdp11 nick.ini
+
+PDP-11 simulator V4.0-0 Current        git commit id: d862d024
+/home/nick/rt-11/nick.ini-7> attach rl0 rl0.dsk
+%SIM-INFO: RL0: 'rl0.dsk' Contains RT11 partitions
+%SIM-INFO: 1 valid partition, Type: V05, Sectors On Disk: 20450
+Overwrite last track? [N]
+/home/nick/rt-11/nick.ini-13> attach rl1 nick.dsk
+%SIM-INFO: RL1: 'nick.dsk' Contains RT11 partitions
+%SIM-INFO: 1 valid partition, Type: V05, Sectors On Disk: 20450
+Overwrite last track? [N]
+/home/nick/rt-11/nick.ini-18> attach tm0 nick.tap
+%SIM-INFO: TM0: Tape Image 'nick.tap' scanned as SIMH format
+
+RT-11FB  V05.03  
+
+.TYPE V5USER.TXT
+
+                              RT-11 V5.3
+
+       Installation of RT-11 Version 5.3 is complete and you are now
+    executing from the working volume    (provided you have used the
+    automatic installation procedure). DIGITAL recommends you verify
+    the correct  operation  of  your  system's  software  using  the
+    verification procedure.  To do this, enter the command:
+
+                             IND VERIFY
+
+        Note that VERIFY should be performed  only after the distri-
+    bution media have been backed up.  This was accomplished as part
+    of automatic installation on  all  RL02,  RX02,  TK50, and  RX50
+    based systems,   including the  MicroPDP-11 and the Professional
+    300.  If you have not completed automatic installation, you must
+    perform a manual backup before using VERIFY.  Note also,  VERIFY
+    is NOT supported on RX01 diskettes,    DECtape I or II,   or the
+    Professional 325.
+
+    DIGITAL also  recommends  you  read  the  file V5NOTE.TXT, which
+    contains information  formalized too late to be included  in the
+    Release Notes.  V5NOTE.TXT can be TYPED or PRINTED.
+
+
+.del/noquery dl1:*.*
+
+.ass dl1 dk
+
+.pip
+**.*=MT0:*.*
+*^C
+
+.@krtasm.non
+
+.ass dk in
+
+.r macro
+*krtatr,krtatr=krtnhd,krtatr
+*krtcmd,krtcmd=krtnhd,krtcmd
+*krtcm1,krtcm1=krtnhd,krtcm1
+*krtcom,krtcom=krtnhd,krtcom
+*krtcon,krtcon=krtnhd,krtcon
+*krtcvt,krtcvt=krtnhd,krtcvt
+*krtdat,krtdat=krtnhd,krtdat
+*krtdeb,krtdeb=krtnhd,krtdeb
+*krtdia,krtdia=krtnhd,krtdia
+*krtdir,krtdir=krtnhd,krtdir
+*krtdsp,krtdsp=krtnhd,krtdsp
+*krtedi,krtedi=krtnhd,krtedi
+*krterm,krterm=krtnhd,krterm
+*krterr,krterr=krtnhd,krterr
+*krthlp,krthlp=krtnhd,krthlp
+*krtidx,krtidx=krtnhd,krtidx
+*krtini,krtini=krtnhd,krtini
+*krtmdm,krtmdm=krtnhd,krtmdm
+*krtosi,krtosi=krtnhd,krtosi
+*krtpak,krtpak=krtnhd,krtpak
+*krtrec,krtrec=krtnhd,krtrec
+*krtrms,krtrms=krtnhd,krtrms
+*krtsen,krtsen=krtnhd,krtsen
+*krtser,krtser=krtnhd,krtser
+*krtsho,krtsho=krtnhd,krtsho
+*krtsj,krtsj=krtnhd,krtsj
+*krtstd,krtstd=krtnhd,krtstd
+*krtst0,krtst0=krtnhd,krtst0
+*krtst1,krtst1=krtnhd,krtst1
+*krtsub,krtsub=krtnhd,krtsub
+*krttra,krttra=krtnhd,krttra
+*krtutl,krtutl=krtnhd,krtutl
+*krtxl,krtxl=krtnhd,krtxl
+*krtxm,krtxm=krtnhd,krtxm
+*krtxmo,krtxmo=krtnhd,krtxmo
+*^C
+
+.@krt
+
+.r link
+*krt,krt=krtsj,krtpak/t//
+*krtdat
+*krtrms
+*krtdsp
+*krtcmd
+*krtsub
+*krterm/o:1
+*krtxl/o:1
+*krtcm1/o:2
+*krtosi/o:2
+*krtsen/o:2
+*krtrec/o:2
+*krthlp/o:2
+*krtdia/o:3
+*krtst0/o:3
+*krtxmo
+*krtst1/o:3
+*krtcon
+*krttra
+*krtsho/o:3
+*krtidx/o:3
+*krtser/o:3
+*krtdeb
+*krtini/o:4
+*krtatr/o:4
+*krtstd
+*krtdir/o:4
+*krtedi/o:4
+*krtcom
+*krtutl/o:4
+*krtcvt
+*krterr/o:4
+*krtmdm/o:4
+*//
+Transfer symbol? fbstart
+*^C
+
+.pip
+*MT0:KRT.SAV=KRT.SAV
+*MT0:KRT1.MAP=KRT.MAP
+*MT0:*.LST=*.LST
+*^C
+
+.
+Simulation stopped, PC: 152472 (MOV #201,R4)
+sim> quit
+Goodbye
+======

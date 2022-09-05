@@ -1,0 +1,1413 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   2	Local data		; /63/ consolidate here..
+    9-   2	BINARY-TYPES default list
+   10-   2	Generate character class table for file name state parsing
+   11-   2	NAMCVT state transition table
+   12-   3	Parse file specification to extract only filnam.typ
+   12-  53	Action routines for the file name parser
+   13-   2	Check file extent to determine its type
+   14-   2	Init BINARY-TYPES list
+   15-   2	Convert invalid characters to something reasonable
+   16-   2	Convert strings ala abcde<15> or abcde\015 to binary format
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTCVT	File name and misc data conversions
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	fixfil now fixes unix leading dot ".file" names, also ".x.", etc.
+      7					;	cleaned up chkext
+      8					;	move unfmts to KRTSUB so KRTMDM can use this overlay ...
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	increase size of fixfil stack buffer to SVID limit
+     13
+     14					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     15					;
+     16					;	added useful RT-11/TSX+ binary file types
+     17					;	modified chkext to handle file types of less than 3 chars
+     18					;	fixfil - parse a device name in filespec, fixed termination bug
+     19					;	namcvt now catches unix "/" and pc "\" directory delimiters
+     20					;	namcvt fixed to not output a "." on a null input file name
+     21
+     22					;	Copyright 1984 Change Software, Inc.
+     23					;
+     24					;	20-Mar-84  11:31:06 Brian Nelson
+     25					;
+     26					;	 Attempt to parse filespecifications that may include DECNET
+     27					;	remote node name and  directories  in  a  manner  compatible
+     28					;	with RSTS, RSX and RT-11.
+     29					;
+     30					;	 This was  first  implemented using the host executives file
+     31					;	name parsing services, ie for RSTS using the .FSS  directive
+     32					;	and   for   RSX   using   CSI   and   .PARSE   to   get  the
+     33					;	filespecification converted into rad50 and  then  converting
+     34					;	back  to  ascii.  The  problem with doing it that way, apart
+     35					;	from being a hack, is that we could not process DECNET  node
+     36					;	file  specifications  as the format of remote file names can
+     37					;	never be expected to be compatible  with  the  host  system.
+     38					;	Bob  Denny  wrote  a  new  one  for  RSX  which avoided this
+     39					;	problem,  and  this  version  should  work  on   all  PDP-11
+     40					;	operating systems.
+     41					;
+     42					;	 This  is implemented using a  transition state table driver
+     43					;	thus allowing simple modification to accommodate the various
+     44					;	types of node file names that may come up in the future.
+     45					;
+     46					;	 For the time being this routine will be placed in the over-
+     47					;	lay region  ERRDVR, since  as of now it is  only called from
+     48					;	KRTPAK and then only once for  each file send  to the remote
+     49					;	system or micro.
+     50
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3
+      4						.macro	chtype	ch ,val		; /62/ work around "n/df" hosing .LST
+      5						.if nb	ch
+      6						. = chtype+ch			; put in the buffer, according to its
+      7						.byte	val			; ascii value as an offset into it
+      8						.iff
+      9						. = chtype+128.			; /63/ if no args, restore pc
+     10						.endc
+     11						.endm	chtype
+     12
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 8
+Utility macros
+
+      1
+      2						.sbttl	Local data		; /63/ consolidate here..
+      3
+      4	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+      5	000000	   000 	   000 	   000 	chkbuf:	.byte	0 ,0 ,0 ,0 ,0 ,0	; /BBS/ buff to pad extents <3 chars
+      6
+      7	000000					.psect	$pdata
+      8	000000	   130 			defchr:	.byte	'X&137			; replace any bad name char with this
+      9	000001	   060 	   061 	   062 	okchr:	.asciz	"0123456789.:ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; /BBS/ allow device
+     10						.even				; /E64/ just in case
+     11
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 9
+Local data		; /63/ consolidate here..
+
+      1
+      2						.sbttl	BINARY-TYPES default list
+      3						.dsabl	lc			; binl data MUST be UPPER case
+      4
+      5					; /BBS/ SPACE-PAD TO FOUR BYTES IF FILE TYPE IS LESS THAN FOUR BYTES..
+      6
+      7	000050	   056 	   102 	   101 	BINL:	.ASCII	".BAC"			; COMPILED BASIC FILES
+      8	000054	   056 	   102 	   101 		.ASCII	".BAX"			; /BBS/ DOUBLE PRECISION .BAC FILES
+      9	000060	   056 	   102 	   111 		.ASCII	".BIN"			; XXDP
+     10	000064	   056 	   102 	   117 		.ASCII	".BOT"			; /BBS/ RT-11 BOOT FILES
+     11	000070	   056 	   102 	   125 		.ASCII	".BUP"			; /62/ BACKUP FILES
+     12	000074	   056 	   103 	   101 		.ASCII	".CAL"			; /62/ SPREADSHEET FILES
+     13	000100	   056 	   103 	   122 		.ASCII	".CRF"			; LINK CROSS REFERENCE FILES
+     14	000104	   056 	   104 	   105 		.ASCII	".DEV"			; /BBS/ OLD LOGICAL DISK FILE
+     15	000110	   056 	   104 	   123 		.ASCII	".DSK"			; /BBS/ LOGICAL DISK FILE
+     16	000114	   056 	   105 	   130 		.ASCII	".EXE"			; EXECUTABLE IMAGE ONLY, NO DATA
+     17	000120	   056 	   114 	   104 		.ASCII	".LDA"			; /62/ ABSOLUTE LOAD ADDRESS IMAGES
+     18	000124	   056 	   115 	   114 		.ASCII	".MLB"			; MACRO LIBRARIES
+     19	000130	   056 	   117 	   102 		.ASCII	".OBJ"			; MACRO OUTPUT FILES
+     20	000134	   056 	   122 	   105 		.ASCII	".REL"			; /BBS/ RT-11 RELOCATABLE PROGRAMS
+     21	000140	   056 	   122 	   124 		.ASCII	".RTS"			; TSX+ RUN TIME SYSTEMS
+     22	000144	   056 	   123 	   101 		.ASCII	".SAV"			; RT-11 SAVED IMAGES
+     23	000150	   056 	   123 	   115 		.ASCII	".SML"			; SYSTEM MACRO LIBS
+     24	000154	   056 	   123 	   124 		.ASCII	".STB"			; LINK SYMBOL TABLES
+     25	000160	   056 	   123 	   131 		.ASCII	".SYS"			; RT-11 MONITORS, DRIVERS
+     26	000164	   056 	   124 	   123 		.ASCII	".TSX"			; /BBS/ TSX+ SYSTEM FILES
+     27	000170	   000 				.BYTE	0			; /BBS/ END OF IT ALL
+     28						.EVEN
+     29						.ENABL	LC			; /BBS/ RESTORE
+     30
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 10
+BINARY-TYPES default list
+
+      1
+      2						.sbttl	Generate character class table for file name state parsing
+      3
+      4					;	  character    class	  operation	/63/ commented for clarity..
+      5					;	  ---------    -----	  ---------
+      6					;	     other	 0	  ignore, skip past adding nothing to output
+      7					;	      nul	 1	  input string termination chars, must exit
+      8					;	     < ( [	 2	  start of a dircetory, ppn or uic
+      9					;	     > ) ]	 3	  end of a dircetory, ppn or uic
+     10					;	     : / \	 4	  end of a device, directory or node
+     11					;	      dot	 5	  part of a directory or file name
+     12					;	     comma	 6	  part of a ppn or uic
+     13					;	alpha-numeric	 7	  any char that's ok in directory or file name
+     14
+     15	000172	000200 			chtype:	.rept	128.		; doing ascii 0. through 127.
+     16						.byte		 0	; init everything to being ignored
+     17						.endr
+	000172	   000 				.byte		 0	; init everything to being ignored
+	000173	   000 				.byte		 0	; init everything to being ignored
+	000174	   000 				.byte		 0	; init everything to being ignored
+	000175	   000 				.byte		 0	; init everything to being ignored
+	000176	   000 				.byte		 0	; init everything to being ignored
+	000177	   000 				.byte		 0	; init everything to being ignored
+	000200	   000 				.byte		 0	; init everything to being ignored
+	000201	   000 				.byte		 0	; init everything to being ignored
+	000202	   000 				.byte		 0	; init everything to being ignored
+	000203	   000 				.byte		 0	; init everything to being ignored
+	000204	   000 				.byte		 0	; init everything to being ignored
+	000205	   000 				.byte		 0	; init everything to being ignored
+	000206	   000 				.byte		 0	; init everything to being ignored
+	000207	   000 				.byte		 0	; init everything to being ignored
+	000210	   000 				.byte		 0	; init everything to being ignored
+	000211	   000 				.byte		 0	; init everything to being ignored
+	000212	   000 				.byte		 0	; init everything to being ignored
+	000213	   000 				.byte		 0	; init everything to being ignored
+	000214	   000 				.byte		 0	; init everything to being ignored
+	000215	   000 				.byte		 0	; init everything to being ignored
+	000216	   000 				.byte		 0	; init everything to being ignored
+	000217	   000 				.byte		 0	; init everything to being ignored
+	000220	   000 				.byte		 0	; init everything to being ignored
+	000221	   000 				.byte		 0	; init everything to being ignored
+	000222	   000 				.byte		 0	; init everything to being ignored
+	000223	   000 				.byte		 0	; init everything to being ignored
+	000224	   000 				.byte		 0	; init everything to being ignored
+	000225	   000 				.byte		 0	; init everything to being ignored
+	000226	   000 				.byte		 0	; init everything to being ignored
+	000227	   000 				.byte		 0	; init everything to being ignored
+	000230	   000 				.byte		 0	; init everything to being ignored
+	000231	   000 				.byte		 0	; init everything to being ignored
+	000232	   000 				.byte		 0	; init everything to being ignored
+	000233	   000 				.byte		 0	; init everything to being ignored
+	000234	   000 				.byte		 0	; init everything to being ignored
+	000235	   000 				.byte		 0	; init everything to being ignored
+	000236	   000 				.byte		 0	; init everything to being ignored
+	000237	   000 				.byte		 0	; init everything to being ignored
+	000240	   000 				.byte		 0	; init everything to being ignored
+	000241	   000 				.byte		 0	; init everything to being ignored
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 10-1
+Generate character class table for file name state parsing
+
+	000242	   000 				.byte		 0	; init everything to being ignored
+	000243	   000 				.byte		 0	; init everything to being ignored
+	000244	   000 				.byte		 0	; init everything to being ignored
+	000245	   000 				.byte		 0	; init everything to being ignored
+	000246	   000 				.byte		 0	; init everything to being ignored
+	000247	   000 				.byte		 0	; init everything to being ignored
+	000250	   000 				.byte		 0	; init everything to being ignored
+	000251	   000 				.byte		 0	; init everything to being ignored
+	000252	   000 				.byte		 0	; init everything to being ignored
+	000253	   000 				.byte		 0	; init everything to being ignored
+	000254	   000 				.byte		 0	; init everything to being ignored
+	000255	   000 				.byte		 0	; init everything to being ignored
+	000256	   000 				.byte		 0	; init everything to being ignored
+	000257	   000 				.byte		 0	; init everything to being ignored
+	000260	   000 				.byte		 0	; init everything to being ignored
+	000261	   000 				.byte		 0	; init everything to being ignored
+	000262	   000 				.byte		 0	; init everything to being ignored
+	000263	   000 				.byte		 0	; init everything to being ignored
+	000264	   000 				.byte		 0	; init everything to being ignored
+	000265	   000 				.byte		 0	; init everything to being ignored
+	000266	   000 				.byte		 0	; init everything to being ignored
+	000267	   000 				.byte		 0	; init everything to being ignored
+	000270	   000 				.byte		 0	; init everything to being ignored
+	000271	   000 				.byte		 0	; init everything to being ignored
+	000272	   000 				.byte		 0	; init everything to being ignored
+	000273	   000 				.byte		 0	; init everything to being ignored
+	000274	   000 				.byte		 0	; init everything to being ignored
+	000275	   000 				.byte		 0	; init everything to being ignored
+	000276	   000 				.byte		 0	; init everything to being ignored
+	000277	   000 				.byte		 0	; init everything to being ignored
+	000300	   000 				.byte		 0	; init everything to being ignored
+	000301	   000 				.byte		 0	; init everything to being ignored
+	000302	   000 				.byte		 0	; init everything to being ignored
+	000303	   000 				.byte		 0	; init everything to being ignored
+	000304	   000 				.byte		 0	; init everything to being ignored
+	000305	   000 				.byte		 0	; init everything to being ignored
+	000306	   000 				.byte		 0	; init everything to being ignored
+	000307	   000 				.byte		 0	; init everything to being ignored
+	000310	   000 				.byte		 0	; init everything to being ignored
+	000311	   000 				.byte		 0	; init everything to being ignored
+	000312	   000 				.byte		 0	; init everything to being ignored
+	000313	   000 				.byte		 0	; init everything to being ignored
+	000314	   000 				.byte		 0	; init everything to being ignored
+	000315	   000 				.byte		 0	; init everything to being ignored
+	000316	   000 				.byte		 0	; init everything to being ignored
+	000317	   000 				.byte		 0	; init everything to being ignored
+	000320	   000 				.byte		 0	; init everything to being ignored
+	000321	   000 				.byte		 0	; init everything to being ignored
+	000322	   000 				.byte		 0	; init everything to being ignored
+	000323	   000 				.byte		 0	; init everything to being ignored
+	000324	   000 				.byte		 0	; init everything to being ignored
+	000325	   000 				.byte		 0	; init everything to being ignored
+	000326	   000 				.byte		 0	; init everything to being ignored
+	000327	   000 				.byte		 0	; init everything to being ignored
+	000330	   000 				.byte		 0	; init everything to being ignored
+	000331	   000 				.byte		 0	; init everything to being ignored
+	000332	   000 				.byte		 0	; init everything to being ignored
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 10-2
+Generate character class table for file name state parsing
+
+	000333	   000 				.byte		 0	; init everything to being ignored
+	000334	   000 				.byte		 0	; init everything to being ignored
+	000335	   000 				.byte		 0	; init everything to being ignored
+	000336	   000 				.byte		 0	; init everything to being ignored
+	000337	   000 				.byte		 0	; init everything to being ignored
+	000340	   000 				.byte		 0	; init everything to being ignored
+	000341	   000 				.byte		 0	; init everything to being ignored
+	000342	   000 				.byte		 0	; init everything to being ignored
+	000343	   000 				.byte		 0	; init everything to being ignored
+	000344	   000 				.byte		 0	; init everything to being ignored
+	000345	   000 				.byte		 0	; init everything to being ignored
+	000346	   000 				.byte		 0	; init everything to being ignored
+	000347	   000 				.byte		 0	; init everything to being ignored
+	000350	   000 				.byte		 0	; init everything to being ignored
+	000351	   000 				.byte		 0	; init everything to being ignored
+	000352	   000 				.byte		 0	; init everything to being ignored
+	000353	   000 				.byte		 0	; init everything to being ignored
+	000354	   000 				.byte		 0	; init everything to being ignored
+	000355	   000 				.byte		 0	; init everything to being ignored
+	000356	   000 				.byte		 0	; init everything to being ignored
+	000357	   000 				.byte		 0	; init everything to being ignored
+	000360	   000 				.byte		 0	; init everything to being ignored
+	000361	   000 				.byte		 0	; init everything to being ignored
+	000362	   000 				.byte		 0	; init everything to being ignored
+	000363	   000 				.byte		 0	; init everything to being ignored
+	000364	   000 				.byte		 0	; init everything to being ignored
+	000365	   000 				.byte		 0	; init everything to being ignored
+	000366	   000 				.byte		 0	; init everything to being ignored
+	000367	   000 				.byte		 0	; init everything to being ignored
+	000370	   000 				.byte		 0	; init everything to being ignored
+	000371	   000 				.byte		 0	; init everything to being ignored
+     18
+     19	000372					chtype	 0	,1	; exit on null
+	000172	   001 				.byte	1			; ascii value as an offset into it
+     20	000173					chtype	lf	,1	; /62/ exit on a line feed
+	000204	   001 				.byte	1			; ascii value as an offset into it
+     21	000205					chtype	cr	,1	; exit on <cr>
+	000207	   001 				.byte	1			; ascii value as an offset into it
+     22	000210					chtype	'(	,2	; start of a rsts style ppn
+	000242	   002 				.byte	2			; ascii value as an offset into it
+     23	000243					chtype	')	,3	; end of a ppn
+	000243	   003 				.byte	3			; ascii value as an offset into it
+     24	000244					chtype	comma	,6	; part of a uic or ppn
+	000246	   006 				.byte	6			; ascii value as an offset into it
+     25	000247					chtype	dot	,5	; part of a file name or directory
+	000250	   005 				.byte	5			; ascii value as an offset into it
+     26	000251					chtype	'/	,4	; /BBS/ end of a unix directory
+	000251	   004 				.byte	4			; ascii value as an offset into it
+     27		000060 				 $ch =	'0		; /62/ digits are ok most anywhere
+     28		000012 				 .rept	10.
+     29						 chtype	$ch	,7
+     30						 $ch =	$ch+1		; do 0 through 9
+     31						 .endr
+	000252	   007 				.byte	7			; ascii value as an offset into it
+	000253	   007 				.byte	7			; ascii value as an offset into it
+	000254	   007 				.byte	7			; ascii value as an offset into it
+	000255	   007 				.byte	7			; ascii value as an offset into it
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 10-3
+Generate character class table for file name state parsing
+
+	000256	   007 				.byte	7			; ascii value as an offset into it
+	000257	   007 				.byte	7			; ascii value as an offset into it
+	000260	   007 				.byte	7			; ascii value as an offset into it
+	000261	   007 				.byte	7			; ascii value as an offset into it
+	000262	   007 				.byte	7			; ascii value as an offset into it
+	000263	   007 				.byte	7			; ascii value as an offset into it
+     32	000264					chtype	'<	,2	; start of a TOPS-20 directory
+	000266	   002 				.byte	2			; ascii value as an offset into it
+     33	000267					chtype	':	,4	; end of a device or node
+	000264	   004 				.byte	4			; ascii value as an offset into it
+     34	000265					chtype	scolon	,1	; exit on ";" version delimiter
+	000265	   001 				.byte	1			; ascii value as an offset into it
+     35	000266					chtype	'>	,3	; end of a TOPS-20 directory
+	000270	   003 				.byte	3			; ascii value as an offset into it
+     36		000101 				 $ch =	'A&137		; letters are also ok most anywhere
+     37		000032 				 .rept	32
+     38						 chtype	$ch	,7
+     39						 $ch =	$ch+1		; do A through Z
+     40						 .endr
+	000273	   007 				.byte	7			; ascii value as an offset into it
+	000274	   007 				.byte	7			; ascii value as an offset into it
+	000275	   007 				.byte	7			; ascii value as an offset into it
+	000276	   007 				.byte	7			; ascii value as an offset into it
+	000277	   007 				.byte	7			; ascii value as an offset into it
+	000300	   007 				.byte	7			; ascii value as an offset into it
+	000301	   007 				.byte	7			; ascii value as an offset into it
+	000302	   007 				.byte	7			; ascii value as an offset into it
+	000303	   007 				.byte	7			; ascii value as an offset into it
+	000304	   007 				.byte	7			; ascii value as an offset into it
+	000305	   007 				.byte	7			; ascii value as an offset into it
+	000306	   007 				.byte	7			; ascii value as an offset into it
+	000307	   007 				.byte	7			; ascii value as an offset into it
+	000310	   007 				.byte	7			; ascii value as an offset into it
+	000311	   007 				.byte	7			; ascii value as an offset into it
+	000312	   007 				.byte	7			; ascii value as an offset into it
+	000313	   007 				.byte	7			; ascii value as an offset into it
+	000314	   007 				.byte	7			; ascii value as an offset into it
+	000315	   007 				.byte	7			; ascii value as an offset into it
+	000316	   007 				.byte	7			; ascii value as an offset into it
+	000317	   007 				.byte	7			; ascii value as an offset into it
+	000320	   007 				.byte	7			; ascii value as an offset into it
+	000321	   007 				.byte	7			; ascii value as an offset into it
+	000322	   007 				.byte	7			; ascii value as an offset into it
+	000323	   007 				.byte	7			; ascii value as an offset into it
+	000324	   007 				.byte	7			; ascii value as an offset into it
+     41	000325					chtype	'[	,2	; start of a directory or uic
+	000325	   002 				.byte	2			; ascii value as an offset into it
+     42	000326					chtype	'\	,4	; /BBS/ end of a pc directory
+	000326	   004 				.byte	4			; ascii value as an offset into it
+     43	000327					chtype	']	,3	; end of a directory
+	000327	   003 				.byte	3			; ascii value as an offset into it
+     44	000330					chtype			; /63/ end of this list
+     45		000141 				 $ch =	'a!40		; don't forget lower case letters
+     46		000032 				 .rept	32
+     47						 chtype	$ch	,7
+     48						 $ch =	$ch+1		; do a through z
+     49						 .endr
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 10-4
+Generate character class table for file name state parsing
+
+	000333	   007 				.byte	7			; ascii value as an offset into it
+	000334	   007 				.byte	7			; ascii value as an offset into it
+	000335	   007 				.byte	7			; ascii value as an offset into it
+	000336	   007 				.byte	7			; ascii value as an offset into it
+	000337	   007 				.byte	7			; ascii value as an offset into it
+	000340	   007 				.byte	7			; ascii value as an offset into it
+	000341	   007 				.byte	7			; ascii value as an offset into it
+	000342	   007 				.byte	7			; ascii value as an offset into it
+	000343	   007 				.byte	7			; ascii value as an offset into it
+	000344	   007 				.byte	7			; ascii value as an offset into it
+	000345	   007 				.byte	7			; ascii value as an offset into it
+	000346	   007 				.byte	7			; ascii value as an offset into it
+	000347	   007 				.byte	7			; ascii value as an offset into it
+	000350	   007 				.byte	7			; ascii value as an offset into it
+	000351	   007 				.byte	7			; ascii value as an offset into it
+	000352	   007 				.byte	7			; ascii value as an offset into it
+	000353	   007 				.byte	7			; ascii value as an offset into it
+	000354	   007 				.byte	7			; ascii value as an offset into it
+	000355	   007 				.byte	7			; ascii value as an offset into it
+	000356	   007 				.byte	7			; ascii value as an offset into it
+	000357	   007 				.byte	7			; ascii value as an offset into it
+	000360	   007 				.byte	7			; ascii value as an offset into it
+	000361	   007 				.byte	7			; ascii value as an offset into it
+	000362	   007 				.byte	7			; ascii value as an offset into it
+	000363	   007 				.byte	7			; ascii value as an offset into it
+	000364	   007 				.byte	7			; ascii value as an offset into it
+     50	000365					chtype			; /63/ restore the pc
+     51
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 11
+Generate character class table for file name state parsing
+
+      1
+      2						.sbttl	NAMCVT state transition table
+      3
+      4	000372				ptable:
+      5
+      6					; char	other	null	'[	']	':	'.	',   letter/digit
+      7					; class	  0	  1	 2	 3	 4	 5	 6	  7
+      8
+      9	000372	   001 	   036 	   002 	  .byte	  1	,30.	,2	,-1	,11.	,21.	,-1	,21.  ; init
+     10	000402	   002 	   036 	   377 	  .byte	  2	,30.	,-1	,3	,-1	,2	,2	,2    ; [ ]
+     11	000412	   003 	   036 	   377 	  .byte	  3	,30.	,-1	,-1	,14.	,23.	,3	,23.  ; [ ]x.x
+     12	000422	   004 	   036 	   036 	  .byte	  4	,30.	,30.	,-1	,-1	,24.	,-1	,24.  ; x.x
+     13
+     14	000432				paction:			; action routines for file name parsing
+     15	000432	000174'				.word	null		; null process, do nothing, ignore input char
+     16	000434	000176'				.word	init		; start over, hosing everything done prior
+     17	000436	000206'				.word	copy		; copy a valid char into the output string
+     18	000440	000214'				.word	fin		; done, append a dot if needed and exit
+     19
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 12
+NAMCVT state transition table
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Parse file specification to extract only filnam.typ
+      4
+      5					;	input:	 (r5)	address of source file_spec
+      6					;		2(r5)	resultant string address
+      7					;	output:   r0	error code, if any
+      8					;
+      9					;	internal register usage:
+     10					;	r0	=   action index
+     11					;	r1	=   current state
+     12					;	r2	=   input string pointer
+     13					;	r4	--> resultant string
+     14
+     15	000000				namcvt::save	<r1,r2,r3,r4>
+	000000	010146 				 mov	r1	,-(sp)
+	000002	010246 				 mov	r2	,-(sp)
+	000004	010346 				 mov	r3	,-(sp)
+	000006	010446 				 mov	r4	,-(sp)
+     16	000010	011502 				mov	@r5	,r2		; point to the input string
+     17	000012	016504 	000002 			mov	2(r5)	,r4		; point to the output string
+     18	000016	105014 				clrb	@r4			; init output to be .asciz
+     19	000020	012701 	000001 			mov	#1	,r1		; initialize current state
+     20	000024	005767 	000000G			tst	rawfil			; /54/ really string stuff?
+     21	000030	001406 				beq	10$			; /54/ yes
+     22	000032					strcpy	r4	,r2		; /54/ no, copy as is
+	000032	010246 				mov	r2	,-(sp)
+	000034	010446 				mov	r4	,-(sp)
+	000036	004767 	000000G			jsr	pc	,strcpy
+     23	000042	005000 				clr	r0			; /54/ no errors
+     24	000044	000446 				br	40$			; /54/ and exit
+     25
+     26	000046	005701 			10$:	tst	r1			; current state is zero?
+     27	000050	001437 				beq	20$			; yes, exit then
+     28	000052	005003 				clr	r3			; get the next ch please
+     29	000054	152203 				bisb	(r2)+	,r3		; simple
+     30	000056	042703 	177600 			bic	#^c<177>,r3		; ensure in range 0..127
+     31	000062	005301 				dec	r1			; use previous state to get the
+     32	000064					mul	#10	,r1		; index into the state table  line
+	000064	012746 	000010 			mov	#10	,-(sp)		; pass multiplier to p$mul
+	000070	010146 				mov	r1	,-(sp)		; pass multiplicand too
+	000072	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	000076	012601 				.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     33	000100	116300 	000172'			movb	chtype(r3),r0		; /BBS/                       column
+     34	000104	060001 				add	r0	,r1		; add in the character class  line+col
+     35	000106	116101 	000372'			movb	ptable(r1),r1		; and get the new state of system
+     36	000112	001416 				beq	20$			; all done if new state is zero
+     37	000114	100420 				bmi	30$			; error exit if < 0
+     38	000116	005000 				clr	r0			; now mask off the action index from
+     39	000120					div	#10.	,r0		; the new state
+	000120	012746 	000012 			mov	#10.	,-(sp)		; divisor
+	000124	010146 				mov	r1	,-(sp)		; dividend low word
+	000126	010046 				mov	r0	,-(sp)		; dividend high word
+	000130	004767 	000000G			call	p$div			; divide
+	000134	012601 				mov	(sp)+	,r1		; remainder
+	000136	012600 				mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     40	000140	006300 				asl	r0			; word indexing to action routine
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 12-1
+Parse file specification to extract only filnam.typ
+
+     41	000142	004770 	000432'			jsr	pc	,@paction(r0)	; simple
+     42	000146	000737 				br	10$			; next please
+     43
+     44	000150	005000 			20$:	clr	r0			; no errors
+     45	000152	105014 				clrb	@r4			; .asciz for output
+     46	000154	000402 				br	40$
+     47
+     48	000156	012700 	177777 		30$:	mov	#-1	,r0		; error, bye
+     49	000162				40$:	unsave	<r4,r3,r2,r1>
+	000162	012604 				 mov	(sp)+	,r4
+	000164	012603 				 mov	(sp)+	,r3
+	000166	012602 				 mov	(sp)+	,r2
+	000170	012601 				 mov	(sp)+	,r1
+     50	000172	000207 				return
+     51
+     52
+     53						.sbttl	Action routines for the file name parser
+     54
+     55	000174	000207 			null:	return
+     56
+     57	000176	016504 	000002 		init:	mov	2(r5)	,r4		; re-init the output string address
+     58	000202	105014 				clrb	@r4			; /BBS/ re-init the output buffer
+     59	000204	000207 				return
+     60
+     61	000206	110324 			copy:	movb	r3	,(r4)+		; copy a byte
+     62	000210	105014 				clrb	@r4			; (re)terminate the string
+     63	000212	000207 				return				; next please
+     64
+     65	000214				fin:	save	<r0,r3>			; all done, look for a dot
+	000214	010046 				 mov	r0	,-(sp)
+	000216	010346 				 mov	r3	,-(sp)
+     66	000220	016500 	000002 			mov	2(r5)	,r0		; if there isn't any, add one
+     67	000224	105710 				tstb	@r0			; /BBS/ is there anything left?
+     68	000226	001413 				beq	30$			; /BBS/ don't add a dot to nothing
+     69	000230	105710 			10$:	tstb	@r0			; end of the line yet?
+     70	000232	001405 				beq	20$			; yes
+     71	000234	121027 	000056 			cmpb	@r0	,#'.		; a dot hanging around today?
+     72	000240	001406 				beq	30$			; yes, exit
+     73	000242	005200 				inc	r0			; no, bump to next char
+     74	000244	000771 				br	10$			; and try again please
+     75	000246	112703 	000056 		20$:	movb	#'.	,r3		; no dot, stuff one in please
+     76	000252	004767 	177730 			call	copy			; simple
+     77	000256				30$:	unsave	<r3,r0>
+	000256	012603 				 mov	(sp)+	,r3
+	000260	012600 				 mov	(sp)+	,r0
+     78	000262	000207 				return
+     79
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 13
+Action routines for the file name parser
+
+      1
+      2						.sbttl	Check file extent to determine its type
+      3
+      4					;	C H K E X T
+      5					;
+      6					;	input:	 (r5)	= file name
+      7					;	output:	  r0	= if <>, assume it's a binary file
+      8
+      9	000264				chkext::save	<r1,r2,r3,r4>
+	000264	010146 				 mov	r1	,-(sp)
+	000266	010246 				 mov	r2	,-(sp)
+	000270	010346 				 mov	r3	,-(sp)
+	000272	010446 				 mov	r4	,-(sp)
+     10	000274	011501 				mov	@r5	,r1		; /BBS/ save copy of pointer
+     11	000276					strlen	r1			; how much is left?
+	000276	010100 				mov	r1	,r0
+	000300	004767 	000000G			call	l$len
+     12	000304	005700 				tst	r0			; if nothing, then presume not binary
+     13	000306	001465 				beq	80$			; nothing to do, exit
+     14	000310	060001 				add	r0	,r1		; point to the end of the file name
+     15	000312	124127 	000056 		10$:	cmpb	-(r1)	,#'.		; look for a dot which will delimit
+     16	000316	001403 				beq	20$			; the file type
+     17	000320					sob	r0	,10$		; not found, try again please
+	000320	005300 				dec	r0
+	000322	001373 				bne	10$
+     18	000324	000456 				br	80$			; never found a dot (can't happen)
+     19	000326				20$:	copyz	r1	,#chkbuf,#5	; /BBS/ make a copy so spaces aren't
+	000326	012746 	000005 			mov	#5	,-(sp)
+	000332	010146 				mov	r1	,-(sp)
+	000334	012746 	000000'			mov	#chkbuf	,-(sp)
+	000340	004767 	000000G			call	copyz$
+     20	000344	012701 	000000'			mov	#chkbuf	,r1		; /BBS/ written into actual name buff!
+     21	000350					strlen	r1			; # chars in file type, including "."
+	000350	010100 				mov	r1	,r0
+	000352	004767 	000000G			call	l$len
+     22	000356	012703 	000004 			mov	#4	,r3		; /BBS/ flip operands for positive num
+     23	000362	160003 				sub	r0	,r3		; /BBS/ must be 4 chars or less
+     24	000364	001410 				beq	40$			; /BBS/ it's exactly 4, on to testing
+     25	000366	002435 				blt	80$			; /BBS/ it's greater than 4, bail out
+     26	000370	010102 				mov	r1	,r2		; /BBS/ save copy of pointer
+     27	000372	060002 				add	r0	,r2		; /BBS/ point to last char
+     28	000374	112722 	000040 		30$:	movb	#space	,(r2)+		; /BBS/ space pad file extent
+     29	000400					sob	r3	,30$		; /BBS/ until total length is 4
+	000400	005303 				dec	r3
+	000402	001374 				bne	30$
+     30	000404	105012 				clrb	@r2			; /BBS/ null terminate padded string
+     31
+     32	000406	016702 	000000G		40$:	mov	bintyp	,r2		; ok, get listhead of file types
+     33	000412					upcase	r1			; /63/ upper case chkbuf
+	000412	010100 				mov	r1	,r0
+	000414	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     34
+     35	000420	010203 			50$:	mov	r2	,r3		; get next file type address
+     36	000422	105713 				tstb	@r3			; end of the list?
+     37	000424	001416 				beq	80$			; if null, then all done
+     38	000426	010104 				mov	r1	,r4		; not done, get pointer to passed type
+     39	000430	122423 				cmpb	(r4)+	,(r3)+		; /63/ skip past the dots
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 13-1
+Check file extent to determine its type
+
+     40	000432	122423 				cmpb	(r4)+	,(r3)+		; /63/ look for match on file type
+     41	000434	001004 				bne	60$			; not bloody likely
+     42	000436	122423 				cmpb	(r4)+	,(r3)+		; /63/ and so on
+     43	000440	001002 				bne	60$			; you know
+     44	000442	122423 				cmpb	(r4)+	,(r3)+		; /63/ one more time
+     45	000444	001403 				beq	70$			; a match, go say so..
+     46	000446	062702 	000004 		60$:	add	#4	,r2		; no match, bump to next one please
+     47	000452	000762 				br	50$			; and go give it a try
+     48
+     49	000454	012700 	000001 		70$:	mov	#1	,r0		; flag it's a binary file
+     50	000460	000401 				br	90$
+     51	000462	005000 			80$:	clr	r0			; not binary
+     52	000464				90$:	unsave	<r4,r3,r2,r1>
+	000464	012604 				 mov	(sp)+	,r4
+	000466	012603 				 mov	(sp)+	,r3
+	000470	012602 				 mov	(sp)+	,r2
+	000472	012601 				 mov	(sp)+	,r1
+     53	000474	000207 				return
+     54
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 14
+Check file extent to determine its type
+
+      1
+      2						.sbttl	Init BINARY-TYPES list
+      3
+      4	000476				binini::strcpy	bintyp	,#binl		; copy list to buffer in high memory
+	000476	012746 	000050'			mov	#binl	,-(sp)
+	000502	016746 	000000G			mov	bintyp	,-(sp)
+	000506	004767 	000000G			jsr	pc	,strcpy
+      5	000512	000207 				return				; so appending it is possible
+      6
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 15
+Init BINARY-TYPES list
+
+      1
+      2						.sbttl	Convert invalid characters to something reasonable
+      3
+      4					;	F I X F I L E
+      5					;
+      6					;	Input:	 (r5)	= source string, .asciz
+      7					;		2(r5)	= destination string, .asciz
+      8					;	Output:	  r0	= zero if unmodified, else non-zero (for warnings)
+      9					;
+     10					;	The main reason for this is to protect ourselves against the
+     11					;	file naming conventions used for TOPS20 and VMS so we do not
+     12					;	die on a bad file name.
+     13
+     14					; /63/	Modified to accomodate Unix file names, general clean-up too.
+     15
+     16	000514				fixfil::save	<r1,r2,r3>
+	000514	010146 				 mov	r1	,-(sp)
+	000516	010246 				 mov	r2	,-(sp)
+	000520	010346 				 mov	r3	,-(sp)
+     17	000522	162706 	000400 			sub	#256.	,sp		; buffer so src string stays intact
+     18	000526	010601 				mov	sp	,r1		; pointer to it
+     19	000530					copyz	(r5)	,r1  ,#255.	; copy input string into it
+	000530	012746 	000377 			mov	#255.	,-(sp)
+	000534	011546 				mov	(r5)	,-(sp)
+	000536	010146 				mov	r1	,-(sp)
+	000540	004767 	000000G			call	copyz$
+     20	000544					upcase	r1			; upper case the copy
+	000544	010100 				mov	r1	,r0
+	000546	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     21	000552	005003 				clr	r3			; no mods made yet to file name
+     22
+     23	000554	105711 			10$:	tstb	(r1)			; this is the replace bad chars loop
+     24	000556	001416 				beq	30$			; null = end of source file spec
+     25	000560					scan	(r1)	,#okchr		; check for invalid character
+	000560	012746 	000001'			mov	#okchr	,-(sp)
+	000564	005046 				clr	-(sp)
+	000566	151116 				bisb	(r1)	,@sp
+	000570	004767 	000000G			call	scanch
+     26	000574	005700 				tst	r0			; did we find one?
+     27	000576	001004 				bne	20$			; no (we checked for legit chars)
+     28	000600	116711 	000000'			movb	defchr	,(r1)		; ya, insert the fixup character
+     29	000604	012703 	000000G			mov	#er$fnm	,r3		; and flag name has been modified
+     30	000610	005201 			20$:	inc	r1			; advance to next src char
+     31	000612	000760 				br	10$			; and go check it
+     32
+     33	000614	010601 			30$:	mov	sp	,r1		; restore pointer to temp buffer
+     34	000616	016502 	000002 			mov	2(r5)	,r2		; dst string buffer address
+     35	000622					scan	#':	,r1		; look for a device delimiter
+	000622	010146 				mov	r1	,-(sp)
+	000624	005046 				clr	-(sp)
+	000626	152716 	000072 			bisb	#':	,@sp
+	000632	004767 	000000G			call	scanch
+     36	000636	005700 				tst	r0			; find one?
+     37	000640	001403 				beq	50$			; no..
+     38	000642	112122 			40$:	movb	(r1)+	,(r2)+		; ya, copy the device name
+     39	000644					sob	r0	,40$		; including the colon terminator
+	000644	005300 				dec	r0
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 15-1
+Convert invalid characters to something reasonable
+
+	000646	001375 				bne	40$
+     40	000650	012700 	000006 		50$:	mov	#6	,r0		; RT-11 file name is 6 chars max
+     41
+     42	000654	105711 			60$:	tstb	(r1)			; anything now left?
+     43	000656	001404 				beq	70$			; no, must have at least 1 char
+     44	000660	121127 	000056 			cmpb	(r1)	,#'.		; end of file name field?
+     45	000664	001011 				bne	90$			; not yet
+     46	000666	005201 				inc	r1			; if a dot, bump pointer past it
+     47	000670	020027 	000006 		70$:	cmp	r0	,#6		; anything at all in the name field?
+     48	000674	001021 				bne	100$			; something has been copied there
+     49	000676	116722 	000000'			movb	defchr	,(r2)+		; no, it must have at least 1 char
+     50	000702	012703 	000000G		80$:	mov	#er$fnm	,r3		; flag that we altered name
+     51	000706	000414 				br	100$			; then continue
+     52
+     53	000710	112122 			90$:	movb	(r1)+	,(r2)+		; copy the character
+     54	000712					sob	r0	,60$		; next please
+	000712	005300 				dec	r0
+	000714	001357 				bne	60$
+     55	000716					scan	#'.	,r1		; now find next dot in input string
+	000716	010146 				mov	r1	,-(sp)
+	000720	005046 				clr	-(sp)
+	000722	152716 	000056 			bisb	#'.	,@sp
+	000726	004767 	000000G			call	scanch
+     56	000732	060001 				add	r0	,r1		; bump ptr past it (no dot = no bump)
+     57	000734	005300 				dec	r0			; next char was dot or no dot at all?
+     58	000736	003361 				bgt	80$			; no, so something had to be tossed..
+     59
+     60	000740	112722 	000056 		100$:	movb	#'.	,(r2)+		; stuff a dot in output string
+     61	000744	012700 	000003 			mov	#3	,r0		; at most 3 chars in file type
+     62
+     63	000750	121127 	000056 		110$:	cmpb	(r1)	,#'.		; another dot??  (for unix!)
+     64	000754	001403 				beq	120$			; ya
+     65	000756	121127 	000072 			cmpb	(r1)	,#':		; just in case, is it a colon?
+     66	000762	001004 				bne	130$			; no    (colon is not fixed above..)
+     67	000764	105721 			120$:	tstb	(r1)+			; ya, skip past this char
+     68	000766	012703 	000000G			mov	#er$fnm	,r3		; and flag name was altered..
+     69	000772	000766 				br	110$
+     70
+     71	000774	112122 			130$:	movb	(r1)+	,(r2)+		; finish off with the file type
+     72	000776	001407 				beq	140$			; hit the end of input string
+     73	001000					sob	r0	,110$		; next char please
+	001000	005300 				dec	r0
+	001002	001362 				bne	110$
+     74	001004	105012 				clrb	(r2)			; .asciz
+     75	001006	105711 				tstb	(r1)			; anything left over?
+     76	001010	001402 				beq	140$			; nope..
+     77	001012	012703 	000000G			mov	#er$fnm	,r3		; ya, flag type was truncated..
+     78
+     79	001016	062706 	000400 		140$:	add	#256.	,sp		; release temp buffer
+     80	001022	010300 				mov	r3	,r0		; return status
+     81	001024					unsave	<r3,r2,r1>
+	001024	012603 				 mov	(sp)+	,r3
+	001026	012602 				 mov	(sp)+	,r2
+	001030	012601 				 mov	(sp)+	,r1
+     82	001032	000207 				return
+     83
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 16
+Convert invalid characters to something reasonable
+
+      1
+      2						.sbttl	Convert strings ala abcde<15> or abcde\015 to binary format
+      3
+      4	001034				prsarg::save	<r1,r2,r3,r4>		; /45/ save regs
+	001034	010146 				 mov	r1	,-(sp)
+	001036	010246 				 mov	r2	,-(sp)
+	001040	010346 				 mov	r3	,-(sp)
+	001042	010446 				 mov	r4	,-(sp)
+      5	001044	016703 	000000G			mov	argbuf	,r3		; /41/ argbuf address
+      6	001050	010004 				mov	r0	,r4		; /41/ where to return parsed string
+      7	001052	112302 			10$:	movb	(r3)+	,r2		; /41/ while (*argbuf)
+      8	001054	001473 				beq	110$			; /41/ exit with success
+      9	001056	120227 	000134 			cmpb	r2	,#'\		; /45/ "C" style notation?
+     10	001062	001431 				beq	50$			; /45/ yes
+     11	001064	120227 	000074 			cmpb	r2	,#'<		; /41/ start of an octal sequence?
+     12	001070	001024 				bne	40$			; /41/ no
+     13	001072	005001 				clr	r1			; /41/ init accumulator
+     14	001074	112302 			20$:	movb	(r3)+	,r2		; /41/ while (*argbuf++)
+     15	001076	001457 				beq	100$			; /41/ error, no terminator
+     16	001100	120227 	000076 			cmpb	r2	,#'>		; /41/ octal number terminator?
+     17	001104	001415 				beq	30$			; /41/ yes, exit loop
+     18	001106	120227 	000060 			cmpb	r2	,#'0		; /41/ check for legitimate value
+     19	001112	103451 				blo	100$			; /41/ not an octal digit, error
+     20	001114	120227 	000067 			cmpb	r2	,#'7		; /41/ check again please
+     21	001120	101046 				bhi	100$			; /41/ not legit, error
+     22	001122	162702 	000060 			sub	#'0	,r2		; /41/ yes, convert to octal until ">"
+     23	001126					ash	#3	,r1		; /62/ shift left 3 bits
+	001126	006301 				.iif gt <$$type>  asl	r1
+	001130	006301 				.iif gt <$$type>  asl	r1
+	001132	006301 				.iif gt <$$type>  asl	r1
+     24	001134	060201 				add	r2	,r1		; /41/ add in current digit
+     25	001136	000756 				br	20$			; /41/ no
+     26	001140	010102 			30$:	mov	r1	,r2		; /41/ yes, get set to insert value
+     27	001142	110224 			40$:	movb	r2	,(r4)+		; /41/ place current char or value in
+     28	001144	000742 				br	10$			; /41/ next please
+     29
+     30	001146	005001 			50$:	clr	r1			; /45/ "C" style notation
+     31	001150	005046 				clr	-(sp)			; /45/ trip counter
+     32	001152	111302 			60$:	movb	(r3)	,r2		; /45/ copy a character
+     33	001154	001417 				beq	70$			; /45/ EOS, exit next time
+     34	001156	120227 	000060 			cmpb	r2	,#'0		; /45/ octal characters?
+     35	001162	103414 				blo	70$			; /45/ no, exit this loop
+     36	001164	120227 	000067 			cmpb	r2	,#'7		; /45/ ...
+     37	001170	101011 				bhi	70$			; /45/ copy the character
+     38	001172	005216 				inc	(sp)			; /45/ been here at least once
+     39	001174	162702 	000060 			sub	#'0	,r2		; /45/ yes, convert to octal
+     40	001200					ash	#3	,r1		; /62/ shift left 3 bits
+	001200	006301 				.iif gt <$$type>  asl	r1
+	001202	006301 				.iif gt <$$type>  asl	r1
+	001204	006301 				.iif gt <$$type>  asl	r1
+     41	001206	060201 				add	r2	,r1		; /45/ add in current digit
+     42	001210	005203 				inc	r3			; /45/ next please
+     43	001212	000757 				br	60$			; /45/ do it
+     44	001214	005726 			70$:	tst	(sp)+			; /45/ did we really get a number?
+     45	001216	001402 				beq	80$			; /45/ no, ignore then
+     46	001220	110124 				movb	r1	,(r4)+		; /45/ done, copy the data
+     47	001222	000404 				br	90$			; /45/ and get next please
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 16-1
+Convert strings ala abcde<15> or abcde\015 to binary format
+
+     48	001224	105702 			80$:	tstb	r2			; /45/ no number, perhaps "\\" or
+     49	001226	001402 				beq	90$			; /45/ or "\<" was present?
+     50	001230	110224 				movb	r2	,(r4)+		; /45/ must have had "\x"
+     51	001232	005203 				inc	r3			; /45/ point to next char please
+     52	001234	000706 			90$:	br	10$			; /45/ go get it
+     53
+     54	001236	012700 	177777 		100$:	mov	#-1	,r0		; /41/ failed
+     55	001242	000401 				br	120$			; /41/ exit
+     56	001244	005000 			110$:	clr	r0			; /41/ success
+     57	001246	105014 			120$:	clrb	@r4			; /41/ ensure string is .asciz
+     58	001250					unsave	<r4,r3,r2,r1>		; /45/ unsave regs
+	001250	012604 				 mov	(sp)+	,r4
+	001252	012603 				 mov	(sp)+	,r3
+	001254	012602 				 mov	(sp)+	,r2
+	001256	012601 				 mov	(sp)+	,r1
+     59	001260	000207 				return
+     60
+     61		000001 				.end
+KRTCVT	File name and misc data	MACRO V05.03b  00:01  Page 16-2
+Symbol table
+
+ALSIZE= 001000   	COPY    000206R     002	JSW   = 000044   	PAR$NO  000000   	SEVER$= 000010
+ARGBUF= ****** GX	COPYZ$= ****** GX	KRTINC= 000001   	PAR$OD  000001   	SOH   = 000001
+AT.ALL  000177   	CR    = 000015   	LF    = 000012   	PAR$SP  000004   	SPACE = 000040
+AT.CDT  000001   	CTRL$N= 000016   	LN$CNT= 000003   	PRSARG  001034RG    002	STRCPY= ****** GX
+AT.INF  000002   	CTRL$O= 000017   	LN$MAX= 000120   	PTABLE  000372R     003	SUCCS$= 000001
+AT.LEN  000004   	C.CRLF= 000004   	LOG$AL= 000003   	P$DIV = ****** GX	TAB   = 000011
+AT.ON   100000   	C.LCUC= 000040   	LOG$CO= 000002   	P$MUL = ****** GX	TERMIN  177777
+AT.PRO  000010   	C.LSPA= 000010   	LOG$DE= 000020   	P.CAPA= 000011   	TEXT    000000
+AT.SYS  000020   	C.SSPA= 000020   	LOG$IO= 000010   	P.CHKT= 000007   	TILDE = 000176
+AT.TYP  000040   	C.TSPA= 000200   	LOG$ON= 040000   	P.EOL = 000004   	TTY   = 000001
+AT.XLE  000100   	DECNAT  000002   	LOG$OP= 100000   	P.MXL1= 000013   	UPCASE= ****** GX
+BELL  = 000007   	DEFCHR  000000R     003	LOG$PA= 000001   	P.MXL2= 000014   	USERRB= 000053
+BINARY  000001   	DEL   = 000177   	LOG$RP= 000004   	P.NPAD= 000002   	VT100 = 000002
+BININI  000476RG    002	DOT   = 000056   	L$LEN = ****** GX	P.PADC= 000003   	VT200 = 000003
+BINL    000050R     003	ERBFSI= 000170   	MAXLNG= 001130   	P.QBIN= 000006   	WARN$ = 000002
+BINTYP= ****** GX	ERRBYT= 000052   	MAXPAK  000136   	P.QCTL= 000005   	XOFF  = 000023
+BS    = 000010   	ERROR$= 000004   	NAMCVT  000000RG    002	P.REPT= 000010   	XON   = 000021
+CAPA.A= 000010   	ER$FNM= ****** GX	NONEIS= 000001   	P.SPSI= 000000   	$ALLSI= 001144
+CAPA.L= 000002   	ESC   = 000033   	NOSCOP= 000000   	P.TIME= 000001   	$C    = 000003
+CAPA.S= 000004   	FATAL$= 000020   	NULL    000174R     002	P.VEND= 000017   	$CH   = 000173
+CHKBUF  000000R     004	FF    = 000014   	OKCHR   000001R     003	P.WIND= 000012   	$$    = 000000
+CHKEXT  000264RG    002	FIN     000214R     002	PACTIO  000432R     003	RAWFIL= ****** GX	$$SIZE= 000003
+CHTYPE  000172R     003	FIXFIL  000514RG    002	PAR$EV  000002   	SCANCH= ****** GX	$$TYPE= 000001
+COMMA = 000054   	INIT    000176R     002	PAR$MA  000003   	SCOLON= 000073   	$$$0  = 000027
+CON$ES= 000034
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	001262    002	(RO,I,LCL,REL,CON)
+$PDATA	000442    003	(RO,D,LCL,REL,CON)
+$RWDAT	000006    004	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 12368 Words  ( 49 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.23
+KRTCVT,KRTCVT=KRTNHD,KRTCVT

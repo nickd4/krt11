@@ -1,0 +1,1360 @@
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01
+Table of contents
+
+    3-   1	KRTMAC	Various handy constants and macros
+    5-   2	Utility macros
+    7-   1	KRTDEF	Packet types (edited from VMS Kermit)
+    7-  11	Protocol V1.0 message types
+    7-  22	Protocol V2.0 message types
+    7-  29	Protocol V4.0 message types
+    7-  35	Generic Kermit commands
+    7-  57	Acknowledgment modifiers (V4.0)
+    7-  63	End of file packet modifier
+    7-  67	Send/receive states
+    9-   2	Local data
+   10-   3	Send file(s)		; /BBS/ somewhat modified..
+   11-   2	XMODEM a file		; /62/ moved this here too..
+   12-   2	Initialization
+   13-   2	Download
+   14-   2	End of file processing
+   15-   2	Clean up and exit Xmodem
+   16-   2	Wait for initial NAK from remote
+   17-   2	Wait for ACK from remote
+   18-   2	Send a checksummed block to the remote
+   19-   2	Read a block from the input file
+   20-   2	Schedule a completion routine
+   21-   2	Update CRC, routine from Steve Brecher's COM program
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTXMO	XMODEM, SEND command interface
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	disallow sends from TT (not supported, makes Kermit hang)..
+      7
+      8					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      9					;
+     10					;	move command interface here from KRTCM1
+     11
+     12					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     13					;
+     14					; This module uses xmodem written by Chuck Sadoian, Dinuba, CA
+     15
+     16					; Xmodem here supports either checksum or CRC error detection, however it
+     17					; only does so one file at a time, using 128 byte blocks, under TSX-Plus.
+     18					; Transmission is presently only on the controlling terminal (this Kermit
+     19					; must be the remote system) and is also SEND-only from here to the other
+     20					; system, because the TSX-Plus terminal handler does not pass nulls (zero
+     21					; bytes) to a running program.
+     22					;
+     23					; The Xmodem protocol requires an 8-bit path.  If this isn't the system's
+     24					; default, you must from KMON issue the command SET TT 8BIT,BITS=8 before
+     25					; running Kermit.  "BITS=8" is a hardware parameter and must be done on a
+     26					; primary line only.  Setting it on a subprocess may write garbage in the
+     27					; line_parameters word, rendering the line useless.
+     28					;
+     29					; Xmodem doesn't work under RT-11 because RT strips all terminal I/O data
+     30					; of the high order (parity) bit, thus preventing an 8-bit data path from
+     31					; being used.
+     32
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 2
+
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 3
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 4-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106						ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107						LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108						LN$MAX	=     80.	; /63/ max command line length
+    109						MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111		002000 				ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112		000012 				LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113		000204 				LN$MAX	=    132.	; /63/ max command line length
+    114		003600 				MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 4-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		003614 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 5-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 5-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 5-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 5-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 6
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2						.include "IN:KRTDEF.MAC"
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 7
+KRTDEF	Packet types (edited from VMS Kermit)
+
+      1						.sbttl	KRTDEF	Packet types (edited from VMS Kermit)
+      2					;	.ident	"V03.63"	; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7
+      8					;	Note the use of the "=:" direct assignment ensures these
+      9					;	rather long names are unique in the first 6 characters.
+     10
+     11						.sbttl	Protocol V1.0 message types
+     12
+     13		000131 			MSG$ACK		=: 'Y&137	; acknowledgment (ACK)
+     14		000102 			MSG$BREAK	=: 'B&137	; break transmission (EOT)
+     15		000104 			MSG$DATA	=: 'D&137	; data packet
+     16		000132 			MSG$EOF		=: 'Z&137	; end of file (EOF)
+     17		000105 			MSG$ERROR	=: 'E&137	; error
+     18		000106 			MSG$FILE	=: 'F&137	; file header
+     19		000116 			MSG$NAK		=: 'N&137	; negative acknowledgment (NAK)
+     20		000123 			MSG$SND		=: 'S&137	; send initiate
+     21
+     22						.sbttl	Protocol V2.0 message types
+     23
+     24		000103 			MSG$COMMAND	=: 'C&137	; host command
+     25		000107 			MSG$GENERIC	=: 'G&137	; generic Kermit command
+     26		000113 			MSG$KERMIT	=: 'K&137	; perform Kermit command (text)
+     27		000122 			MSG$RCV		=: 'R&137	; receive initiate
+     28
+     29						.sbttl	Protocol V4.0 message types
+     30
+     31		000101 			MSG$ATR		=: 'A&137	; attribute packet
+     32		000111 			MSG$SER		=: 'I&137	; server initialization
+     33		000130 			MSG$TEXT	=: 'X&137	; text header message
+     34
+     35						.sbttl	Generic Kermit commands
+     36
+     37		000114 			GN$BYE		=: 'L&137	; logout
+     38		000103 			GN$CONNECT	=: 'C&137	; connect to a directory
+     39		000113 			GN$COPY		=: 'K&137	; copy file
+     40		000105 			GN$DELETE	=: 'E&137	; delete a file
+     41		000104 			GN$DIRECTORY	=: 'D&137	; directory
+     42		000125 			GN$DISK		=: 'U&137	; disk usage
+     43		000106 			GN$EXIT		=: 'F&137	; finish (stop the server)
+     44		000110 			GN$HELP		=: 'H&137	; help
+     45		000112 			GN$JOURNAL	=: 'J&137	; perform journal functions
+     46		000111 			GN$LOGIN	=: 'I&137	; login
+     47		000120 			GN$PRINT	=: 'P&137	; print
+     48		000120 			GN$PROGRAM	=: 'P&137	; run program and pass data
+     49		000121 			GN$QUERY	=: 'Q&137	; query status
+     50		000122 			GN$RENAME	=: 'R&137	; rename file
+     51		000115 			GN$SEND		=: 'M&137	; send a message to a user
+     52		000123 			GN$SUBMIT	=: 'S&137	; submit
+     53		000124 			GN$TYPE		=: 'T&137	; type a file specification
+     54		000126 			GN$VARIABLE	=: 'V&137	; return/set variable state
+     55		000127 			GN$WHO		=: 'W&137	; who's logged in?
+     56
+     57						.sbttl	Acknowledgment modifiers (V4.0)
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 7-1
+Acknowledgment modifiers (V4.0)
+
+     58
+     59		000132 			ABT$ALL		=: 'Z&137	; abort entire stream of files
+     60		000130 			ABT$CUR		=: 'X&137	; abort current file
+     61		000105 			ABT$ERROR	=: 'E&137	; abort because an error occured
+     62
+     63						.sbttl	End of file packet modifier
+     64
+     65		000104 			EOF$DISCARD	=: 'D&137	; discard data from previous file
+     66
+     67						.sbttl	Send/receive states
+     68
+     69		000100 			STA.CCA		=:  100		; ^C from keyboard abort
+     70		000101 			STA.ABO		=: 'A&137	; abort
+     71		000110 			STA.ATR		=: 'H&137	; send attributes
+     72		000102 			STA.BRK		=: 'B&137	; break link
+     73		000103 			STA.COM		=: 'C&137	; transaction complete
+     74		000104 			STA.DAT		=: 'D&137	; data
+     75		000132 			STA.EOF		=: 'Z&137	; end of file or reply
+     76		000106 			STA.FIL		=: 'F&137	; file name header
+     77		000111 			STA.INI		=: 'I&137	; init
+     78		000122 			STA.RIN		=: 'R&137	; receive init
+     79		000123 			STA.SIN		=: 'S&137	; send init
+     80		000130 			STA.TYP		=: 'X&137	; extended reply
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 8
+Send/receive states
+
+      1						.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+      2
+      3						.mcall	.CMKT	,.MRKT	,.PURGE	,.SCCA
+      4						.mcall	.READW	,.TTINR	,.TTYOUT,.TWAIT
+      5
+      6
+      7						.macro	beep2
+      8						wrtall	#$beep2			; make the terminal beep twice
+      9						.endm	beep2
+     10
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 9
+Send/receive states
+
+      1
+      2						.sbttl	Local data
+      3
+      4		000006 				ACK	= 6			; acknowledge packet (ok)
+      5		000030 				CAN	= 30			; cancel transfer
+      6		000001 				CRC	= 1			; bit mask CRC enabled
+      7		000004 				EOT	= 4			; end of transmission
+      8		000025 				NAK	= 25			; negative acknowledge (not ok)
+      9		000015 				NKWAIT	= 13.			; initial wait for first NAK in secs
+     10
+     11	000000					.psect	xmodat	,rw,d,lcl,rel,con
+     12	000000	000000 			aflag:	.word	0			; abort flag
+     13	000002	000000 			blkcnt:	.word	0			; for .readw, block just read
+     14	000004	000000 			block:	.word	0			; file size in RT-11 blocks
+     15	000006	000000 			bytcnt:	.word	0			; number of bytes in input buffer
+     16	000010	000000 			chksum:	.word	0			; checksum
+     17	000012	   000 	   120 		hieff:	.byte	0 ,120			; high efficiency terminal mode emt
+     18	000014	000000 	000000 	000000 	marea:	.word	0 ,0 ,0 ,0		; .mrkt work area
+     19	000024	000000 	000000 		mtime:	.word	0 ,0			; nkwait in ticks lives here
+     20	000030	   000 	   152 		nosingle:.byte	0 ,152
+     21	000032	000124 	000000 			.word	'T&137,0		; turn off single char mode
+     22	000036	   000 	   152 		onewide:.byte	0 ,152
+     23	000040	000121 	000001 			.word	'Q&137,1		; /62/ activate on field width of 1
+     24	000044	000000 			point:	.word	0			; pointer to read buffer
+     25	000046	000000 			rbuff:	.word	0			; input file buffer pointer
+     26	000050	   000 	   152 		single:	.byte	0 ,152
+     27	000052	000123 	000000 			.word	'S&137,0		; turn on single char mode
+     28	000056	   000 	   000 	   000 	sizbuf:	.byte	0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ,0 ; ascii'd size in xmodem blocks
+     29	000070	000000 			tflag:	.word	0			; time-out flag
+     30	000072	000000 	000000 	000000 	ttctlc:	.word	0 ,0 ,0			; for .scca
+     31	000100	000000 	000006 		wtime:	.word	0 ,6			; 1/10 second (slightly more @ 50Hz)
+     32	000104	000000 	000000 		xblock:	.word	0 ,0			; file size in xmodem blocks
+     33	000110	000000 			xmosts:	.word	0			; status word
+     34	000112	000000 			xrecno:	.word	0			; record number for packets
+     35	000114	000000 	000036 		xtime:	.word	0 ,30.			; wait 0.5sec when finished or abort
+     36
+     37	000000					.psect	$pdata			; /63/ consolidate here..
+     38	000000	   007 	   007 	   000 	$beep2:	.byte	bell ,bell ,0		; two bells
+     39	000003	   007 	   123 	   145 	sen.10:	.asciz	<bell>"Send completed"	; /62/
+     40	000023	   007 	   123 	   145 	sen.11:	.asciz	<bell>"Send failed"
+     41	000040	   120 	   162 	   157 	sen.12:	.asciz	'Processing file name "'
+     42	000067	   042 	   000 		sen.13:	.asciz	'"'
+     43	000071	   106 	   151 	   154 	xmo.01:	.asciz	"File open: "		; tell user about the file
+     44	000105	   133 	   000 		xmo.02:	.asciz	"["			; size in RT-11 blocks goes here
+     45	000107	   135 	   054 	   040 	xmo.03:	.asciz	"], "			; format the display
+     46	000113	   040 	   130 	   155 	xmo.04:	.ascii	" Xmodem (128 byte) blocks"<cr><lf>	; tag file size
+     47	000146	   101 	   167 	   141 		.asciz	"Awaiting ready signal (^X aborts).."	; ready to rip..
+     48	000212	   106 	   151 	   154 	xmo.05:	.asciz	"File transfer completed"
+     49						.even
+     50
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 10
+Local data
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Send file(s)		; /BBS/ somewhat modified..
+      4										; /62/ moved here for smaller root
+      5	000000	005067 	000000G		c$send::clr	wasmore			; init multi-args display flag
+      6	000004	005767 	000000G			tst	inopn			; is an input file currently open?
+      7	000010	001410 				beq	10$			; no
+      8	000012					calls	close	,<#lun.in>	; yes, please close old file up
+	000012	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000014	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	000020	010605 				  mov	sp	,r5		; set pointer to argument list
+	000022	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	000026	005726 				  tst	(sp)+			; pop parameter list from stack
+	000030	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	000032	016701 	000000G		10$:	mov	argbuf	,r1		; address of command line buffer
+     10	000036	105711 				tstb	@r1			; anything there?
+     11	000040	001404 				beq	20$			; no
+     12	000042	004767 	000000G			call	isitas			; SEND file asfile?  get asname
+     13	000046	005700 				tst	r0			; any parse error?
+     14	000050	001403 				beq	30$			; no
+     15	000052	012700 	000000G		20$:	mov	#er$snd	,r0		; emit a syntax error message
+     16	000056	000466 				br	50$			; goto error handler
+     17
+     18	000060				30$:	calls	chk.tt	,<#srcnam>	; /63/ disallow TT as an input dev
+	000060	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000062	012746 	000000G			  mov	#srcnam	,-(sp)		; doing it thusly generates less code
+	000066	010605 				  mov	sp	,r5		; set pointer to argument list
+	000070	004767 	000000G			  jsr	pc	,chk.tt		; call the subroutine
+	000074	005726 				  tst	(sp)+			; pop parameter list from stack
+	000076	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     19	000100	005700 				tst	r0			; /63/ well?
+     20	000102	001054 				bne	50$			; /63/ it was TT
+     21	000104	005767 	000000G			tst	wasmore			; working with more than 1 file?
+     22	000110	001417 				beq	40$			; no
+     23	000112					calls	printm	,<#3,#sen.12,#srcnam,#sen.13> ; ya, say which it is
+	000112	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000114	012746 	000067'			        mov	#sen.13	,-(sp)	; push it
+	000120	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	000124	012746 	000040'			        mov	#sen.12	,-(sp)	; push it
+	000130	012746 	000003 			        mov	#3	,-(sp)	; push it
+	000134	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000136	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	000142	062706 	000010 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000146	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     24	000150				40$:	upcase	#srcnam			; upper case the input file name
+	000150	012700 	000000G			mov	#srcnam	,r0
+	000154	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     25	000160	005767 	000000G			tst	remote			; in remote mode?
+     26	000164	001442 				beq	70$			; no
+     27	000166	005067 	000000G			clr	index			; /62/ init lookup's file counter
+     28	000172					calls	lookup	,<#srcnam,#spare1> ; /62/ look for something to do
+	000172	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000174	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	000200	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	000204	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000206	004767 	000000G			  jsr	pc	,lookup		; and go to the routine
+	000212	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 10-1
+Send file(s)		; /BBS/ somewhat modified..
+
+	000214	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     29	000216	005700 				tst	r0			; /62/ well?
+     30	000220	001414 				beq	60$			; /62/ at least one file exists
+     31	000222	020027 	000000G			cmp	r0	,#er$nmf	; if error is "No more files"
+     32	000226	001002 				bne	50$			; then make it say
+     33	000230	012700 	000000G			mov	#er$fnf	,r0		; "File not found"
+     34	000234				50$:	direrr	r0			; emit an error message
+	000234	010046 				mov	r0	,-(sp)
+	000236	004767 	000000G			call	direr$
+     35	000242					.purge	#lun.sr			; /62/ hose dir search channel
+	000242	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	000246	104374 				EMT	^O374
+     36	000250	000527 				br	130$			; go say it's over..
+     37
+     38	000252				60$:	calls	suspend	,<sendly>	; allow time to start REC at other end
+	000252	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000254	016746 	000000G			  mov	sendly	,-(sp)		; doing it thusly generates less code
+	000260	010605 				  mov	sp	,r5		; set pointer to argument list
+	000262	004767 	000000G			  jsr	pc	,suspend		; call the subroutine
+	000266	005726 				  tst	(sp)+			; pop parameter list from stack
+	000270	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     39
+     40	000272	004767 	000000G		70$:	call	opentt			; open and initialize the link
+     41	000276	005700 				tst	r0			; did it work?
+     42	000300	001101 				bne	120$			; no, error displayed by ttyini
+     43	000302	004767 	000000G			call	cantyp			; flush any accumulated NAKs
+     44	000306				80$:	calls	xbinread,<#-1>		; /63/ read with no wait to flush
+	000306	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000310	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	000314	010605 				  mov	sp	,r5		; set pointer to argument list
+	000316	004767 	000000G			  jsr	pc	,xbinread		; call the subroutine
+	000322	005726 				  tst	(sp)+			; pop parameter list from stack
+	000324	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     45	000326	005700 				tst	r0			; /63/ any possible junk in buffer
+     46	000330	001766 				beq	80$			; /63/ loop until nothing remains
+     47	000332	005767 	000000G			tst	locase			; SET FIL NAM LOWER-CASE?
+     48	000336	001004 				bne	90$			; ya, leave output file name..
+     49	000340					upcase	#asname			; no, make it upper case
+	000340	012700 	000000G			mov	#asname	,r0
+	000344	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     50	000350	005067 	000000G		90$:	clr	index			; /62/ wildcard_file_number := 0
+     51	000354	004767 	000000G			call	getnxt			; get the first file name please
+     52	000360	005700 				tst	r0			; did it work?
+     53	000362	001050 				bne	120$			; no, getnxt has sent the error packet
+     54	000364	010667 	000000G			mov	sp	,inprogress	; packets are being exchanged
+     55	000370					calls	sensw	,<#msg$snd>	; now send the file
+	000370	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000372	012746 	000123 			  mov	#msg$snd	,-(sp)		; doing it thusly generates less code
+	000376	010605 				  mov	sp	,r5		; set pointer to argument list
+	000400	004767 	000000G			  jsr	pc	,sensw		; call the subroutine
+	000404	005726 				  tst	(sp)+			; pop parameter list from stack
+	000406	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     56	000410	005700 				tst	r0			; did it work?
+     57	000412	001034 				bne	120$			; no
+     58	000414	016700 	000000G			mov	nextone	,r0		; ya, any more arguments to process?
+     59	000420	001013 				bne	100$			; ya, go do it
+     60	000422					calls	printm	,<#1,#sen.10>	; no, done
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 10-2
+Send file(s)		; /BBS/ somewhat modified..
+
+	000422	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000424	012746 	000003'			        mov	#sen.10	,-(sp)	; push it
+	000430	012746 	000001 			        mov	#1	,-(sp)	; push it
+	000434	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000436	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	000442	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000444	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     61	000446	000432 				br	140$			; note r0 is clear here too
+     62	000450	121027 	000040 		100$:	cmpb	(r0)	,#space		; is first byte a blank?
+     63	000454	001002 				bne	110$			; no
+     64	000456	005200 				inc	r0			; ya, skip past it
+     65	000460	000773 				br	100$			; and check what is now the first byte
+     66	000462				110$:	copyz	r0 ,argbuf ,#ln$max	; pull up remaining args to top of buf
+	000462	012746 	000204 			mov	#ln$max	,-(sp)
+	000466	010046 				mov	r0	,-(sp)
+	000470	016746 	000000G			mov	argbuf	,-(sp)
+	000474	004767 	000000G			call	copyz$
+     67	000500	000167 	177326 			jmp	10$			; /63/ loop back for more
+     68
+     69	000504				120$:	calls	printm	,<#1,#sen.11>	; it failed, say so if local
+	000504	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000506	012746 	000023'			        mov	#sen.11	,-(sp)	; push it
+	000512	012746 	000001 			        mov	#1	,-(sp)	; push it
+	000516	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000520	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	000524	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000526	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     70	000530	005267 	000000G		130$:	inc	status			; /45/ flag for batch exit
+     71	000534	105067 	000000G		140$:	clrb	asname			; /36/ ensure no more alternate names
+     72	000540	004767 	000000G			call	clostt			; release the link
+     73	000544	000167 	000000G			jmp	clrcns			; /62/ flush TT input, clear r0
+     74
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 11
+Send file(s)		; /BBS/ somewhat modified..
+
+      1
+      2						.sbttl	XMODEM a file		; /62/ moved this here too..
+      3
+      4	000550	005767 	000000G		c$xmodem::tst	tsxsav			; send only, via TT only
+      5	000554	001003 				bne	10$			; must be TSX for this to work
+      6	000556	012700 	000000G			mov	#er$tsx	,r0		; say it's not TSX
+      7	000562	000501 				br	60$			; goto error handler
+      8
+      9	000564	005767 	000000G		10$:	tst	inopn			; input file currently open?
+     10	000570	001410 				beq	20$			; no
+     11	000572					calls	close	,<#lun.in>	; yes, please close old file first
+	000572	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000574	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	000600	010605 				  mov	sp	,r5		; set pointer to argument list
+	000602	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	000606	005726 				  tst	(sp)+			; pop parameter list from stack
+	000610	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     12	000612				20$:	upcase	argbuf			; upper case all command args
+	000612	016700 	000000G			mov	argbuf	,r0
+	000616	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     13	000622	016701 	000000G			mov	argbuf	,r1		; address of command line buffer
+     14	000626	105711 				tstb	@r1			; anybody home?
+     15	000630	001003 				bne	30$			; ya
+     16	000632	016700 	000000G			mov	er$wld	,r0		; no, point to err msg
+     17	000636	001453 				beq	60$			; goto error message output
+     18	000640	012702 	000000G		30$:	mov	#srcnam	,r2		; where to store file name
+     19	000644	112122 			40$:	movb	(r1)+	,(r2)+		; copy the name over
+     20	000646	001404 				beq	50$			; can't XMODEM file asfile
+     21	000650	121127 	000040 			cmpb	@r1	,#space		; so stop at first space
+     22	000654	003373 				bgt	40$			; next byte
+     23	000656	105012 				clrb	@r2			; ensure source name is asciz
+     24	000660				50$:	calls	iswild	,<#srcnam>	; check for wildcarding
+	000660	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000662	012746 	000000G			  mov	#srcnam	,-(sp)		; doing it thusly generates less code
+	000666	010605 				  mov	sp	,r5		; set pointer to argument list
+	000670	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	000674	005726 				  tst	(sp)+			; pop parameter list from stack
+	000676	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     25	000700	005700 				tst	r0			; if .ne., then wildcarded
+     26	000702	001031 				bne	60$			; can't process wildcards
+     27	000704					calls	fparse,<#srcnam,#filnam>  ; parse file name
+	000704	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000706	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	000712	012746 	000000G			        mov	#srcnam	,-(sp)	; push it
+	000716	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000720	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	000724	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000726	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     28	000730					calls	open,<#filnam,#lun.in,#binary>  ; try to open the file
+	000730	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000732	012746 	000001 			        mov	#binary	,-(sp)	; push it
+	000736	012746 	000000G			        mov	#lun.in	,-(sp)	; push it
+	000742	012746 	000000G			        mov	#filnam	,-(sp)	; push it
+	000746	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000750	004767 	000000G			  jsr	pc	,open		; and go to the routine
+	000754	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000760	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 11-1
+XMODEM a file		; /62/ moved this here too..
+
+     29	000762	005700 				tst	r0			; did it work?
+     30	000764	001406 				beq	70$			; ya..
+     31	000766				60$:	direrr	r0			; no.. print mapped error msg
+	000766	010046 				mov	r0	,-(sp)
+	000770	004767 	000000G			call	direr$
+     32	000774	004767 	000000G			call	incsts			; /62/ set global error flag
+     33	001000	000414 				br	80$			; and bail out
+     34
+     35	001002	004767 	000030 		70$:	call	x$modem			; run xmodem
+     36	001006					calls	close	,<#lun.in>	; close file
+	001006	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001010	012746 	000000G			  mov	#lun.in	,-(sp)		; doing it thusly generates less code
+	001014	010605 				  mov	sp	,r5		; set pointer to argument list
+	001016	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	001022	005726 				  tst	(sp)+			; pop parameter list from stack
+	001024	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	001026					.newline			; ensure prompt is on a newline
+	001026	004767 	000000G			call	l$pcrlf
+     38	001032	005000 			80$:	clr	r0			; any error was already handled
+     39	001034	000207 				return
+     40
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 12
+XMODEM a file		; /62/ moved this here too..
+
+      1
+      2						.sbttl	Initialization
+      3
+      4	001036				x$modem:.scca	#ttctlc	,#ttctlc+4	; /62/ off ^C
+	001036	012700 	000072'			MOV	#ttctlc,R0
+	001042	012710 	016400 			MOV	#29.*^O400+0.,@R0
+	001046	012760 	000076'	000002 		MOV	#ttctlc+4,2.(R0)
+	001054	104375 				EMT	^O375
+      5	001056					.cmkt	#marea	,#40		; and setcc's mark timer
+	001056	012700 	000014'			MOV	#marea,R0
+	001062	012710 	011400 			MOV	#19.*^O400+0.,@R0
+	001066	012760 	000040 	000002 		MOV	#40,2.(R0)
+	001074	005060 	000004 			CLR	4.(R0)
+	001100	104375 				EMT	^O375
+      6	001102	005067 	000110'			clr	xmosts			; clear status word
+      7	001106					wrtall	#xmo.01			; /63/ "File open: "
+	001106	012746 	000071'			mov	#xmo.01	,-(sp)		; pass the address
+	001112	004767 	000000G			call	wrtall			; do it
+      8	001116					wrtall	#filnam			; print file specification
+	001116	012746 	000000G			mov	#filnam	,-(sp)		; pass the address
+	001122	004767 	000000G			call	wrtall			; do it
+      9	001126					wrtall	#xmo.02			; /63/ "["
+	001126	012746 	000105'			mov	#xmo.02	,-(sp)		; pass the address
+	001132	004767 	000000G			call	wrtall			; do it
+     10	001136	012704 	000000G			mov	#lun.in	,r4		; get I/O channel number
+     11	001142	006304 				asl	r4			; word indexing
+     12	001144	016400 	000000G			mov	sizof(r4),r0		; /63/ recover the file size
+     13	001150	004767 	000000G			call	L10266			; /63/ dump it to the terminal
+     14	001154					wrtall	#xmo.03			; /63/ "], "
+	001154	012746 	000107'			mov	#xmo.03	,-(sp)		; pass the address
+	001160	004767 	000000G			call	wrtall			; do it
+     15	001164	016467 	000000G	000046'		mov	buflst(r4),rbuff	; file input buffer pointer
+     16	001172	016401 	000000G			mov	sizof(r4),r1		; get file size
+     17	001176	010167 	000004'			mov	r1	,block		; save size of file in blocks
+     18	001202	005000 				clr	r0			; clear hi word
+     19	001204	006301 				asl	r1			; non-eis
+     20	001206	005500 				adc	r0			; 32-bit
+     21	001210	006301 				asl	r1			; multiply
+     22	001212	005500 				adc	r0			; by four
+     23	001214	010067 	000104'			mov	r0	,xblock		; save hi word
+     24	001220	010167 	000106'			mov	r1	,xblock+2	; save low word
+     25	001224	005002 				clr	r2			; suppress leading 0s in $cddmg output
+     26	001226	012701 	000104'			mov	#xblock	,r1		; address of 32-bit number
+     27	001232	012700 	000056'			mov	#sizbuf	,r0		; address of out buff for ascii
+     28	001236	004767 	000000G			call	$cddmg			; convert 32-bit integer to ascii
+     29	001242	105010 				clrb	@r0			; null terminate the string
+     30	001244					wrtall	#sizbuf			; and dump it to TT
+	001244	012746 	000056'			mov	#sizbuf	,-(sp)		; pass the address
+	001250	004767 	000000G			call	wrtall			; do it
+     31	001254					wrtall	#xmo.04			; /63/ tag & say awaiting ready signal
+	001254	012746 	000113'			mov	#xmo.04	,-(sp)		; pass the address
+	001260	004767 	000000G			call	wrtall			; do it
+     32	001264	004767 	000000G			call	l$nolf			; /63/
+     33
+     34	001270	012700 	000030'			mov	#nosingle,r0		; single char input dies in hieff mode
+     35	001274	104375 				emt	375			; if activation chars are declared
+     36	001276					calls	t.ttyini,<#0>		; init TT
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 12-1
+Initialization
+
+	001276	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001300	012746 	000000 			  mov	#0	,-(sp)		; doing it thusly generates less code
+	001304	010605 				  mov	sp	,r5		; set pointer to argument list
+	001306	004767 	000000G			  jsr	pc	,t.ttyini		; call the subroutine
+	001312	005726 				  tst	(sp)+			; pop parameter list from stack
+	001314	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     37	001316	112767 	000001 	000012'		movb	#1	,hieff		; setup high efficiency emt
+     38	001324	012700 	000012'			mov	#hieff	,r0
+     39	001330	104375 				emt	375			; do it
+     40
+     41	001332	004767 	000274 			call	waitnk			; look for the initial NAK
+     42	001336	005767 	000000'			tst	aflag			; error detected?
+     43	001342	001070 				bne	abort			; yes, kill transfer
+     44	001344	005067 	000002'			clr	blkcnt			; clear block count
+     45	001350	012767 	000001 	000112'		mov	#1	,xrecno		; init xmodem block count
+     46	001356					.br	dnload			; /63/
+     47
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 13
+Initialization
+
+      1
+      2						.sbttl	Download
+      3
+      4	001356	004767 	000660 		dnload:	call	rdblk			; read some input
+      5	001362	103427 				bcs	eof			; branch if EOF
+      6	001364	004767 	000524 		10$:	call	sndblk			; send a checksummed block
+      7	001370	004767 	000410 			call	getack			; look for ACK from remote
+      8	001374	005767 	000000'			tst	aflag			; check result from receiver
+      9	001400	001406 				beq	20$			; zero is an ACKed block
+     10	001402	022767 	000001 	000000'		cmp	#1	,aflag		; 1 means we NAKed it
+     11	001410	001765 				beq	10$			; so send it again
+     12	001412	000167 	000106 			jmp	abort			; else we abort the transfer
+     13	001416	005267 	000112'		20$:	inc	xrecno			; bump record number
+     14	001422	062767 	000200 	000044'		add	#128.	,point		; update buffer pointer
+     15	001430	026767 	000044'	000006'		cmp	point	,bytcnt		; are we at the end of buffer?
+     16	001436	001747 				beq	dnload			; yes, then better read in some more
+     17	001440	000751 				br	10$			; else go send another block
+     18
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 14
+Download
+
+      1
+      2						.sbttl	End of file processing
+      3
+      4	001442	012700 	000004 		eof:	mov	#eot	,r0		; send end of transmission
+      5	001446					.ttyout
+	001446	104341 				EMT	^O<341>
+	001450	103776 				BCS	.-2.
+      6	001452	004767 	000326 			call	getack			; wait for an acknowledgment
+      7	001456	005767 	000000'			tst	aflag			; check result
+      8	001462	001405 				beq	10$			; zero means all ok!
+      9	001464	022767 	000001 	000000'		cmp	#1	,aflag		; 1 means they NAKed it
+     10	001472	001763 				beq	eof			; so try it again
+     11	001474	000413 				br	abort			; else we need to abort
+     12	001476				10$:	beep2
+	001476	012746 	000000'			mov	#$beep2	,-(sp)		; pass the address
+	001502	004767 	000000G			call	wrtall			; do it
+     13	001506					.newline
+	001506	004767 	000000G			call	l$pcrlf
+     14	001512					wrtall	#xmo.05			; /63/ "File transfer completed"
+	001512	012746 	000212'			mov	#xmo.05	,-(sp)		; pass the address
+	001516	004767 	000000G			call	wrtall			; do it
+     15	001522	000412 				br	reset			; and reset parameters
+     16
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 15
+End of file processing
+
+      1
+      2						.sbttl	Clean up and exit Xmodem
+      3
+      4	001524				abort:	beep2
+	001524	012746 	000000'			mov	#$beep2	,-(sp)		; pass the address
+	001530	004767 	000000G			call	wrtall			; do it
+      5	001534					.newline
+	001534	004767 	000000G			call	l$pcrlf
+      6	001540					direrr	#er$abt			; aborting transfer..
+	001540	012746 	000000G			mov	#er$abt	,-(sp)
+	001544	004767 	000000G			call	direr$
+      7
+      8	001550				reset:	.twait	#rtwork	,#xtime		; wait for remote to come back
+	001550	012700 	000000G			MOV	#rtwork,R0
+	001554	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	001560	012760 	000114'	000002 		MOV	#xtime,2.(R0)
+	001566	104375 				EMT	^O375
+      9	001570	012700 	000036'		10$:	mov	#onewide,r0		; kludge single char input
+     10	001574	104375 				emt	375
+     11	001576					.ttinr				; suck up garbage
+	001576	104340 				EMT	^O340
+     12	001600	103373 				bcc	10$
+     13	001602	105067 	000012'			clrb	hieff			; set emt argument off hi eff mode
+     14	001606	012700 	000012'			mov	#hieff	,r0
+     15	001612	104375 				emt	375			; do it
+     16	001614	004767 	000000G			call	ttyrst			; use existing TT reset stuff
+     17	001620	012700 	000050'			mov	#single	,r0		; restore single char input mode
+     18	001624	104375 				emt	375
+     19	001626	005000 				clr	r0			; no errors passed back..
+     20	001630	000207 				return
+     21
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 16
+Clean up and exit Xmodem
+
+      1
+      2						.sbttl	Wait for initial NAK from remote
+      3
+      4	001632	005067 	000000'		waitnk:	clr	aflag			; clear abort flag
+      5	001636	012767 	001414 	000026'		mov	#nkwait*60.,mtime+2	; wait for preset time
+      6	001644	004767 	000516 			call	stimer			; start the timer
+      7	001650	012700 	000036'		10$:	mov	#onewide,r0		; kludge single char input
+      8	001654	104375 				emt	375
+      9	001656					.ttinr				; pick up a character
+	001656	104340 				EMT	^O340
+     10	001660	103014 				bcc	20$			; did we get something?
+     11	001662	005767 	000070'			tst	tflag			; no, did we time-out?
+     12	001666	001026 				bne	30$			; yes, we should abort this
+     13	001670					.twait	#rtwork	,#wtime		; else sleep a bit, so we don't burn
+	001670	012700 	000000G			MOV	#rtwork,R0
+	001674	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	001700	012760 	000100'	000002 		MOV	#wtime,2.(R0)
+	001706	104375 				EMT	^O375
+     14	001710	000757 				br	10$			; up the cpu time.  Then check again
+     15	001712	120027 	000025 		20$:	cmpb	r0	,#nak		; did we get a NAK?
+     16	001716	001415 				beq	40$			; yes, return normally
+     17	001720	120027 	000030 			cmpb	r0	,#can		; cancel transmission?
+     18	001724	001407 				beq	30$			; yes, abort this
+     19	001726	120027 	000103 			cmpb	r0	,#'C&137	; CRC checksum request?
+     20	001732	001346 				bne	10$			; nope
+     21	001734	052767 	000001 	000110'		bis	#crc	,xmosts		; ya, enable CRC mode
+     22	001742	000403 				br	40$
+     23	001744	005167 	000000'		30$:	com	aflag			; else set abort
+     24	001750	000402 				br	50$
+     25	001752	005067 	000000'		40$:	clr	aflag			; clear abort
+     26	001756				50$:	.cmkt	#marea	,#41		; cancel timer
+	001756	012700 	000014'			MOV	#marea,R0
+	001762	012710 	011400 			MOV	#19.*^O400+0.,@R0
+	001766	012760 	000041 	000002 		MOV	#41,2.(R0)
+	001774	005060 	000004 			CLR	4.(R0)
+	002000	104375 				EMT	^O375
+     27	002002	000207 				return
+     28
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 17
+Wait for initial NAK from remote
+
+      1
+      2						.sbttl	Wait for ACK from remote
+      3
+      4	002004	005067 	000000'		getack:	clr	aflag			; clear abort flag
+      5	002010	012700 	000036'		10$:	mov	#onewide,r0		; kludge single char input
+      6	002014	104375 				emt	375
+      7	002016					.ttinr				; pick up a character
+	002016	104340 				EMT	^O340
+      8	002020	103011 				bcc	20$			; did we get something?
+      9	002022					.twait	#rtwork	,#wtime		; no, sleep a bit, don't burn cpu time
+	002022	012700 	000000G			MOV	#rtwork,R0
+	002026	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	002032	012760 	000100'	000002 		MOV	#wtime,2.(R0)
+	002040	104375 				EMT	^O375
+     10	002042	000762 				br	10$			; then check again
+     11	002044	120027 	000006 		20$:	cmpb	r0	,#ack		; did we get an ACK?
+     12	002050	001416 				beq	40$			; yes, return normally
+     13	002052	120027 	000025 			cmpb	r0	,#nak		; did we get a NAK?
+     14	002056	001407 				beq	30$			; yes
+     15	002060	120027 	000030 			cmpb	r0	,#can		; cancel?
+     16	002064	001351 				bne	10$			; no, keep looking
+     17	002066	012767 	000002 	000000'		mov	#2	,aflag		; else set abort
+     18	002074	000207 				return
+     19	002076	012767 	000001 	000000'	30$:	mov	#1	,aflag		; set aflag to 1
+     20	002104	000207 				return
+     21	002106	005067 	000000'		40$:	clr	aflag			; clear abort
+     22	002112	000207 				return
+     23
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 18
+Wait for ACK from remote
+
+      1
+      2						.sbttl	Send a checksummed block to the remote
+      3
+      4	002114	005067 	000010'		sndblk:	clr	chksum			; clear checksum
+      5	002120	005003 				clr	r3			; clear CRC
+      6	002122	016701 	000046'			mov	rbuff	,r1		; get address of read buffer
+      7	002126	066701 	000044'			add	point	,r1		; add in offset
+      8	002132	012700 	000001 			mov	#soh	,r0		; send a SOH
+      9	002136					.ttyout
+	002136	104341 				EMT	^O<341>
+	002140	103776 				BCS	.-2.
+     10	002142	016700 	000112'			mov	xrecno	,r0		; send record number
+     11	002146					.ttyout
+	002146	104341 				EMT	^O<341>
+	002150	103776 				BCS	.-2.
+     12	002152	005100 				com	r0			; send complement of record #
+     13	002154					.ttyout
+	002154	104341 				EMT	^O<341>
+	002156	103776 				BCS	.-2.
+     14	002160	012702 	000200 			mov	#128.	,r2		; initialize counter
+     15	002164	112100 			10$:	movb	(r1)+	,r0		; get next byte
+     16	002166	060067 	000010'			add	r0	,chksum		; update checksum
+     17	002172	004767 	000264 			call	updcrc			; update CRC
+     18	002176					.ttyout				; send it
+	002176	104341 				EMT	^O<341>
+	002200	103776 				BCS	.-2.
+     19	002202	077210 				sob	r2	,10$		; finished?
+     20	002204	016700 	000010'			mov	chksum	,r0		; copy of checksum to send
+     21	002210	032767 	000001 	000110'		bit	#crc	,xmosts		; CRC enabled?
+     22	002216	001406 				beq	20$			; no
+     23	002220	004767 	000304 			call	getcrc			; get the CRC value
+     24	002224	000300 				swab	r0			; high byte first
+     25	002226					.ttyout
+	002226	104341 				EMT	^O<341>
+	002230	103776 				BCS	.-2.
+     26	002232	000300 				swab	r0			; then low byte
+     27	002234				20$:	.ttyout				; send checksum
+	002234	104341 				EMT	^O<341>
+	002236	103776 				BCS	.-2.
+     28	002240	000207 				return
+     29
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 19
+Send a checksummed block to the remote
+
+      1
+      2						.sbttl	Read a block from the input file
+      3
+      4	002242	005067 	000044'		rdblk:	clr	point			; clear pointer
+      5	002246					.readw	#rtwork,#lun.in,rbuff,#256.,blkcnt
+	002246	012700 	000000G			MOV	#rtwork,R0
+	002252	012710 	004000G			MOV	#lun.in+<8.*^O400>,@R0
+	002256	016760 	000002'	000002 		MOV	blkcnt,2.(R0)
+	002264	016760 	000046'	000004 		MOV	rbuff,4.(R0)
+	002272	012760 	000400 	000006 		MOV	#256.,6.(R0)
+	002300	005060 	000010 			CLR	8.(R0)
+	002304	104375 				EMT	^O375
+      6	002306	103406 				bcs	20$			; /63/ if EOF...
+      7	002310	006300 				asl	r0			; words to bytes, carry is clear here
+      8	002312	010067 	000006'			mov	r0	,bytcnt		; and store it
+      9	002316	005267 	000002'			inc	blkcnt			; update block cnt, carry still clear
+     10	002322	000207 			10$:	return				; /63/ return with carry bit intact
+     11
+     12	002324	113700 	000052 		20$:	movb	@#errbyt,r0		; make sure it is EOF
+     13	002330	001774 				beq	10$			; /63/ yes it is, carry is already set
+     14	002332	006300 				asl	r0			; not EOF, use word indexing to
+     15	002334	016000 	000000G			mov	reaerr(r0),r0		; point to error message text
+     16	002340					.newline			; ensure starting on a fresh line
+	002340	004767 	000000G			call	l$pcrlf
+     17	002344					direrr	r0			; we had a read error!
+	002344	010046 				mov	r0	,-(sp)
+	002346	004767 	000000G			call	direr$
+     18	002352					beep2				; this doesn't preserve r0..
+	002352	012746 	000000'			mov	#$beep2	,-(sp)		; pass the address
+	002356	004767 	000000G			call	wrtall			; do it
+     19	002362	000167 	177162 			jmp	reset			; exit the program
+     20
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 20
+Read a block from the input file
+
+      1
+      2						.sbttl	Schedule a completion routine
+      3
+      4	002366				stimer:	.cmkt	#marea	,#41		; cancel possible outstanding request
+	002366	012700 	000014'			MOV	#marea,R0
+	002372	012710 	011400 			MOV	#19.*^O400+0.,@R0
+	002376	012760 	000041 	000002 		MOV	#41,2.(R0)
+	002404	005060 	000004 			CLR	4.(R0)
+	002410	104375 				EMT	^O375
+      5	002412	005067 	000070'			clr	tflag			; clear timout flag
+      6	002416					.mrkt	#marea	,#mtime	,#timout,#41 ; issue a timer request
+	002416	012700 	000014'			MOV	#marea,R0
+	002422	012710 	011000 			MOV	#18.*^O400+0.,@R0
+	002426	012760 	000024'	000002 		MOV	#mtime,2.(R0)
+	002434	012760 	002454'	000004 		MOV	#timout,4.(R0)
+	002442	012760 	000041 	000006 		MOV	#41,6.(R0)
+	002450	104375 				EMT	^O375
+      7	002452	000207 				return
+      8	002454	005167 	000070'		timout:	com	tflag			; set timout flag to indicate time-out
+      9	002460	000207 				return
+     10
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 21
+Schedule a completion routine
+
+      1
+      2						.sbttl	Update CRC, routine from Steve Brecher's COM program
+      3
+      4					; Update CRC in r3 with datum in the low byte of r0.  Registers preserved.
+      5					;
+      6					; Algorithm:	for each data bit from bit 7 to bit 0, shift the bit
+      7					;		into the LSB of the CRC.  If 1 shifts out of MSB of CRC,
+      8					;		XOR the CRC with the constant.
+      9
+     10		010041 			CON	= 10041		;constant = 1021 hex, for CCITT, recommended
+     11								;polynomial of x**16 + x**12 + x**5 + 1
+     12
+     13	002462				updcrc:	save	<r0,r1,r2>
+	002462	010046 				 mov	r0	,-(sp)
+	002464	010146 				 mov	r1	,-(sp)
+	002466	010246 				 mov	r2	,-(sp)
+     14	002470	012702 	010041 			mov	#con	,r2		; the constant
+     15	002474	012701 	000010 			mov	#8.	,r1		; number of data bits
+     16	002500	106100 			10$:	rolb	r0			; rotate left, byte mode
+     17	002502	006103 				rol	r3			; rotate left, word mode
+     18	002504	103004 				bcc	20$			; nothing shifted out of msb
+     19	002506					xor	r2	,r3		; something shifted out, fix it
+	002506	010246 				mov	r2	,-(sp)		; it's much simpler to do this
+	002510	040316 				bic	r3	,@sp		; for all RT-11 systems rather
+	002512	040203 				bic	r2	,r3		; than to be selective
+	002514	052603 				bis	(sp)+	,r3		; done
+     20	002516	077110 			20$:	sob	r1	,10$		; next data bit
+     21	002520					unsave	<r2,r1,r0>
+	002520	012602 				 mov	(sp)+	,r2
+	002522	012601 				 mov	(sp)+	,r1
+	002524	012600 				 mov	(sp)+	,r0
+     22	002526	000207 				return
+     23
+     24	002530	005000 			getcrc:	clr	r0			; after all data have passed through
+     25	002532	004767 	177724 			call	updcrc			; updcrc, call this routine to get the
+     26	002536	004767 	177720 			call	updcrc			; final CRC, for transmission, into r0
+     27	002542	010300 				mov	r3	,r0
+     28	002544	000207 				return
+     29
+     30		000001 				.end
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 21-1
+Symbol table
+
+ABORT   001524R     002	DEL   = 000177   	JSW   = 000044   	PAR$OD  000001   	STA.RI  000122
+ABT$AL  000132   	DIRER$= ****** GX	KRTINC= 000001   	PAR$SP  000004   	STA.SI  000123
+ABT$CU  000130   	DNLOAD  001356R     002	LF    = 000012   	POINT   000044R     004	STA.TY  000130
+ABT$ER  000105   	DOT   = 000056   	LN$CNT= 000012   	PRINTM= ****** GX	STIMER  002366R     002
+ACK   = 000006   	EOF     001442R     002	LN$MAX= 000204   	P.CAPA= 000011   	SUCCS$= 000001
+AFLAG   000000R     004	EOF$DI  000104   	LOCASE= ****** GX	P.CHKT= 000007   	SUSPEN= ****** GX
+ALSIZE= 002000   	EOT   = 000004   	LOG$AL= 000003   	P.EOL = 000004   	TAB   = 000011
+ARGBUF= ****** GX	ERBFSI= 000170   	LOG$CO= 000002   	P.MXL1= 000013   	TERMIN  177777
+ASNAME= ****** GX	ERRBYT= 000052   	LOG$DE= 000020   	P.MXL2= 000014   	TEXT    000000
+AT.ALL  000177   	ERROR$= 000004   	LOG$IO= 000010   	P.NPAD= 000002   	TFLAG   000070R     004
+AT.CDT  000001   	ER$ABT= ****** GX	LOG$ON= 040000   	P.PADC= 000003   	TILDE = 000176
+AT.INF  000002   	ER$FNF= ****** GX	LOG$OP= 100000   	P.QBIN= 000006   	TIMOUT  002454R     002
+AT.LEN  000004   	ER$NMF= ****** GX	LOG$PA= 000001   	P.QCTL= 000005   	TSXSAV= ****** GX
+AT.ON   100000   	ER$SND= ****** GX	LOG$RP= 000004   	P.REPT= 000010   	TTCTLC  000072R     004
+AT.PRO  000010   	ER$TSX= ****** GX	LOOKUP= ****** GX	P.SPSI= 000000   	TTY   = 000001
+AT.SYS  000020   	ER$WLD= ****** GX	LUN.IN= ****** GX	P.TIME= 000001   	TTYRST= ****** GX
+AT.TYP  000040   	ESC   = 000033   	LUN.SR= ****** GX	P.VEND= 000017   	T.TTYI= ****** GX
+AT.XLE  000100   	FATAL$= 000020   	L$NOLF= ****** GX	P.WIND= 000012   	UPCASE= ****** GX
+BELL  = 000007   	FF    = 000014   	L$PCRL= ****** GX	RBUFF   000046R     004	UPDCRC  002462R     002
+BINARY  000001   	FILNAM= ****** GX	L10266= ****** GX	RDBLK   002242R     002	USERRB= 000053
+BLKCNT  000002R     004	FPARSE= ****** GX	MAREA   000014R     004	REAERR= ****** GX	VT100 = 000002
+BLOCK   000004R     004	GETACK  002004R     002	MAXLNG= 003600   	REMOTE= ****** GX	VT200 = 000003
+BS    = 000010   	GETCRC  002530R     002	MAXPAK  000136   	RESET   001550R     002	WAITNK  001632R     002
+BUFLST= ****** GX	GETNXT= ****** GX	MSG$AC  000131   	RTWORK= ****** GX	WARN$ = 000002
+BYTCNT  000006R     004	GN$BYE  000114   	MSG$AT  000101   	SCOLON= 000073   	WASMOR= ****** GX
+CAN   = 000030   	GN$CON  000103   	MSG$BR  000102   	SENDLY= ****** GX	WRTALL= ****** GX
+CANTYP= ****** GX	GN$COP  000113   	MSG$CO  000103   	SENSW = ****** GX	WTIME   000100R     004
+CAPA.A= 000010   	GN$DEL  000105   	MSG$DA  000104   	SEN.10  000003R     003	XBINRE= ****** GX
+CAPA.L= 000002   	GN$DIR  000104   	MSG$EO  000132   	SEN.11  000023R     003	XBLOCK  000104R     004
+CAPA.S= 000004   	GN$DIS  000125   	MSG$ER  000105   	SEN.12  000040R     003	XMOSTS  000110R     004
+CHKSUM  000010R     004	GN$EXI  000106   	MSG$FI  000106   	SEN.13  000067R     003	XMO.01  000071R     003
+CHK.TT= ****** GX	GN$HEL  000110   	MSG$GE  000107   	SEVER$= 000010   	XMO.02  000105R     003
+CLOSE = ****** GX	GN$JOU  000112   	MSG$KE  000113   	SINGLE  000050R     004	XMO.03  000107R     003
+CLOSTT= ****** GX	GN$LOG  000111   	MSG$NA  000116   	SIZBUF  000056R     004	XMO.04  000113R     003
+CLRCNS= ****** GX	GN$PRI  000120   	MSG$RC  000122   	SIZOF = ****** GX	XMO.05  000212R     003
+COMMA = 000054   	GN$PRO  000120   	MSG$SE  000111   	SNDBLK  002114R     002	XOFF  = 000023
+CON   = 010041   	GN$QUE  000121   	MSG$SN  000123   	SOH   = 000001   	XON   = 000021
+CON$ES= 000034   	GN$REN  000122   	MSG$TE  000130   	SPACE = 000040   	XRECNO  000112R     004
+COPYZ$= ****** GX	GN$SEN  000115   	MTIME   000024R     004	SPARE1= ****** GX	XTIME   000114R     004
+CR    = 000015   	GN$SUB  000123   	NAK   = 000025   	SRCNAM= ****** GX	X$MODE  001036R     002
+CRC   = 000001   	GN$TYP  000124   	NEXTON= ****** GX	STATUS= ****** GX	$ALLSI= 003614
+CTRL$N= 000016   	GN$VAR  000126   	NKWAIT= 000015   	STA.AB  000101   	$BEEP2  000000R     003
+CTRL$O= 000017   	GN$WHO  000127   	NOSCOP= 000000   	STA.AT  000110   	$CDDMG= ****** GX
+C$SEND  000000RG    002	HIEFF   000012R     004	NOSING  000030R     004	STA.BR  000102   	$$    = 000001
+C$XMOD  000550RG    002	INCSTS= ****** GX	ONEWID  000036R     004	STA.CC  000100   	$$$0  = 000000
+C.CRLF= 000004   	INDEX = ****** GX	OPEN  = ****** GX	STA.CO  000103   	$$1   = 000001
+C.LCUC= 000040   	INOPN = ****** GX	OPENTT= ****** GX	STA.DA  000104   	$$2   = 000000
+C.LSPA= 000010   	INPROG= ****** GX	PAR$EV  000002   	STA.EO  000132   	$$5   = 000003
+C.SSPA= 000020   	ISITAS= ****** GX	PAR$MA  000003   	STA.FI  000106   	...V1 = 000003
+C.TSPA= 000200   	ISWILD= ****** GX	PAR$NO  000000   	STA.IN  000111   	...V2 = 000027
+DECNAT  000002
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	002546    002	(RO,I,LCL,REL,CON)
+$PDATA	000242    003	(RO,D,LCL,REL,CON)
+XMODAT	000120    004	(RW,D,LCL,REL,CON)
+KRTXMO	XMODEM, SEND command in	MACRO V05.03b  00:01  Page 21-2
+Symbol table
+
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 18
+Work  file writes: 20
+Size of work file: 13256 Words  ( 52 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.26
+KRTXMO,KRTXMO=KRTXMO

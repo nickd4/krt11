@@ -1,0 +1,3751 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    4-   1	KRTMAC	Various handy constants and macros
+    6-   2	Utility macros
+    8-   1	KRTCDF	Define command macro
+   11-   2	Local data
+   12-   3	LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
+   13-   2	SET DEBUG
+   14-   2	SET PARITY
+   15-   2	SET HANDSHAKE
+   16-   2	SET DUPLEX, SET LOCAL-ECHO	; /BBS/ add _ECHO to LOCAL
+   17-   2	SET UPDATE
+   18-   2	SET RETRY		; /BBS/ enhanced..
+   19-   2	SET SERVER
+   20-   2	SET EOF [NO]EXIT
+   21-   2	SET INCOMPLETE-FILE-DISPOSITION	; /BBS/ all new..
+   22-   2	SET DIAL		; /BBS/ substantially enhanced
+   23-   2	SET PHONE		; /45/ added
+   24-   2	SET SL			; /BBS/ added..
+   25-   2	SET CONTROL-CHARACTER	; /63/ all new..
+   26-   2	Get the next argument
+   27-   2	Memory allocation	; /62/ moved this here
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTST0	SET command overlay zero
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add SET CONTROL-CHARACTER
+      7					;	consolidate local data..
+      8					;	add file name to when logging to LP so later OS versions are happy
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	add support for call back modems, SET DIAL/PHONE [NO]ANSWER
+     13					;
+     14					;	report file size (blocks free) when opening a log file
+     15					;	simply set binary flag instead of close/reopen file for raw I/O debug
+     16					;	fix typo causing a new logfile of same name not to get opened
+     17					;	combine FILE, STATE and PACKET into one DEBUG mode (ON)
+     18					;	redo SET DIAL ECHO and INIT-ONCE as [NO]ECHO and [NO]INIT-ONCE
+     19					;	SET SETTLE-TIME is now SET DIAL SETTLE-TIME
+     20					;	drop SET HAND XON, as RT-11 and TSX eat same..
+     21					;	drop SET DIAL INFO, as any undefined message defaults to it
+     22					;
+     23					;	rename SET DIAL PROMPT to WAKE-ACK, add BLIND, PULSE, TONE, DIAL-ACK,
+     24					;	INITIATE-PROMPT, CONFIRM-ACK, [NO]BINARY-RESPONSE (were missing)..
+     25
+     26					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     27					;
+     28					;	set$pa - fixed display bug with "?" arg
+     29					;	enhanced set$speed error handling
+     30					;	added SET PHONE XMODE for Hayes extended response modes
+     31					;	cleaned up all debug code, allowing debug to TT w/o a disk file
+     32					;	moved set$line to KRTDSP, so it can call c$idle in adjacent overlay
+     33					;	make SET DEBUG NONE off ALL debugging, including TT
+     34					;	add separate parameter for retrying initial-connection ala VMS Kermit
+     35					;	add SET INCOMPLETE-FILE-DISPOSITION
+     36					;	add SET SL
+     37					;	move [SET] LOGFILE here, integrate with SET DEBUG..
+     38					;	make logfile default type .LOG
+     39					;	allow LP as the log file, please SPOOL this in the op system!
+     40					;
+     41					;	added SET DIAL RINGING, CONnnnn for supported speeds, ABORT,
+     42					;	COMMENT, IDLE, PROMPT and INIT.ONCE for user-defined modem
+     43
+     44					;	Copyright 1984  Change Software, Inc.
+     45					;
+     46					;	31-Jan-84  15:13:45  Brian Nelson
+     47
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 4
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 5-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 5-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 6-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 6-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 6-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 6-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 7
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2						.include "IN:KRTCDF.MAC"
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 8
+KRTCDF	Define command macro
+
+      1						.sbttl	KRTCDF	Define command macro
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	modify optional prompt arg to use address of prompt string
+      7					;	allows longer strings to be used and eliminates redundancy
+      8					;	drop $CMGLOBAL
+      9
+     10					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     11					;
+     12					;	$$trip hack to avoid "ndf/df" tests blowing up .LST output
+     13
+     14					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     15					;
+     16					;	dump unused argtyp
+     17
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 9
+KRTCDF	Define command macro
+
+      1
+      2					;	usage example:
+      3					;
+      4					;	command	cmdlst	SEND ,3 ,c$send ,optional_prompt_addr
+      5					;
+      6					;	Would define the SEND command with a minimum length of
+      7					;	three characters, and dispatch it to c$send.  Use of a
+      8					;	prompt will cause  same  to appear when the command is
+      9					;	given without argument(s).  cmdlst is the listhead for
+     10					;	all commands and is  only  used once, but must be used
+     11					;	in all entries to keep other arguments in place.
+     12
+     13
+     14		000001 				KRTCDF	=  1			; used to detect an .include error
+     15		000004 				$LISTL	== 4			; number of args stuffed in list here
+     16		000000 				$$TRIP	=  0			; /62/ init trip counter
+     17
+     18						.macro	command	list ,name ,min ,address ,arg
+     19						.list me
+     20						.save
+     21						.nlist me
+     22						.if b <name>			; command name supplied this time?
+     23						.list me
+     24						.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of list
+     25						.nlist me
+     26						.word	0			; /62/ mark it with a null
+     27						.list me			; /63/
+     28						.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+     29						.even				; /63/ doing this at the end of a list
+     30						.nlist me			; /63/
+     31						$$trip	= 0			; /62/ reset trip counter for next cmd
+     32						.iff	; b <name>		; ya, process args into command data
+     33						.list me
+     34						.psect	cmdtxt	,ro,d,lcl,rel,con
+     35						.nlist me
+     36						$$name	= .
+     37						.asciz	#name#			; store the command name
+     38						.psect	cmddsp	,ro,d,lcl,rel,con
+     39						.nlist me
+     40						  .if eq $$trip			; /62/ if first pass label listhead
+     41					'list:					; global flag was not set
+     42						  $$trip = 1			; /62/ not first time through anymore
+     43						  .endc				; no
+     44						.word	$$name			; store address of command name text
+     45						.word	min			; min number of chars to match
+     46						.word	address			; the command routine's address
+     47						  .if b <arg>			; /63/ optional_prompt address given?
+     48						  .word	0			; /63/ no, say so with a null here
+     49						  .iff
+     50						  .word	arg			; /63/ ya, stuff in its location
+     51						  .endc
+     52						.endc	; b <name>
+     53						.list me
+     54						.restore
+     55						.nlist me
+     56						.endm
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 10
+KRTCDF	Define command macro
+
+      1						.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
+      2
+      3						.mcall	.PURGE	,.SPFUN		; /63/
+      4
+      5
+      6						.macro	malloc	size		; /62/ moved this here
+      7						mov	size	,r0
+      8						call	malloc
+      9						.endm	malloc
+     10
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 11
+KRTCDF	Define command macro
+
+      1
+      2						.sbttl	Local data
+      3
+      4	000000					.psect	$rwdata	,rw,d,lcl,rel,con
+      5	000000	000000 			savpnt:	.word	0			; save pointer to next arg here
+      6
+      7	000000					.psect	$pdata			; /63/ consolidate all data here..
+      8	000000	   113 	   122 	   124 	log2lp:	.asciz	"KRTLOG.OUT"		; /63/ need a name for later os vers
+      9	000013	   056 	   114 	   117 	logext:	.asciz	".LOG"
+     10	000020	   114 	   157 	   147 	prefix:	.asciz	"Logfile "
+     11	000031	   040 	   151 	   163 	closit:	.asciz	" is open - Close it? "
+     12	000057	   040 	   145 	   170 	ovrwrt:	.asciz	" exists - Overwrite? "
+     13	000105	   116 	   165 	   155 	st0.01:	.asciz	"Number: "
+     14	000116	   123 	   145 	   143 	st0.02:	.asciz	"Seconds: "
+     15	000130	   101 	   142 	   157 	st0.03:	.asciz	"Abort dialing string: "
+     16	000157	   105 	   156 	   141 	st0.04:	.asciz	"Enable auto-answer string: "
+     17	000213	   102 	   154 	   151 	st0.05:	.asciz	"Blind dialing string: "
+     18	000242	   115 	   157 	   144 	st0.06:	.asciz	"Modem description: "
+     19	000266	   103 	   157 	   156 	st0.07:	.asciz	"Connect at 300 message: "
+     20	000317	   103 	   157 	   156 	st0.08:	.asciz	"Connect at 1200 message: "
+     21	000351	   103 	   157 	   156 	st0.09:	.asciz	"Connect at 2400 message: "
+     22	000403	   103 	   157 	   156 	st0.10:	.asciz	"Connect at 4800 message: "
+     23	000435	   103 	   157 	   156 	st0.11:	.asciz	"Connect at 9600 message: "
+     24	000467	   103 	   157 	   156 	st0.12:	.asciz	"Connect at 19.2k message: "
+     25	000522	   103 	   157 	   156 	st0.13:	.asciz	"Connect at 38.4k message: "
+     26	000555	   123 	   164 	   162 	st0.14:	.asciz	"String: "
+     27	000566	   103 	   150 	   141 	st0.15:	.asciz	"Character(s): "
+     28	000605	   124 	   151 	   143 	st0.16:	.asciz	"Ticks: "
+     29	000615	   106 	   141 	   151 	st0.17:	.asciz	"Failed call message: "
+     30	000643	   104 	   151 	   141 	st0.18:	.asciz	"Dial format string: "
+     31	000670	   115 	   157 	   144 	st0.19:	.asciz	"Modem reset string: "
+     32	000715	   111 	   156 	   151 	st0.20:	.asciz	"Initiate dialing string: "
+     33	000747	   111 	   156 	   151 	st0.21:	.asciz	"Initiate dialing prompt string: "
+     34	001010	   104 	   151 	   163 	st0.22:	.asciz	"Disable auto-answer string: "
+     35	001045	   120 	   165 	   154 	st0.23:	.asciz	"Pulse dial string: "
+     36	001071	   122 	   151 	   156 	st0.24:	.asciz	"Ringing message: "
+     37	001113	   103 	   157 	   156 	st0.25:	.asciz	"Connect (speed locked) message: "
+     38	001154	   123 	   145 	   143 	st0.26:	.asciz	"Seconds: "
+     39	001166	   124 	   157 	   156 	st0.27:	.asciz	"Tone dial string: "
+     40	001211	   122 	   145 	   163 	st0.28:	.asciz	"Response to wake-up: "
+     41	001237	   111 	   156 	   151 	st0.29:	.asciz	"Init modem to dial string: "
+     42	001273	   116 	   141 	   155 	st0.30:	.asciz	"Name Phone-Number: "
+     43	001317	   105 	   170 	   164 	st0.31:	.asciz	"Extended Mode: "
+     44	001337	   116 	   165 	   155 	st0.32:	.asciz	"Numbers or ALL: "
+     45	001360	   116 	   157 	   040 	st0.33:	.asciz	"No LOGFILE is open"<cr><lf>
+     46	001405	   040 	   157 	   160 	st0.34:	.asciz	" opened, "
+     47	001417	   040 	   142 	   154 	st0.35:	.asciz	" block"
+     48	001426	   163 	   000 		st0.36:	.asciz	"s"
+     49	001430	   102 	   111 	   116 	st0.37:	.asciz	"BINARY-MODE (fixed 512, no carriage control) enabled"<cr><lf>
+     50	001517	   040 	   143 	   154 	st0.38:	.asciz	" closed"<cr><lf>
+     51	001531	   040 	   151 	   163 	st0.39:	.asciz	" is already open"<cr><lf>
+     52	001554	   077 	   123 	   105 	st0.40:	.asciz	"?SET$DEBUG-W-Bad option"<cr><lf>
+     53	001606	   131 	   157 	   165 	st0.41:	.asciz	"You must SET DEBUG as desired to write to this file"<cr><lf>
+     54	001674	   103 	   141 	   165 	st0.42:	.asciz	"Caution: Binary files will require 8-bit prefixing"<cr><lf>
+     55	001761	   040 	   162 	   145 	st0.43:	.asciz	" requires hardware flow control"
+     56	002021	   040 	   155 	   165 	st0.44:	.asciz	" must always be quoted"
+     57	002050	   040 	   151 	   163 	st0.45:	.asciz	" is not a control character"
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 11-1
+Local data
+
+     58						.even
+     59
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 12
+Local data
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
+      4						.enabl	lsb
+      5
+      6		000274 				CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.LCUC ! C.TSPA ; arg processing
+      7
+      8	000000	004767 	000020 		c$logf::call	set$log			; try to open the logfile
+      9	000004	005700 				tst	r0			; did that work?
+     10	000006	001405 				beq	10$			; ya
+     11	000010					direrr	r0			; no, display any error
+	000010	010046 				mov	r0	,-(sp)
+	000012	004767 	000000G			call	direr$
+     12	000016	004767 	000000G			call	incsts			; set global error flag
+     13	000022	000207 			10$:	return
+     14
+     15	000024	105777 	000000G		set$lo::tstb	@argbuf			; any arg(s) supplied?
+     16	000030	001015 				bne	40$			; ya
+     17	000032	032767 	100000 	000000G		bit	#log$op	,trace		; no, is there a logfile open?
+     18	000040	001006 				bne	20$			; no
+     19	000042					wrtall	#st0.33			; /63/ "No LOGFILE is open"
+	000042	012746 	001360'			mov	#st0.33	,-(sp)		; pass the address
+	000046	004767 	000000G			call	wrtall			; do it
+     20	000052	005000 				clr	r0			; return no error
+     21	000054	000402 				br	30$
+     22	000056	004767 	001314 		20$:	call	sd$off			; ya, close the current logfile
+     23	000062	000207 			30$:	return
+     24
+     25	000064	032767 	100000 	000000G	40$:	bit	#log$op	,trace		; is there a logfile open?
+     26	000072	001457 				beq	90$			; no
+     27
+     28						; /BBS/ if a logfile is already open, query before closing it
+     29	000074					wrtall	#prefix			; ya, build prompt, "Logfile " first
+	000074	012746 	000020'			mov	#prefix	,-(sp)		; pass the address
+	000100	004767 	000000G			call	wrtall			; do it
+     30	000104					wrtall	#logfil			; append the file name, say it's open
+	000104	012746 	000000G			mov	#logfil	,-(sp)		; pass the address
+	000110	004767 	000000G			call	wrtall			; do it
+     31	000114					wrtall	#closit			; and ask if it can be closed
+	000114	012746 	000031'			mov	#closit	,-(sp)		; pass the address
+	000120	004767 	000000G			call	wrtall			; do it
+     32	000124					calls	kbread	,<#spare1>	; get the answer, sans SL processing
+	000124	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000126	012746 	000000G			  mov	#spare1	,-(sp)		; doing it thusly generates less code
+	000132	010605 				  mov	sp	,r5		; set pointer to argument list
+	000134	004767 	000000G			  jsr	pc	,kbread		; call the subroutine
+	000140	005726 				  tst	(sp)+			; pop parameter list from stack
+	000142	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     33	000144	005700 				tst	r0			; successful terminal read?
+     34	000146	001403 				beq	50$			; ya
+     35	000150					.newline			; no, after ^C, ensure a new line..
+	000150	004767 	000000G			call	l$pcrlf
+     36	000154	000422 				br	60$
+     37	000156				50$:	calls	cvt$$	,<#spare1,r1,#cvtarg> ; remove garbage, upper case
+	000156	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000160	012746 	000274 			        mov	#cvtarg	,-(sp)	; push it
+	000164	010146 				        mov	r1	,-(sp)	; push it
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 12-1
+LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
+
+	000166	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	000172	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000174	004767 	000000G			  jsr	pc	,cvt$$		; and go to the routine
+	000200	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	000204	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     38	000206	005700 				tst	r0			; anything left?
+     39	000210	001405 				beq	70$			; no, exit please
+     40	000212	126727 	000000G	000131 		cmpb	spare1	,#'Y&137	; does string begin with a "Y" ?
+     41	000220	001402 				beq	80$			; ya, it does, meaning zap this file
+     42	000222	005000 			60$:	clr	r0			; success, either way a file is open
+     43	000224	000207 			70$:	return
+     44
+     45	000226	004767 	001144 		80$:	call	sd$off			; close the current logfile
+     46
+     47	000232	005067 	000000'		90$:	clr	savpnt			; init to say no second arg parsed yet
+     48	000236	016700 	000000G			mov	argbuf	,r0		; set to recover next arg in buffer
+     49	000242	105710 			100$:	tstb	(r0)			; find EOS yet?
+     50	000244	001407 				beq	110$			; yes, exit without changing anything
+     51	000246	122027 	000040 			cmpb	(r0)+	,#space		; found a delimiter yet?
+     52	000252	001373 				bne	100$			; no, keep looking
+     53	000254	105060 	177777 			clrb	-1(r0)			; replace space delimiter with a null
+     54	000260	010067 	000000'			mov	r0	,savpnt		; save address of second argument
+     55
+     56	000264	004767 	000066 		110$:	call	L1$			; call shared open the logfile code
+     57	000270	103755 				bcs	70$			; /63/ file open failed, error's in r0
+     58	000272	016767 	000000'	000000G		mov	savpnt	,argpnt		; pass debug mode argument to set$deb
+     59	000300	001412 				beq	120$			; nothing there, so skip the call..
+     60	000302	004767 	000734 			call	set$debug		; process next arg as debug mode
+     61	000306	005700 				tst	r0			; /62/ did it work?
+     62	000310	001406 				beq	120$			; /62/ ya
+     63	000312					wrtall	#st0.40			; /63/ "SET$DEBUG-W-Bad option"
+	000312	012746 	001554'			mov	#st0.40	,-(sp)		; pass the address
+	000316	004767 	000000G			call	wrtall			; do it
+     64	000322	004767 	000000G			call	incsts			; /62/ flag error
+     65	000326	005067 	000000'		120$:	clr	savpnt			; re-init this right away..
+     66	000332	016700 	000000G			mov	trace	,r0		; copy of log status word
+     67	000336	042700 	100024 			bic	#<log$rp!log$de!log$op>,r0 ; /62/ hose non-relevant bits
+     68	000342	001327 				bne	60$			; /63/ some disk mode is already set
+     69	000344					wrtall	#st0.41			; /63/ "You must SET DEBUG .."
+	000344	012746 	001606'			mov	#st0.41	,-(sp)		; pass the address
+	000350	004767 	000000G			call	wrtall			; do it
+     70	000354	000722 				br	60$			; /63/ done
+     71
+     72						; /BBS/ shared code, so set$debug can call this much of it too..
+     73	000356	042767 	000013 	000000G	L1$:	bic	#log$al!log$io,trace	; /62/ clear all disk debug bits now
+     74	000364					upcase	argpnt			; ensure file name is upper case
+	000364	016700 	000000G			mov	argpnt	,r0
+	000370	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     75	000374					calls	fparse	,<argpnt,#spare1> ; /63/ parse the file name please
+	000374	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000376	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	000402	016746 	000000G			        mov	argpnt	,-(sp)	; push it
+	000406	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000410	004767 	000000G			  jsr	pc	,fparse		; and go to the routine
+	000414	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000416	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     76	000420	005700 				tst	r0			; did the $parse work?
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 12-2
+LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
+
+     77	000422	001402 				beq	130$			; /63/ ya
+     78	000424	000167 	000410 			jmp	190$			; /63/ no, return error in r0
+     79	000430	012702 	000000G		130$:	mov	#spare1	,r2		; pointer to possible "LP:"
+     80	000434	122722 	000114 			cmpb	#'L&137	,(r2)+		; is first byte an "L" ?
+     81	000440	001017 				bne	140$			; nope..
+     82	000442	122722 	000120 			cmpb	#'P&137	,(r2)+		; is second byte a "P" ?
+     83	000446	001014 				bne	140$			; nope..
+     84	000450	122722 	000072 			cmpb	#':	,(r2)+		; is "LP" followed by a colon?
+     85	000454	001011 				bne	140$			; no
+     86	000456	105712 				tstb	(r2)			; ya, but is that null terminated?
+     87	000460	001171 				bne	200$			; /63/ no, user supplied a file name
+     88	000462					strcat	#spare1	,#log2lp	; /63/ ya, a name is required here
+	000462	012746 	000000'			mov	#log2lp	,-(sp)
+	000466	012746 	000000G			mov	#spare1	,-(sp)
+	000472	004767 	000000G			jsr	pc	,strcat
+     89	000476	000562 				br	200$			; /63/ go do the file open
+     90
+     91	000500				140$:	scan	#'.	,#spare1	; look for a dot in the name
+	000500	012746 	000000G			mov	#spare1	,-(sp)
+	000504	005046 				clr	-(sp)
+	000506	152716 	000056 			bisb	#'.	,@sp
+	000512	004767 	000000G			call	scanch
+     92	000516	005700 				tst	r0			; find one?
+     93	000520	001044 				bne	160$			; ya..
+     94	000522	105067 	000000G			clrb	errtxt			; /63/ init buffer for possible [size]
+     95	000526					scan	#'[	,#spare1	; /63/ did the user specify a size?
+	000526	012746 	000000G			mov	#spare1	,-(sp)
+	000532	005046 				clr	-(sp)
+	000534	152716 	000133 			bisb	#'[	,@sp
+	000540	004767 	000000G			call	scanch
+     96	000544	005700 				tst	r0			; /63/ well?
+     97	000546	001412 				beq	150$			; /63/ no
+     98	000550	062700 	000000G			add	#spare1	,r0		; /63/ ya, get pointer to the "["
+     99	000554	005300 				dec	r0			; /63/ it's really here
+    100	000556					copyz	r0	,#errtxt	; /63/ now save a copy of size data
+	000556	005046 				clr	-(sp)
+	000560	010046 				mov	r0	,-(sp)
+	000562	012746 	000000G			mov	#errtxt	,-(sp)
+	000566	004767 	000000G			call	copyz$
+    101	000572	105010 				clrb	@r0			; /63/ then mark end of file name
+    102	000574				150$:	strcat	#spare1	,#logext	; add .LOG to it
+	000574	012746 	000013'			mov	#logext	,-(sp)
+	000600	012746 	000000G			mov	#spare1	,-(sp)
+	000604	004767 	000000G			jsr	pc	,strcat
+    103	000610	105767 	000000G			tstb	errtxt			; /63/ need to restore the size?
+    104	000614	001406 				beq	160$			; /63/ no
+    105	000616					strcat	#spare1	,#errtxt	; /63/ ya, put it back after extent
+	000616	012746 	000000G			mov	#errtxt	,-(sp)
+	000622	012746 	000000G			mov	#spare1	,-(sp)
+	000626	004767 	000000G			jsr	pc	,strcat
+    106
+    107	000632				160$:	calls	iswild	,<#spare1>	; wildcarded file spec??
+	000632	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000634	012746 	000000G			  mov	#spare1	,-(sp)		; doing it thusly generates less code
+	000640	010605 				  mov	sp	,r5		; set pointer to argument list
+	000642	004767 	000000G			  jsr	pc	,iswild		; call the subroutine
+	000646	005726 				  tst	(sp)+			; pop parameter list from stack
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 12-3
+LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
+
+	000650	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    108	000652	005700 				tst	r0			; no support for it yet here..
+    109	000654	001071 				bne	190$			; disallow wildcarded file name
+    110
+    111						; /BBS/ if logfile already exists, query before overwriting it
+    112	000656	005067 	000000G			clr	index			; /62/ clear lookup's file counter
+    113	000662					calls	lookup,<#spare1,#errtxt> ; /62/ does file already exist?
+	000662	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000664	012746 	000000G			        mov	#errtxt	,-(sp)	; push it
+	000670	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	000674	010605 				  mov	sp	,r5		; set up the argument list pointer
+	000676	004767 	000000G			  jsr	pc	,lookup		; and go to the routine
+	000702	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	000704	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    114	000706	005700 				tst	r0			; /62/ find it?
+    115	000710	001055 				bne	200$			; /62/ no
+    116	000712					.purge	#lun.sr			; /62/ ya, hose dir search channel
+	000712	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	000716	104374 				EMT	^O374
+    117	000720					wrtall	#spare1			; ya, build prompt, file name first
+	000720	012746 	000000G			mov	#spare1	,-(sp)		; pass the address
+	000724	004767 	000000G			call	wrtall			; do it
+    118	000730					wrtall	#ovrwrt			; append some informative text
+	000730	012746 	000057'			mov	#ovrwrt	,-(sp)		; pass the address
+	000734	004767 	000000G			call	wrtall			; do it
+    119	000740					calls	kbread	,<argbuf>	; get the answer, sans SL processing
+	000740	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000742	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	000746	010605 				  mov	sp	,r5		; set pointer to argument list
+	000750	004767 	000000G			  jsr	pc	,kbread		; call the subroutine
+	000754	005726 				  tst	(sp)+			; pop parameter list from stack
+	000756	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    120	000760	005700 				tst	r0			; successful terminal read?
+    121	000762	001403 				beq	170$			; ya
+    122	000764					.newline			; no, after ^C, ensure a new line..
+	000764	004767 	000000G			call	l$pcrlf
+    123	000770	001022 				bne	180$			; go set carry and exit
+    124	000772				170$:	calls	cvt$$	,<argbuf,r1,#cvtarg> ; remove garbage, upper case
+	000772	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000774	012746 	000274 			        mov	#cvtarg	,-(sp)	; push it
+	001000	010146 				        mov	r1	,-(sp)	; push it
+	001002	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	001006	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001010	004767 	000000G			  jsr	pc	,cvt$$		; and go to the routine
+	001014	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001020	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    125	001022	005700 				tst	r0			; anything left?
+    126	001024	001405 				beq	190$			; no, exit please
+    127	001026	127727 	000000G	000131 		cmpb	@argbuf	,#'Y&137	; does string begin with a "Y" ?
+    128	001034	001403 				beq	200$			; /62/ ya, all is well
+    129	001036	005000 			180$:	clr	r0			; no, don't pass back this error
+    130	001040	000261 			190$:	sec				; flag in case called by set$debug
+    131	001042	000207 				return				; error is in r0
+    132
+    133	001044				200$:	calls	create	,<#spare1,#lun.lo,#text> ; open the file
+	001044	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001046	012746 	000000 			        mov	#text	,-(sp)	; push it
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 12-4
+LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
+
+	001052	012746 	000000G			        mov	#lun.lo	,-(sp)	; push it
+	001056	012746 	000000G			        mov	#spare1	,-(sp)	; push it
+	001062	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001064	004767 	000000G			  jsr	pc	,create		; and go to the routine
+	001070	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	001074	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    134	001076	005700 				tst	r0			; did it work?
+    135	001100	001357 				bne	190$			; /BBS/ no
+    136	001102	052767 	100000 	000000G		bis	#log$op	,trace		; yes, say it's open please
+    137	001110					copyz	#spare1	,#logfil ,#26	; save the debug file name for show
+	001110	012746 	000026 			mov	#26	,-(sp)
+	001114	012746 	000000G			mov	#spare1	,-(sp)
+	001120	012746 	000000G			mov	#logfil	,-(sp)
+	001124	004767 	000000G			call	copyz$
+    138	001130	005767 	000000G			tst	infomsg			; /41/ verbose today?
+    139	001134	001440 				beq	220$			; /BBS/ no
+    140	001136					wrtall	#prefix			; /BBS/ a prefix, "Logfile "
+	001136	012746 	000020'			mov	#prefix	,-(sp)		; pass the address
+	001142	004767 	000000G			call	wrtall			; do it
+    141	001146					wrtall	#logfil			; confirm the logfile name
+	001146	012746 	000000G			mov	#logfil	,-(sp)		; pass the address
+	001152	004767 	000000G			call	wrtall			; do it
+    142	001156					wrtall	#st0.34			; /62/ " opened, "
+	001156	012746 	001405'			mov	#st0.34	,-(sp)		; pass the address
+	001162	004767 	000000G			call	wrtall			; do it
+    143	001166	012700 	000000G			mov	#lun.lo	,r0		; /62/ logfile lun
+    144	001172	006300 				asl	r0			; /62/ word indexing
+    145	001174	016000 	000000G			mov	sizof(r0),r0		; /62/ recover size
+    146	001200	010001 				mov	r0	,r1		; /62/ copy to test for plurality
+    147	001202	004767 	000000G			call	L10266			; /62/ dump it to TT
+    148	001206					wrtall	#st0.35			; /62/ say it's block(s)
+	001206	012746 	001417'			mov	#st0.35	,-(sp)		; pass the address
+	001212	004767 	000000G			call	wrtall			; do it
+    149	001216	005301 				dec	r1			; /62/ just one?
+    150	001220	001404 				beq	210$			; /62/ ya, don't make it plural
+    151	001222					wrtall	#st0.36			; /63/ no, toss in an "s"
+	001222	012746 	001426'			mov	#st0.36	,-(sp)		; pass the address
+	001226	004767 	000000G			call	wrtall			; do it
+    152	001232				210$:	.newline			; /62/
+	001232	004767 	000000G			call	l$pcrlf
+    153	001236	005000 			220$:	clr	r0			; success, also clears carry
+    154	001240	000207 				return
+    155
+    156						.dsabl	lsb
+    157
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 13
+LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
+
+      1
+      2						.sbttl	SET DEBUG
+      3						.enabl	lsb			; /63/
+      4
+      5	001242				set$de::upcase	argpnt			; /BBS/ upper case all args
+	001242	016700 	000000G			mov	argpnt	,r0
+	001246	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	001252					calls	getcm0	,<argpnt,#dbglst> ; find out which option was given
+	001252	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001254	012746 	000000'			        mov	#dbglst	,-(sp)	; push it
+	001260	016746 	000000G			        mov	argpnt	,-(sp)	; push it
+	001264	010605 				  mov	sp	,r5		; set up the argument list pointer
+	001266	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	001272	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	001274	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	001276	005700 				tst	r0			; find one?
+      8	001300	100500 				bmi	30$			; /63/ no
+      9	001302	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+     10	001306	001075 				bne	30$			; /63/ ya
+     11	001310	000111 				jmp	@r1			; /63/ dispatch now
+     12
+     13	001312					command	dbglst	,ALL	,1	,sd$on
+						.list me
+						.save
+						.list me
+	000000					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000000	   101 	   114 	   114 		.asciz	#ALL#			; store the command ALL
+	000000	000000'				.word	$$name			; store sd$on of command ALL text
+	000002	000001 				.word	1			; 1 number of chars to match
+	000004	001504'				.word	sd$on			; the command routine's sd$on
+	000006	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     14	001312					command	dbglst	,CONNECT,2	,sd$con
+						.list me
+						.save
+						.list me
+	000004					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000004	   103 	   117 	   116 		.asciz	#CONNECT#			; store the command CONNECT
+	000010	000004'				.word	$$name			; store sd$con of command CONNECT text
+	000012	000002 				.word	2			; 2 number of chars to match
+	000014	001312'				.word	sd$con			; the command routine's sd$con
+	000016	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     15	001312					command	dbglst	,CONSOLE,2	,sd$con
+						.list me
+						.save
+						.list me
+	000014					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000014	   103 	   117 	   116 		.asciz	#CONSOLE#			; store the command CONSOLE
+	000020	000014'				.word	$$name			; store sd$con of command CONSOLE text
+	000022	000002 				.word	2			; 2 number of chars to match
+	000024	001312'				.word	sd$con			; the command routine's sd$con
+	000026	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 13-1
+SET DEBUG
+
+     16	001312					command	dbglst	,NONE	,3	,sd$none
+						.list me
+						.save
+						.list me
+	000024					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000024	   116 	   117 	   116 		.asciz	#NONE#			; store the command NONE
+	000030	000024'				.word	$$name			; store sd$none of command NONE text
+	000032	000003 				.word	3			; 3 number of chars to match
+	000034	001344'				.word	sd$none			; the command routine's sd$none
+	000036	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     17	001312					command	dbglst	,NORPACK,3	,sd$nrp
+						.list me
+						.save
+						.list me
+	000031					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000031	   116 	   117 	   122 		.asciz	#NORPACK#			; store the command NORPACK
+	000040	000031'				.word	$$name			; store sd$nrp of command NORPACK text
+	000042	000003 				.word	3			; 3 number of chars to match
+	000044	001366'				.word	sd$nrp			; the command routine's sd$nrp
+	000046	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     18	001312					command	dbglst	,NOTERMINAL,3	,sd$not
+						.list me
+						.save
+						.list me
+	000041					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000041	   116 	   117 	   124 		.asciz	#NOTERMINAL#			; store the command NOTERMINAL
+	000050	000041'				.word	$$name			; store sd$not of command NOTERMINAL text
+	000052	000003 				.word	3			; 3 number of chars to match
+	000054	001356'				.word	sd$not			; the command routine's sd$not
+	000056	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     19	001312					command	dbglst	,NOTT:	,3	,sd$not
+						.list me
+						.save
+						.list me
+	000054					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000054	   116 	   117 	   124 		.asciz	#NOTT:#			; store the command NOTT:
+	000060	000054'				.word	$$name			; store sd$not of command NOTT: text
+	000062	000003 				.word	3			; 3 number of chars to match
+	000064	001356'				.word	sd$not			; the command routine's sd$not
+	000066	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     20	001312					command	dbglst	,OFF	,2	,sd$off
+						.list me
+						.save
+						.list me
+	000062					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000062	   117 	   106 	   106 		.asciz	#OFF#			; store the command OFF
+	000070	000062'				.word	$$name			; store sd$off of command OFF text
+	000072	000002 				.word	2			; 2 number of chars to match
+	000074	001376'				.word	sd$off			; the command routine's sd$off
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 13-2
+SET DEBUG
+
+	000076	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     21	001312					command	dbglst	,ON	,2	,sd$on
+						.list me
+						.save
+						.list me
+	000066					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000066	   117 	   116 	   000 		.asciz	#ON#			; store the command ON
+	000100	000066'				.word	$$name			; store sd$on of command ON text
+	000102	000002 				.word	2			; 2 number of chars to match
+	000104	001504'				.word	sd$on			; the command routine's sd$on
+	000106	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     22	001312					command	dbglst	,PACKET	,1	,sd$pak
+						.list me
+						.save
+						.list me
+	000071					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000071	   120 	   101 	   103 		.asciz	#PACKET#			; store the command PACKET
+	000110	000071'				.word	$$name			; store sd$pak of command PACKET text
+	000112	000001 				.word	1			; 1 number of chars to match
+	000114	001530'				.word	sd$pak			; the command routine's sd$pak
+	000116	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     23	001312					command	dbglst	,RAW	,2	,sd$raw
+						.list me
+						.save
+						.list me
+	000100					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000100	   122 	   101 	   127 		.asciz	#RAW#			; store the command RAW
+	000120	000100'				.word	$$name			; store sd$raw of command RAW text
+	000122	000002 				.word	2			; 2 number of chars to match
+	000124	001730'				.word	sd$raw			; the command routine's sd$raw
+	000126	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     24	001312					command	dbglst	,RPACK	,2	,sd$rpa
+						.list me
+						.save
+						.list me
+	000104					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000104	   122 	   120 	   101 		.asciz	#RPACK#			; store the command RPACK
+	000130	000104'				.word	$$name			; store sd$rpa of command RPACK text
+	000132	000002 				.word	2			; 2 number of chars to match
+	000134	001562'				.word	sd$rpa			; the command routine's sd$rpa
+	000136	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     25	001312					command	dbglst	,TERMINAL,2	,sd$ter
+						.list me
+						.save
+						.list me
+	000112					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000112	   124 	   105 	   122 		.asciz	#TERMINAL#			; store the command TERMINAL
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 13-3
+SET DEBUG
+
+	000140	000112'				.word	$$name			; store sd$ter of command TERMINAL text
+	000142	000002 				.word	2			; 2 number of chars to match
+	000144	001572'				.word	sd$ter			; the command routine's sd$ter
+	000146	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     26	001312					command	dbglst	,TT:	,2	,sd$ter
+						.list me
+						.save
+						.list me
+	000123					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000123	   124 	   124 	   072 		.asciz	#TT:#			; store the command TT:
+	000150	000123'				.word	$$name			; store sd$ter of command TT: text
+	000152	000002 				.word	2			; 2 number of chars to match
+	000154	001572'				.word	sd$ter			; the command routine's sd$ter
+	000156	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	001312					.restore
+     27	001312					command	dbglst
+						.list me
+						.save
+						.list me
+	000160					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of dbglst
+	000160	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000127					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a dbglst
+						.list me
+	001312					.restore
+     28
+     29	001312	004767 	000264 		sd$con:	call	sdopen			; logfile open?
+     30	001316	103471 				bcs	30$			; no
+     31	001320	004767 	000366 			call	rawchk			; disallow other logging
+     32	001324	103466 				bcs	30$			; if raw is on
+     33	001326	042767 	000003 	000000G		bic	#log$al	,trace		; /BBS/ clear all disk debug bits now
+     34	001334	052767 	000002 	000000G		bis	#log$co	,trace		; enable connect mode logging
+     35	001342	000456 				br	20$			; /63/ success
+     36
+     37	001344	004767 	000026 		sd$none:call	sd$off			; /BBS/ do this first
+     38	001350	005067 	000000G			clr	trace			; /BBS/ dump everything
+     39	001354	000451 				br	20$			; /63/ success
+     40
+     41	001356	042767 	000020 	000000G	sd$not:	bic	#log$de	,trace		; /62/ turn off terminal debugging
+     42	001364	000445 				br	20$			; /63/ success
+     43
+     44	001366	042767 	000004 	000000G	sd$nrp:	bic	#log$rp	,trace		; /BBS/ off just RPACK debugging
+     45	001374	000441 				br	20$			; /63/ success
+     46
+     47	001376	032767 	100000 	000000G	sd$off::bit	#log$op	,trace		; is there a logfile open?
+     48	001404	001432 				beq	10$			; no
+     49	001406					calls	close	,<#lun.lo>	; close it
+	001406	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	001410	012746 	000000G			  mov	#lun.lo	,-(sp)		; doing it thusly generates less code
+	001414	010605 				  mov	sp	,r5		; set pointer to argument list
+	001416	004767 	000000G			  jsr	pc	,close		; call the subroutine
+	001422	005726 				  tst	(sp)+			; pop parameter list from stack
+	001424	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 13-4
+SET DEBUG
+
+     50	001426	042767 	100000 	000000G		bic	#log$op	,trace		; say it's closed please
+     51	001434	005767 	000000G			tst	infomsg			; /41/ inform the user?
+     52	001440	001414 				beq	10$			; /41/ no
+     53	001442					wrtall	#prefix			; /41/ call it Logfile now
+	001442	012746 	000020'			mov	#prefix	,-(sp)		; pass the address
+	001446	004767 	000000G			call	wrtall			; do it
+     54	001452					wrtall	#logfil			; /BBS/ include the actual file name
+	001452	012746 	000000G			mov	#logfil	,-(sp)		; pass the address
+	001456	004767 	000000G			call	wrtall			; do it
+     55	001462					wrtall	#st0.38			; /63/ " closed"<cr><lf>
+	001462	012746 	001517'			mov	#st0.38	,-(sp)		; pass the address
+	001466	004767 	000000G			call	wrtall			; do it
+     56	001472	042767 	000013 	000000G	10$:	bic	#log$al!log$io,trace	; /BBS/ clear all disk debug bits now
+     57	001500	005000 			20$:	clr	r0			; success
+     58	001502	000207 			30$:	return
+     59
+     60	001504	004767 	000202 		sd$on:	call	rawchk			; disallow other logging
+     61	001510	103774 				bcs	30$			; if raw is on
+     62	001512	004767 	000064 			call	sdopen			; a debug file already open?
+     63	001516	103771 				bcs	30$			; no
+     64	001520	052767 	000003 	000000G		bis	#log$al	,trace		; set debug on turns on the world
+     65	001526	000764 				br	20$			; /63/ success
+     66
+     67	001530	004767 	000046 		sd$pak:	call	sdopen			; logfile open?
+     68	001534	103762 				bcs	30$			; no
+     69	001536	004767 	000150 			call	rawchk			; disallow other logging
+     70	001542	103757 				bcs	30$			; if raw is on
+     71	001544	042767 	000003 	000000G		bic	#log$al	,trace		; /BBS/ clear all disk debug bits now
+     72	001552	052767 	000001 	000000G		bis	#log$pa	,trace		; enable packet logging
+     73	001560	000747 				br	20$			; /63/ success
+     74
+     75	001562	052767 	000004 	000000G	sd$rpa:	bis	#log$rp	,trace		; enable RPACK debugging
+     76	001570	000743 				br	20$			; /63/ success
+     77
+     78	001572	052767 	000020 	000000G	sd$ter:	bis	#log$de	,trace		; /62/ I/O to the local terminal
+     79	001600	000737 				br	20$			; /63/ success
+     80
+     81	001602	032767 	100000 	000000G	sdopen:	bit	#log$op	,trace		; a logfile open?
+     82	001610	001420 				beq	50$			; no
+     83	001612	005767 	000000'			tst	savpnt			; /BBS/ come here from file opener?
+     84	001616	001014 				bne	40$			; /BBS/ ya, skip this message..
+     85	001620					wrtall	#prefix			; /BBS/ no, say it's already there
+	001620	012746 	000020'			mov	#prefix	,-(sp)		; pass the address
+	001624	004767 	000000G			call	wrtall			; do it
+     86	001630					wrtall	#logfil			; /BBS/ including what it is
+	001630	012746 	000000G			mov	#logfil	,-(sp)		; pass the address
+	001634	004767 	000000G			call	wrtall			; do it
+     87	001640					wrtall	#st0.39			; /63/ " is already open"<cr><lf>
+	001640	012746 	001531'			mov	#st0.39	,-(sp)		; pass the address
+	001644	004767 	000000G			call	wrtall			; do it
+     88	001650	000713 			40$:	br	20$			; /63/ no error, clr r0 clears carry
+     89
+     90	001652	016700 	000000G		50$:	mov	argbuf	,r0		; /BBS/ bump argpnt to the next arg..
+     91	001656	105710 			60$:	tstb	@r0			; /63/ find EOS yet?
+     92	001660	001410 				beq	70$			; /BBS/ yes, exit with an error
+     93	001662	122027 	000040 			cmpb	(r0)+	,#space		; /BBS/ found a delimiter yet?
+     94	001666	001373 				bne	60$			; /63/ no, keep looking
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 13-5
+SET DEBUG
+
+     95	001670	010067 	000000G			mov	r0	,argpnt		; /BBS/ pass name to logfile opener
+     96	001674	004767 	176456 			call	L1$			; /BBS/ jump in at appropriate place
+     97	001700	103300 				bcc	30$			; /BBS/ carry clear = logfile open
+     98	001702	012700 	000000G		70$:	mov	#er$lgf	,r0		; /BBS/ please opn a LOGFILE first
+     99	001706	000261 			80$:	sec				; /63/ error exit
+    100	001710	000207 				return
+    101
+    102	001712	032767 	000010 	000000G	rawchk:	bit	#log$io	,trace		; raw I/O debugging?  (clears carry)
+    103	001720	001670 				beq	30$			; /63/ no
+    104	001722	012700 	000000G			mov	#er$rax	,r0		; /BBS/ can't with raw I/O logging on
+    105	001726	000767 				br	80$			; /63/ failure
+    106
+    107	001730	004767 	177646 		sd$raw:	call	sdopen			; logfile open?
+    108	001734	103662 				bcs	30$			; no
+    109	001736	016700 	000000G			mov	trace	,r0		; copy of debugging status word
+    110	001742	042700 	100004 			bic	#<log$rp!log$op>,r0	; hose RPACK and disk file open bits
+    111	001746	001403 				beq	90$			; no other disk_based option is on
+    112	001750	012700 	000000G			mov	#er$raw	,r0		; /BBS/ can't do raw I/O w/other opts
+    113	001754	000652 				br	30$
+    114	001756	052767 	000010 	000000G	90$:	bis	#log$io	,trace		; enable raw I/O logging
+    115	001764	012700 	000000G			mov	#lun.lo	,r0		; /62/ copy of lun
+    116	001770	006300 				asl	r0			; /62/ word indexing
+    117	001772	010660 	000000G			mov	sp	,filtyp(r0)	; /62/ flag to use binary mode
+    118	001776	005767 	000000G			tst	infomsg			; SET TT QUIET?
+    119	002002	001636 				beq	20$			; /63/ ya, skip info message
+    120	002004					wrtall	#prefix			; /62/ "Logfile "
+	002004	012746 	000020'			mov	#prefix	,-(sp)		; pass the address
+	002010	004767 	000000G			call	wrtall			; do it
+    121	002014					wrtall	#st0.37			; /62/ say binary mode is enabled
+	002014	012746 	001430'			mov	#st0.37	,-(sp)		; pass the address
+	002020	004767 	000000G			call	wrtall			; do it
+    122	002024	000625 				br	20$			; /63/ success
+    123
+    124						.dsabl	lsb
+    125
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 14
+SET DEBUG
+
+      1
+      2						.sbttl	SET PARITY
+      3						.enabl	lsb			; /63/
+      4
+      5	002026				set$pa::upcase	argbuf			; /BBS/ upper case all args
+	002026	016700 	000000G			mov	argbuf	,r0
+	002032	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	002036					calls	getcm0	,<argbuf,#parlst> ; find out which option was given
+	002036	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002040	012746 	000162'			        mov	#parlst	,-(sp)	; push it
+	002044	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	002050	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002052	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	002056	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002060	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	002062	005700 				tst	r0			; did we find one
+      8	002064	100434 				bmi	30$			; no
+      9	002066	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+     10	002072	001030 				bne	20$			; /BBS/ ya
+     11	002074	000111 				jmp	@r1			; /63/ dispatch
+     12
+     13	002076					command	parlst	,EVEN	,1	,spa$ev
+						.list me
+						.save
+						.list me
+	000130					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000130	   105 	   126 	   105 		.asciz	#EVEN#			; store the command EVEN
+	000162	000130'				.word	$$name			; store spa$ev of command EVEN text
+	000164	000001 				.word	1			; 1 number of chars to match
+	000166	002076'				.word	spa$ev			; the command routine's spa$ev
+	000170	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002076					.restore
+     14	002076					command	parlst	,MARK	,1	,spa$ma
+						.list me
+						.save
+						.list me
+	000135					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000135	   115 	   101 	   122 		.asciz	#MARK#			; store the command MARK
+	000172	000135'				.word	$$name			; store spa$ma of command MARK text
+	000174	000001 				.word	1			; 1 number of chars to match
+	000176	002112'				.word	spa$ma			; the command routine's spa$ma
+	000200	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002076					.restore
+     15	002076					command	parlst	,NONE	,1	,spa$no
+						.list me
+						.save
+						.list me
+	000142					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000142	   116 	   117 	   116 		.asciz	#NONE#			; store the command NONE
+	000202	000142'				.word	$$name			; store spa$no of command NONE text
+	000204	000001 				.word	1			; 1 number of chars to match
+	000206	002126'				.word	spa$no			; the command routine's spa$no
+	000210	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002076					.restore
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 14-1
+SET PARITY
+
+     16	002076					command	parlst	,ODD	,1	,spa$od
+						.list me
+						.save
+						.list me
+	000147					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000147	   117 	   104 	   104 		.asciz	#ODD#			; store the command ODD
+	000212	000147'				.word	$$name			; store spa$od of command ODD text
+	000214	000001 				.word	1			; 1 number of chars to match
+	000216	002104'				.word	spa$od			; the command routine's spa$od
+	000220	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002076					.restore
+     17	002076					command	parlst	,SPACE	,1	,spa$sp
+						.list me
+						.save
+						.list me
+	000153					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000153	   123 	   120 	   101 		.asciz	#SPACE#			; store the command SPACE
+	000222	000153'				.word	$$name			; store spa$sp of command SPACE text
+	000224	000001 				.word	1			; 1 number of chars to match
+	000226	002120'				.word	spa$sp			; the command routine's spa$sp
+	000230	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002076					.restore
+     18	002076					command	parlst
+						.list me
+						.save
+						.list me
+	000232					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of parlst
+	000232	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000161					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a parlst
+						.list me
+	002076					.restore
+     19
+     20	002076	012700 	000002 		spa$ev:	mov	#par$ev	,r0		; even
+     21	002102	000412 				br	10$			; /63/
+     22
+     23	002104	012700 	000001 		spa$od:	mov	#par$od	,r0		; odd
+     24	002110	000407 				br	10$			; /63/
+     25
+     26	002112	012700 	000003 		spa$ma:	mov	#par$ma	,r0		; mark
+     27	002116	000404 				br	10$			; /63/
+     28
+     29	002120	012700 	000004 		spa$sp:	mov	#par$sp	,r0		; space
+     30	002124	000401 				br	10$			; /63/
+     31
+     32	002126	005000 			spa$no:	clr	r0			; /BBS/ none
+     33	002130	010067 	000000G		10$:	mov	r0	,parity		; /63/ save returned value
+     34	002134	001407 				beq	20$			; /BBS/ skip msg if parity is set none
+     35	002136	005767 	000000G			tst	infomsg			; SET TT QUIET?
+     36	002142	001404 				beq	20$			; ya
+     37	002144					wrtall	#st0.42			; /63/ "Binary files will be prefixed"
+	002144	012746 	001674'			mov	#st0.42	,-(sp)		; pass the address
+	002150	004767 	000000G			call	wrtall			; do it
+     38	002154	005000 			20$:	clr	r0			; no error
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 14-2
+SET PARITY
+
+     39	002156	000207 			30$:	return
+     40
+     41						.dsabl	lsb
+     42
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 15
+SET PARITY
+
+      1
+      2						.sbttl	SET HANDSHAKE
+      3						.enabl	lsb			; /63/
+      4
+      5		000047 				SQUOTE	= 47	; '
+      6		000042 				DQUOTE	= 42	; "
+      7
+      8	002160				set$ha::upcase	argbuf			; /BBS/ leaves r0 pointing to argbuf
+	002160	016700 	000000G			mov	argbuf	,r0
+	002164	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      9	002170	121027 	000047 			cmpb	@r0	,#squote	; a literal ' quoted character?
+     10	002174	001403 				beq	10$			; yes, use next char as the handshake
+     11	002176	121027 	000042 			cmpb	@r0	,#dquote	; look for " also
+     12	002202	001003 				bne	20$			; not there
+     13	002204	116000 	000001 		10$:	movb	1(r0)	,r0		; get the handshake character please
+     14	002210	000423 				br	30$			; and copy it please
+     15	002212				20$:	calls	getcm0	,<r0,#hanlst>	; which option was given?
+	002212	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002214	012746 	000234'			        mov	#hanlst	,-(sp)	; push it
+	002220	010046 				        mov	r0	,-(sp)	; push it
+	002222	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002224	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	002230	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002232	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     16	002234	005700 				tst	r0			; find one?
+     17	002236	100413 				bmi	50$			; no
+     18	002240	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+     19	002244	001007 				bne	40$			; /BBS/ ya
+     20	002246	000111 				jmp	@r1			; /63/ dispatch now
+     21
+     22	002250					command	hanlst	,CR	,1	,sha$cr
+						.list me
+						.save
+						.list me
+	000162					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000162	   103 	   122 	   000 		.asciz	#CR#			; store the command CR
+	000234	000162'				.word	$$name			; store sha$cr of command CR text
+	000236	000001 				.word	1			; 1 number of chars to match
+	000240	002254'				.word	sha$cr			; the command routine's sha$cr
+	000242	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002250					.restore
+     23	002250					command	hanlst	,NONE	,1	,sha$no
+						.list me
+						.save
+						.list me
+	000165					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000165	   116 	   117 	   116 		.asciz	#NONE#			; store the command NONE
+	000244	000165'				.word	$$name			; store sha$no of command NONE text
+	000246	000001 				.word	1			; 1 number of chars to match
+	000250	002250'				.word	sha$no			; the command routine's sha$no
+	000252	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002250					.restore
+     24	002250					command	hanlst
+						.list me
+						.save
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 15-1
+SET HANDSHAKE
+
+						.list me
+	000254					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of hanlst
+	000254	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000172					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a hanlst
+						.list me
+	002250					.restore
+     25
+     26	002250	105000 			sha$no:	clrb	r0			; no handshake (the default)
+     27	002252	000402 				br	30$			; /63/
+     28
+     29	002254	112700 	000015 		sha$cr:	movb	#cr	,r0		; wait for a carriage return
+     30	002260	110067 	000000G		30$:	movb	r0	,handch		; save the result
+     31	002264	005000 			40$:	clr	r0			; success
+     32	002266	000207 			50$:	return
+     33
+     34						.dsabl	lsb
+     35
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 16
+SET HANDSHAKE
+
+      1
+      2						.sbttl	SET DUPLEX, SET LOCAL-ECHO	; /BBS/ add _ECHO to LOCAL
+      3						.enabl	lsb			; /63/
+      4
+      5					;	Provide both SET DUPLEX FULL/HALF and SET LOCAL-ECHO ON/OFF
+      6					;	to provide users with compatibility with the different ways
+      7					;	other Kermits do this.
+      8
+      9	002270	012705 	000300'		set$lc::mov	#lcelst	,r5		; load pointer to LOCAL commands
+     10	002274	000402 				br	dulc			; share common code
+     11
+     12	002276	012705 	000256'		set$du::mov	#duplst	,r5		; load pointer to DUPLEX commands
+     13	002302				dulc:	upcase	argbuf			; /BBS/ upper case all args
+	002302	016700 	000000G			mov	argbuf	,r0
+	002306	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     14	002312					calls	getcm0	,<argbuf,r5>	; find out which option was given
+	002312	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002314	010546 				        mov	r5	,-(sp)	; push it
+	002316	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	002322	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002324	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	002330	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002332	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     15	002334	005700 				tst	r0			; did we find one
+     16	002336	100412 				bmi	20$			; no
+     17	002340	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+     18	002344	001006 				bne	10$			; /BBS/ ya
+     19	002346	000111 				jmp	@r1			; /63/ dispatch
+     20
+     21	002350					command	duplst	,FULL	,1	,sdu$fu
+						.list me
+						.save
+						.list me
+	000172					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000172	   106 	   125 	   114 		.asciz	#FULL#			; store the command FULL
+	000256	000172'				.word	$$name			; store sdu$fu of command FULL text
+	000260	000001 				.word	1			; 1 number of chars to match
+	000262	002356'				.word	sdu$fu			; the command routine's sdu$fu
+	000264	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002350					.restore
+     22	002350					command	duplst	,HALF	,1	,sdu$ha
+						.list me
+						.save
+						.list me
+	000177					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000177	   110 	   101 	   114 		.asciz	#HALF#			; store the command HALF
+	000266	000177'				.word	$$name			; store sdu$ha of command HALF text
+	000270	000001 				.word	1			; 1 number of chars to match
+	000272	002350'				.word	sdu$ha			; the command routine's sdu$ha
+	000274	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002350					.restore
+     23	002350					command	duplst
+						.list me
+						.save
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 16-1
+SET DUPLEX, SET LOCAL-ECHO	; /BBS/ add _ECHO to LOCAL
+
+	000276					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of duplst
+	000276	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000204					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a duplst
+						.list me
+	002350					.restore
+     24
+     25	002350					command	lcelst	,OFF	,2	,sdu$fu
+						.list me
+						.save
+						.list me
+	000204					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000204	   117 	   106 	   106 		.asciz	#OFF#			; store the command OFF
+	000300	000204'				.word	$$name			; store sdu$fu of command OFF text
+	000302	000002 				.word	2			; 2 number of chars to match
+	000304	002356'				.word	sdu$fu			; the command routine's sdu$fu
+	000306	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002350					.restore
+     26	002350					command	lcelst	,ON	,2	,sdu$ha
+						.list me
+						.save
+						.list me
+	000210					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000210	   117 	   116 	   000 		.asciz	#ON#			; store the command ON
+	000310	000210'				.word	$$name			; store sdu$ha of command ON text
+	000312	000002 				.word	2			; 2 number of chars to match
+	000314	002350'				.word	sdu$ha			; the command routine's sdu$ha
+	000316	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002350					.restore
+     27	002350					command	lcelst
+						.list me
+						.save
+						.list me
+	000320					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of lcelst
+	000320	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000213					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a lcelst
+						.list me
+	002350					.restore
+     28
+     29	002350	010667 	000000G		sdu$ha:	mov	sp	,duplex		; force local echo on
+     30	002354	000402 				br	10$			; /63/
+     31
+     32	002356	005067 	000000G		sdu$fu:	clr	duplex			; no local echo, the default
+     33	002362	005000 			10$:	clr	r0			; no error
+     34	002364	000207 			20$:	return
+     35
+     36						.dsabl	lsb
+     37
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 17
+SET DUPLEX, SET LOCAL-ECHO	; /BBS/ add _ECHO to LOCAL
+
+      1
+      2						.sbttl	SET UPDATE
+      3
+      4	002366	005067 	000000G		set$nu::clr	blip			; SET NOUPDATE
+      5	002372	005000 				clr	r0			; no error
+      6	002374	000207 				return
+      7
+      8	002376				set$up::calls	l$val	,<argbuf>	; get the interval into decimal
+	002376	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002400	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	002404	010605 				  mov	sp	,r5		; set pointer to argument list
+	002406	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	002412	005726 				  tst	(sp)+			; pop parameter list from stack
+	002414	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	002416	005700 				tst	r0			; ok?
+     10	002420	001002 				bne	10$			; /63/ er$bad stuffed in r0 by l$val
+     11	002422	010167 	000000G			mov	r1	,blip		; yes, set it up please (r0 is clear)
+     12	002426	000207 			10$:	return
+     13
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 18
+SET UPDATE
+
+      1
+      2						.sbttl	SET RETRY		; /BBS/ enhanced..
+      3						.enabl	lsb			; /63/
+      4
+      5	002430				set$re::upcase	argbuf			; /BBS/ upper case argument buffer
+	002430	016700 	000000G			mov	argbuf	,r0
+	002434	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	002440					calls	getcm0	,<argbuf,#trylst> ; try to parse the first arg
+	002440	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002442	012746 	000322'			        mov	#trylst	,-(sp)	; push it
+	002446	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	002452	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002454	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	002460	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002462	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	002464	005700 				tst	r0			; did it work?
+      8	002466	100465 				bmi	20$			; /63/ nope
+      9	002470	005767 	000000G			tst	wasnul			; were commands listed via "?"
+     10	002474	001062 				bne	20$			; /63/ ya
+     11	002476					calls	getcm1	,<argbuf,#trylst,r0> ; /63/ check for possible arg
+	002476	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002500	010046 				        mov	r0	,-(sp)	; push it
+	002502	012746 	000322'			        mov	#trylst	,-(sp)	; push it
+	002506	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	002512	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002514	004767 	000000G			  jsr	pc	,getcm1		; and go to the routine
+	002520	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002524	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     12	002526	005700 				tst	r0			; /63/ well?
+     13	002530	100444 				bmi	20$			; /63/ bad arg..
+     14	002532	000111 				jmp	@r1			; /63/ dispatch
+     15
+     16	002534					command	trylst	,INITIAL-CONNECTION,1	,stry$i	,st0.01
+						.list me
+						.save
+						.list me
+	000214					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000214	   111 	   116 	   111 		.asciz	#INITIAL-CONNECTION#			; store the command INITIAL-CONNECTION
+	000322	000214'				.word	$$name			; store stry$i of command INITIAL-CONNECTION text
+	000324	000001 				.word	1			; 1 number of chars to match
+	000326	002534'				.word	stry$i			; the command routine's stry$i
+	000330	000105'				  .word	st0.01			; /63/ ya, stuff in its location
+						.list me
+	002534					.restore
+     17	002534					command	trylst	,PACKET		   ,1	,stry$p	,st0.01
+						.list me
+						.save
+						.list me
+	000237					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000237	   120 	   101 	   103 		.asciz	#PACKET#			; store the command PACKET
+	000332	000237'				.word	$$name			; store stry$p of command PACKET text
+	000334	000001 				.word	1			; 1 number of chars to match
+	000336	002552'				.word	stry$p			; the command routine's stry$p
+	000340	000105'				  .word	st0.01			; /63/ ya, stuff in its location
+						.list me
+	002534					.restore
+     18	002534					command	trylst
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 18-1
+SET RETRY		; /BBS/ enhanced..
+
+						.list me
+						.save
+						.list me
+	000342					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of trylst
+	000342	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000246					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a trylst
+						.list me
+	002534					.restore
+     19
+     20	002534	004767 	000030 		stry$i:	call	stry$$			; initial-connection retries
+     21	002540	005700 				tst	r0			; did it work?
+     22	002542	001037 				bne	20$			; /63/ no
+     23	002544	010167 	000000G			mov	r1	,initry		; ya, save value
+     24	002550	000207 				return
+     25
+     26	002552	004767 	000012 		stry$p:	call	stry$$			; data packet retries
+     27	002556	005700 				tst	r0			; did it work?
+     28	002560	001030 				bne	20$			; /63/ no
+     29	002562	010167 	000000G			mov	r1	,maxtry		; ya, save value
+     30	002566	000207 				return
+     31
+     32	002570	004767 	003044 		stry$$:	call	nextarg			; get the next argument
+     33	002574	105711 				tstb	@r1			; well?
+     34	002576	001417 				beq	10$			; not there
+     35	002600					calls	l$val	,<r1>		; SET RETRY decimal-number
+	002600	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002602	010146 				  mov	r1	,-(sp)		; doing it thusly generates less code
+	002604	010605 				  mov	sp	,r5		; set pointer to argument list
+	002606	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	002612	005726 				  tst	(sp)+			; pop parameter list from stack
+	002614	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     36	002616	005700 				tst	r0			; well?
+     37	002620	001006 				bne	10$			; no, bad value
+     38	002622	020127 	000003 			cmp	r1	,#3.		; a reasonable minimum?
+     39	002626	103403 				blo	10$			; nope..
+     40	002630	020127 	000036 			cmp	r1	,#30.		; a reasonable maximum?
+     41	002634	101402 				blos	20$			; ya
+     42	002636	012700 	000000G		10$:	mov	#er$try	,r0		; no, must be between 3. and 30.
+     43	002642	000207 			20$:	return
+     44
+     45						.dsabl	lsb			; /63/
+     46
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 19
+SET RETRY		; /BBS/ enhanced..
+
+      1
+      2						.sbttl	SET SERVER
+      3						.enabl	lsb			; /63/
+      4
+      5	002644				set$sv::upcase	argbuf			; /BBS/ upper case all args
+	002644	016700 	000000G			mov	argbuf	,r0
+	002650	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	002654					calls	getcm0	,<argbuf,#svlst> ; find out which option was given
+	002654	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002656	012746 	000344'			        mov	#svlst	,-(sp)	; push it
+	002662	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	002666	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002670	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	002674	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	002676	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	002700	005700 				tst	r0			; did we find the option?
+      8	002702	100444 				bmi	20$			; /63/ no
+      9	002704	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+     10	002710	001041 				bne	20$			; /63/ ya
+     11	002712					calls	getcm1	,<argbuf,#svlst,r0> ; yes, look for value clause now
+	002712	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002714	010046 				        mov	r0	,-(sp)	; push it
+	002716	012746 	000344'			        mov	#svlst	,-(sp)	; push it
+	002722	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	002726	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002730	004767 	000000G			  jsr	pc	,getcm1		; and go to the routine
+	002734	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002740	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     12	002742	005700 				tst	r0			; find it (or read it?)
+     13	002744	100423 				bmi	20$			; /63/ no
+     14	002746	000111 				jmp	@r1			; /63/ getcm1 always returns in argbuf
+     15
+     16	002750					command svlst	,NOTIME-OUT	,1	,srv$nt
+						.list me
+						.save
+						.list me
+	000246					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000246	   116 	   117 	   124 		.asciz	#NOTIME-OUT#			; store the command NOTIME-OUT
+	000344	000246'				.word	$$name			; store srv$nt of command NOTIME-OUT text
+	000346	000001 				.word	1			; 1 number of chars to match
+	000350	003016'				.word	srv$nt			; the command routine's srv$nt
+	000352	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	002750					.restore
+     17	002750					command svlst	,TIME-OUT	,1	,srv$ti	,st0.02
+						.list me
+						.save
+						.list me
+	000261					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000261	   124 	   111 	   115 		.asciz	#TIME-OUT#			; store the command TIME-OUT
+	000354	000261'				.word	$$name			; store srv$ti of command TIME-OUT text
+	000356	000001 				.word	1			; 1 number of chars to match
+	000360	002750'				.word	srv$ti			; the command routine's srv$ti
+	000362	000116'				  .word	st0.02			; /63/ ya, stuff in its location
+						.list me
+	002750					.restore
+     18	002750					command svlst
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 19-1
+SET SERVER
+
+						.list me
+						.save
+						.list me
+	000364					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of svlst
+	000364	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000272					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a svlst
+						.list me
+	002750					.restore
+     19
+     20	002750				srv$ti:	calls	l$val	,<argbuf>	; convert ascii number to integer
+	002750	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002752	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	002756	010605 				  mov	sp	,r5		; set pointer to argument list
+	002760	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	002764	005726 				  tst	(sp)+			; pop parameter list from stack
+	002766	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     21	002770	005700 				tst	r0			; did it work?
+     22	002772	001010 				bne	20$			; /63/ no, l$val loads er$bad into r0
+     23	002774	020127 	002104 			cmp	r1	,#1092.		; /62/ too big?  note r0 is clear here
+     24	003000	101003 				bhi	10$			; /62/ ya, don't set it
+     25	003002	010167 	000000G			mov	r1	,serwait	; it's ok, save desired time out
+     26	003006	000402 				br	20$
+     27	003010	012700 	000000G		10$:	mov	#er$bad	,r0		; error, a bad value was given
+     28	003014	000207 			20$:	return
+     29
+     30	003016	012767 	002104 	000000G	srv$nt:	mov	#1092.	,serwait	; /62/ wait the max, 18.2 mins @ 60Hz
+     31	003024	005000 				clr	r0			; no error possible here
+     32	003026	000207 				return
+     33
+     34						.dsabl	lsb
+     35
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 20
+SET SERVER
+
+      1
+      2						.sbttl	SET EOF [NO]EXIT
+      3						.enabl	lsb			; /63/
+      4
+      5	003030				set$ef::upcase	argbuf			; /BBS/ upper case all args
+	003030	016700 	000000G			mov	argbuf	,r0
+	003034	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	003040					calls	getcm0	,<argbuf,#eflist> ; parse the first arg
+	003040	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003042	012746 	000366'			        mov	#eflist	,-(sp)	; push it
+	003046	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	003052	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003054	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	003060	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003062	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	003064	005700 				tst	r0			; did it work?
+      8	003066	100412 				bmi	20$			; no
+      9	003070	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+     10	003074	001007 				bne	20$			; /BBS/ ya
+     11	003076	000111 				jmp	@r1			; /63/ dispatch
+     12
+     13	003100					command	eflist	,EXIT	,1	,sef$ex
+						.list me
+						.save
+						.list me
+	000272					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000272	   105 	   130 	   111 		.asciz	#EXIT#			; store the command EXIT
+	000366	000272'				.word	$$name			; store sef$ex of command EXIT text
+	000370	000001 				.word	1			; 1 number of chars to match
+	000372	003106'				.word	sef$ex			; the command routine's sef$ex
+	000374	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003100					.restore
+     14	003100					command	eflist	,NOEXIT	,1	,sef$ne
+						.list me
+						.save
+						.list me
+	000277					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000277	   116 	   117 	   105 		.asciz	#NOEXIT#			; store the command NOEXIT
+	000376	000277'				.word	$$name			; store sef$ne of command NOEXIT text
+	000400	000001 				.word	1			; 1 number of chars to match
+	000402	003100'				.word	sef$ne			; the command routine's sef$ne
+	000404	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003100					.restore
+     15	003100					command	eflist
+						.list me
+						.save
+						.list me
+	000406					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of eflist
+	000406	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000306					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a eflist
+						.list me
+	003100					.restore
+     16
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 20-1
+SET EOF [NO]EXIT
+
+     17	003100	005067 	000000G		sef$ne:	clr	exieof			; don't exit at end of TAKE file
+     18	003104	000402 				br	10$			; /63/
+     19
+     20	003106	010667 	000000G		sef$ex:	mov	sp	,exieof		; exit to monitor at end of TAKE file
+     21	003112	005000 			10$:	clr	r0			; no error
+     22	003114	000207 			20$:	return
+     23
+     24						.dsabl	lsb
+     25
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 21
+SET EOF [NO]EXIT
+
+      1
+      2						.sbttl	SET INCOMPLETE-FILE-DISPOSITION	; /BBS/ all new..
+      3						.enabl	lsb			; /63/
+      4
+      5	003116				set$in::upcase	argbuf			; upper case all args
+	003116	016700 	000000G			mov	argbuf	,r0
+	003122	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	003126					calls	getcm0	,<argbuf,#inclist> ; try to parse the first arg
+	003126	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003130	012746 	000410'			        mov	#inclist	,-(sp)	; push it
+	003134	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	003140	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003142	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	003146	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003150	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	003152	005700 				tst	r0			; well?
+      8	003154	100412 				bmi	20$			; didn't work
+      9	003156	005767 	000000G			tst	wasnul			; was arg a question mark?
+     10	003162	001007 				bne	20$			; ya, don't dispatch on that
+     11	003164	000111 				jmp	@r1			; /63/ dispatch the command
+     12
+     13	003166					command	inclist	,DISCARD,1	,sin$ds
+						.list me
+						.save
+						.list me
+	000306					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000306	   104 	   111 	   123 		.asciz	#DISCARD#			; store the command DISCARD
+	000410	000306'				.word	$$name			; store sin$ds of command DISCARD text
+	000412	000001 				.word	1			; 1 number of chars to match
+	000414	003174'				.word	sin$ds			; the command routine's sin$ds
+	000416	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003166					.restore
+     14	003166					command	inclist	,KEEP	,1	,sin$kp
+						.list me
+						.save
+						.list me
+	000316					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000316	   113 	   105 	   105 		.asciz	#KEEP#			; store the command KEEP
+	000420	000316'				.word	$$name			; store sin$kp of command KEEP text
+	000422	000001 				.word	1			; 1 number of chars to match
+	000424	003166'				.word	sin$kp			; the command routine's sin$kp
+	000426	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003166					.restore
+     15	003166					command	inclist
+						.list me
+						.save
+						.list me
+	000430					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of inclist
+	000430	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	000323					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a inclist
+						.list me
+	003166					.restore
+     16
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 21-1
+SET INCOMPLETE-FILE-DISPOSITION	; /BBS/ all new..
+
+     17	003166	005067 	000000G		sin$kp:	clr	incfile			; keep incomplete files
+     18	003172	000402 				br	10$			; /63/
+     19
+     20	003174	010667 	000000G		sin$ds:	mov	sp	,incfile	; dump incomplete files
+     21	003200	005000 			10$:	clr	r0			; no error
+     22	003202	000207 			20$:	return
+     23
+     24						.dsabl	lsb
+     25
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22
+SET INCOMPLETE-FILE-DISPOSITION	; /BBS/ all new..
+
+      1
+      2						.sbttl	SET DIAL		; /BBS/ substantially enhanced
+      3						.enabl	lsb			; /63/
+      4
+      5	003204	012703 	000432'		set$di::mov	#dialst	,r3		; pointer to command dispatch table
+      6	003210	012704 	000000G			mov	#spare1	,r4		; /63/ pointer to a temp buffer
+      7	003214					upone	argbuf			; upcase just next arg only..
+	003214	016700 	000000G			mov	argbuf	,r0
+	003220	004767 	000000G			call	upone			; /BBS/ upcase only to next delimiter
+      8	003224					calls	getcm0	,<argbuf,r3>	; parse the first arg
+	003224	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003226	010346 				        mov	r3	,-(sp)	; push it
+	003230	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	003234	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003236	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	003242	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	003244	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      9	003246	005700 				tst	r0			; did it work?
+     10	003250	100525 				bmi	60$			; /63/ no, bad option
+     11	003252	005767 	000000G			tst	wasnul			; were commands listed via "?"
+     12	003256	001122 				bne	60$			; /63/ ya
+     13	003260					calls	getcm1	,<argbuf,r3,r0>	; no, look for next arg
+	003260	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	003262	010046 				        mov	r0	,-(sp)	; push it
+	003264	010346 				        mov	r3	,-(sp)	; push it
+	003266	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	003272	010605 				  mov	sp	,r5		; set up the argument list pointer
+	003274	004767 	000000G			  jsr	pc	,getcm1		; and go to the routine
+	003300	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	003304	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     14	003306	005700 				tst	r0			; get one?
+     15	003310	100505 				bmi	60$			; /63/ no
+     16	003312	000111 				jmp	@r1			; /63/ dispatch
+     17
+     18	003314					command dialst ,ABORT		,2	,ss$abo	,st0.03
+						.list me
+						.save
+						.list me
+	000324					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000324	   101 	   102 	   117 		.asciz	#ABORT#			; store the command ABORT
+	000432	000324'				.word	$$name			; store ss$abo of command ABORT text
+	000434	000002 				.word	2			; 2 number of chars to match
+	000436	003526'				.word	ss$abo			; the command routine's ss$abo
+	000440	000130'				  .word	st0.03			; /63/ ya, stuffER text
+	000444	000002 				.word	2			; 2 number of chars to match
+	000446	003534'				.word	ss$ans			; the command routine's ss$ans
+	000450	000157'				  .word	st0.04			; /63/ ya, stuff in its location
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-1
+SET DIAL		; /BBS/ substantially enhanced
+
+	003314					.restore
+     20	003314					command dialst ,BINARY-RESPONSE	,2	,ss$bin
+						.list me
+						.save
+						.list me
+	000341					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000341	   102 	   111 	   116 		.asciz	#BINARY-RESPONSE#			; store the command BINARY-RESPONSE
+	000452	000341'				.word	$$name			; store ss$bin of command BINARY-RESPONSE text
+	000454	000002 				.word	2			; 2 number of chars to match
+	000456	004004'				.word	ss$bin			; the command routine's ss$bin
+	000460	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003314					.restore
+     21	003314					command dialst ,BLIND		,2	,ss$bli	,st0.05
+						.list me
+						.save
+						.list me
+	000361					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000361	   102 	   114 	   111 		.asciz	#BLIND#			; store the command BLIND
+	000462	000361'				.word	$$name			; store ss$bli of command BLIND text
+	000464	000002 				.word	2			; 2 number of chars to match
+	000466	003652'				.word	ss$bli			; the command routine's ss$bli
+	000470	000213'				  .word	st0.05			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     22	003314					command dialst ,COMMENT		,3	,ss$com	,st0.06
+						.list me
+						.save
+						.list me
+	000367					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000367	   103 	   117 	   115 		.asciz	#COMMENT#			; store the command COMMENT
+	000472	000367'				.word	$$name			; store ss$com of command COMMENT text
+	000474	000003 				.word	3			; 3 number of chars to match
+	000476	003550'				.word	ss$com			; the command routine's ss$com
+	000500	000242'				  .word	st0.06			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     23	003314					command dialst ,CON300		,5	,ss$300	,st0.06
+						.list me
+						.save
+						.list me
+	000377					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000377	   103 	   117 	   116 		.asciz	#CON300#			; store the command CON300
+	000502	000377'				.word	$$name			; store ss$300 of command CON300 text
+	000504	000005 				.word	5			; 5 number of chars to match
+	000506	003314'				.word	ss$300			; the command routine's ss$300
+	000510	000242'				  .word	st0.06			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     24	003314					command dialst ,CON1200		,5	,ss$120	,st0.08
+						.list me
+						.save
+						.list me
+	000406					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000406	   103 	   117 	   116 		.asciz	#CON1200#			; store the command CON1200
+	000512	000406'				.word	$$name			; store ss$120 of command CON1200 text
+	000514	000005 				.word	5			; 5 number of chars to match
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-2
+SET DIAL		; /BBS/ substantially enhanced
+
+	000516	003322'				.word	ss$120			; the command routine's ss$120
+	000520	000317'				  .word	st0.08			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     25	003314					command dialst ,CON2400		,4	,ss$240	,st0.09
+						.list me
+						.save
+						.list me
+	000416					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000416	   103 	   117 	   116 		.asciz	#CON2400#			; store the command CON2400
+	000522	000416'				.word	$$name			; store ss$240 of command CON2400 text
+	000524	000004 				.word	4			; 4 number of chars to match
+	000526	003330'				.word	ss$240			; the command routine's ss$240
+	000530	000351'				  .word	st0.09			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     26	003314					command dialst ,CON4800		,4	,ss$480	,st0.10
+						.list me
+						.save
+						.list me
+	000426					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000426	   103 	   117 	   116 		.asciz	#CON4800#			; store the command CON4800
+	000532	000426'				.word	$$name			; store ss$480 of command CON4800 text
+	000534	000004 				.word	4			; 4 number of chars to match
+	000536	003336'				.word	ss$480			; the command routine's ss$480
+	000540	000403'				  .word	st0.10			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     27	003314					command dialst ,CON9600		,4	,ss$960	,st0.11
+						.list me
+						.save
+						.list me
+	000436					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000436	   103 	   117 	   116 		.asciz	#CON9600#			; store the command CON9600
+	000542	000436'				.word	$$name			; store ss$960 of command CON9600 text
+	000544	000004 				.word	4			; 4 number of chars to match
+	000546	003344'				.word	ss$960			; the command routine's ss$960
+	000550	000435'				  .word	st0.11			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     28	003314					command dialst ,CON19200	,5	,ss$192	,st0.12
+						.list me
+						.save
+						.list me
+	000446					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000446	   103 	   117 	   116 		.asciz	#CON19200#			; store the command CON19200
+	000552	000446'				.word	$$name			; store ss$192 of command CON19200 text
+	000554	000005 				.word	5			; 5 number of chars to match
+	000556	003352'				.word	ss$192			; the command routine's ss$192
+	000560	000467'				  .word	st0.12			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     29	003314					command dialst ,CON38400	,5	,ss$384	,st0.13
+						.list me
+						.save
+						.list me
+	000457					.psect	cmdtxt	,ro,d,lcl,rel,con
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-3
+SET DIAL		; /BBS/ substantially enhanced
+
+	000457	   103 	   117 	   116 		.asciz	#CON38400#			; store the command CON38400
+	000562	000457'				.word	$$name			; store ss$384 of command CON38400 text
+	000564	000005 				.word	5			; 5 number of chars to match
+	000566	003360'				.word	ss$384			; the command routine's ss$384
+	000570	000522'				  .word	st0.13			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     30	003314					command dialst ,CONFIRM		,4	,ss$con	,st0.14
+						.list me
+						.save
+						.list me
+	000470					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000470	   103 	   117 	   116 		.asciz	#CONFIRM#			; store the command CONFIRM
+	000572	000470'				.word	$$name			; store ss$con of command CONFIRM text
+	000574	000004 				.word	4			; 4 number of chars to match
+	000576	003636'				.word	ss$con			; the command routine's ss$con
+	000600	000555'				  .word	st0.14			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     31	003314					command dialst ,CONFIRM-ACKNOWLEDGE,8.	,ss$cak	,st0.14
+						.list me
+						.save
+						.list me
+	000500					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000500	   103 	   117 	   116 		.asciz	#CONFIRM-ACKNOWLEDGE#			; store the command CONFIRM-ACKNOWLEDGE
+	000602	000500'				.word	$$name			; store ss$cak of command CONFIRM-ACKNOWLEDGE text
+	000604	000010 				.word	8.			; 8. number of chars to match
+	000606	003644'				.word	ss$cak			; the command routine's ss$cak
+	000610	000555'				  .word	st0.14			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     32	003314					command dialst ,DIAL-ACKNOWLEDGE,6	,ss$dak	,st0.14
+						.list me
+						.save
+						.list me
+	000524					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000524	   104 	   111 	   101 		.asciz	#DIAL-ACKNOWLEDGE#			; store the command DIAL-ACKNOWLEDGE
+	000612	000524'				.word	$$name			; store ss$dak of command DIAL-ACKNOWLEDGE text
+	000614	000006 				.word	6			; 6 number of chars to match
+	000616	003556'				.word	ss$dak			; the command routine's ss$dak
+	000620	000555'				  .word	st0.14			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     33	003314					command dialst ,DIAL-PAUSE	,6	,ss$pau	,st0.15
+						.list me
+						.save
+						.list me
+	000545					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000545	   104 	   111 	   101 		.asciz	#DIAL-PAUSE#			; store the command DIAL-PAUSE
+	000622	000545'				.word	$$name			; store ss$pau of command DIAL-PAUSE text
+	000624	000006 				.word	6			; 6 number of chars to match
+	000626	003572'				.word	ss$pau			; the command routine's ss$pau
+	000630	000566'				  .word	st0.15			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     34	003314					command dialst ,DIAL-RATE	,6	,ss$dra	,st0.16
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-4
+SET DIAL		; /BBS/ substantially enhanced
+
+						.save
+						.list me
+	000560					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000560	   104 	   111 	   101 		.asciz	#DIAL-RATE#			; store the command DIAL-RATE
+	000632	000560'				.word	$$name			; store ss$dra of command DIAL-RATE text
+	000634	000006 				.word	6			; 6 number of chars to match
+	000636	004040'				.word	ss$dra			; the command routine's ss$dra
+	000640	000605'				  .word	st0.16			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     35	003314					command dialst ,ECHO		,1	,ss$eko
+						.list me
+						.save
+						.list me
+	000572					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000572	   105 	   103 	   110 		.asciz	#ECHO#			; store the command ECHO
+	000642	000572'				.word	$$name			; store ss$eko of command ECHO text
+	000644	000001 				.word	1			; 1 number of chars to match
+	000646	003754'				.word	ss$eko			; the command routine's ss$eko
+	000650	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003314					.restore
+     36	003314					command dialst ,FAILURE		,2	,ss$fai	,st0.17
+						.list me
+						.save
+						.list me
+	000577					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000577	   106 	   101 	   111 		.asciz	#FAILURE#			; store the command FAILURE
+	000652	000577'				.word	$$name			; store ss$fai of command FAILURE text
+	000654	000002 				.word	2			; 2 number of chars to match
+	000656	003402'				.word	ss$fai			; the command routine's ss$fai
+	000660	000615'				  .word	st0.17			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     37	003314					command dialst ,FORMAT		,2	,ss$for	,st0.18
+						.list me
+						.save
+						.list me
+	000607					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000607	   106 	   117 	   122 		.asciz	#FORMAT#			; store the command FORMAT
+	000662	000607'				.word	$$name			; store ss$for of command FORMAT text
+	000664	000002 				.word	2			; 2 number of chars to match
+	000666	003606'				.word	ss$for			; the command routine's ss$for
+	000670	000643'				  .word	st0.18			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     38	003314					command dialst ,IDLE		,2	,ss$idl	,st0.19
+						.list me
+						.save
+						.list me
+	000616					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000616	   111 	   104 	   114 		.asciz	#IDLE#			; store the command IDLE
+	000672	000616'				.word	$$name			; store ss$idl of command IDLE text
+	000674	000002 				.word	2			; 2 number of chars to match
+	000676	003564'				.word	ss$idl			; the command routine's ss$idl
+	000700	000670'				  .word	st0.19			; /63/ ya, stuff in its location
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-5
+SET DIAL		; /BBS/ substantially enhanced
+
+	003314					.restore
+     39	003314					command dialst ,INITIATE	,5	,ss$ini	,st0.20
+						.list me
+						.save
+						.list me
+	000623					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000623	   111 	   116 	   111 		.asciz	#INITIATE#			; store the command INITIATE
+	000702	000623'				.word	$$name			; store ss$ini of command INITIATE text
+	000704	000005 				.word	5			; 5 number of chars to match
+	000706	003622'				.word	ss$ini			; the command routine's ss$ini
+	000710	000715'				  .word	st0.20			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     40	003314					command dialst ,INITIATE-PROMPT	,9.	,ss$inp	,st0.21
+						.list me
+						.save
+						.list me
+	000634					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000634	   111 	   116 	   111 		.asciz	#INITIATE-PROMPT#			; store the command INITIATE-PROMPT
+	000712	000634'				.word	$$name			; store ss$inp of command INITIATE-PROMPT text
+	000714	000011 				.word	9.			; 9. number of chars to match
+	000716	003630'				.word	ss$inp			; the command routine's ss$inp
+	000720	000747'				  .word	st0.21			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     41	003314					command dialst ,INIT-ONCE	,5	,ss$one
+						.list me
+						.save
+						.list me
+	000654					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000654	   111 	   116 	   111 		.asciz	#INIT-ONCE#			; store the command INIT-ONCE
+	000722	000654'				.word	$$name			; store ss$one of command INIT-ONCE text
+	000724	000005 				.word	5			; 5 number of chars to match
+	000726	003770'				.word	ss$one			; the command routine's ss$one
+	000730	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003314					.restore
+     42	003314					command dialst ,NOANSWER	,3	,ss$anx	,st0.22
+						.list me
+						.save
+						.list me
+	000666					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000666	   116 	   117 	   101 		.asciz	#NOANSWER#			; store the command NOANSWER
+	000732	000666'				.word	$$name			; store ss$anx of command NOANSWER text
+	000734	000003 				.word	3			; 3 number of chars to match
+	000736	003542'				.word	ss$anx			; the command routine's ss$anx
+	000740	001010'				  .word	st0.22			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     43	003314					command dialst ,NOBINARY-RESPONSE,3	,ss$bix
+						.list me
+						.save
+						.list me
+	000677					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000677	   116 	   117 	   102 		.asciz	#NOBINARY-RESPONSE#			; store the command NOBINARY-RESPONSE
+	000742	000677'				.word	$$name			; store ss$bix of command NOBINARY-RESPONSE text
+	000744	000003 				.word	3			; 3 number of chars to match
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-6
+SET DIAL		; /BBS/ substantially enhanced
+
+	000746	004016'				.word	ss$bix			; the command routine's ss$bix
+	000750	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003314					.restore
+     44	003314					command dialst ,NOECHO		,3	,ss$ekx
+						.list me
+						.save
+						.list me
+	000721					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000721	   116 	   117 	   105 		.asciz	#NOECHO#			; store the command NOECHO
+	000752	000721'				.word	$$name			; store ss$ekx of command NOECHO text
+	000754	000003 				.word	3			; 3 number of chars to match
+	000756	003762'				.word	ss$ekx			; the command routine's ss$ekx
+	000760	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003314					.restore
+     45	003314					command dialst ,NOINIT-ONCE	,3	,ss$onx
+						.list me
+						.save
+						.list me
+	000730					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000730	   116 	   117 	   111 		.asciz	#NOINIT-ONCE#			; store the command NOINIT-ONCE
+	000762	000730'				.word	$$name			; store ss$onx of command NOINIT-ONCE text
+	000764	000003 				.word	3			; 3 number of chars to match
+	000766	003776'				.word	ss$onx			; the command routine's ss$onx
+	000770	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	003314					.restore
+     46	003314					command dialst ,PULSE		,1	,ss$pul	,st0.23
+						.list me
+						.save
+						.list me
+	000744					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000744	   120 	   125 	   114 		.asciz	#PULSE#			; store the command PULSE
+	000772	000744'				.word	$$name			; store ss$pul of command PULSE text
+	000774	000001 				.word	1			; 1 number of chars to match
+	000776	003660'				.word	ss$pul			; the command routine's ss$pul
+	001000	001045'				  .word	st0.23			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     47	003314					command dialst ,RINGING		,1	,ss$rin	,st0.24
+						.list me
+						.save
+						.list me
+	000752					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000752	   122 	   111 	   116 		.asciz	#RINGING#			; store the command RINGING
+	001002	000752'				.word	$$name			; store ss$rin of command RINGING text
+	001004	000001 				.word	1			; 1 number of chars to match
+	001006	003374'				.word	ss$rin			; the command routine's ss$rin
+	001010	001071'				  .word	st0.24			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     48	003314					command dialst ,SETTLE-TIME	,2	,sst$st	,st0.16
+						.list me
+						.save
+						.list me
+	000762					.psect	cmdtxt	,ro,d,lcl,rel,con
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-7
+SET DIAL		; /BBS/ substantially enhanced
+
+	000762	   123 	   105 	   124 		.asciz	#SETTLE-TIME#			; store the command SETTLE-TIME
+	001012	000762'				.word	$$name			; store sst$st of command SETTLE-TIME text
+	001014	000002 				.word	2			; 2 number of chars to match
+	001016	004104'				.word	sst$st			; the command routine's sst$st
+	001020	000605'				  .word	st0.16			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     49	003314					command dialst ,SUCCESS		,2	,ss$suc	,st0.25
+						.list me
+						.save
+						.list me
+	000776					.psect	cmdtxt	,ro,d,lcl,rel,con
+	000776	   123 	   125 	   103 		.asciz	#SUCCESS#			; store the command SUCCESS
+	001022	000776'				.word	$$name			; store ss$suc of command SUCCESS text
+	001024	000002 				.word	2			; 2 number of chars to match
+	001026	003366'				.word	ss$suc			; the command routine's ss$suc
+	001030	001113'				  .word	st0.25			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     50	003314					command dialst ,TIME-OUT	,2	,ss$tmo	,st0.26
+						.list me
+						.save
+						.list me
+	001006					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001006	   124 	   111 	   115 		.asciz	#TIME-OUT#			; store the command TIME-OUT
+	001032	001006'				.word	$$name			; store ss$tmo of command TIME-OUT text
+	001034	000002 				.word	2			; 2 number of chars to match
+	001036	004142'				.word	ss$tmo			; the command routine's ss$tmo
+	001040	001154'				  .word	st0.26			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     51	003314					command dialst ,TONE		,2	,ss$ton	,st0.27
+						.list me
+						.save
+						.list me
+	001017					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001017	   124 	   117 	   116 		.asciz	#TONE#			; store the command TONE
+	001042	001017'				.word	$$name			; store ss$ton of command TONE text
+	001044	000002 				.word	2			; 2 number of chars to match
+	001046	003666'				.word	ss$ton			; the command routine's ss$ton
+	001050	001166'				  .word	st0.27			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     52	003314					command dialst ,WAKE-ACKNOWLEDGE,6	,ss$pro	,st0.28
+						.list me
+						.save
+						.list me
+	001024					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001024	   127 	   101 	   113 		.asciz	#WAKE-ACKNOWLEDGE#			; store the command WAKE-ACKNOWLEDGE
+	001052	001024'				.word	$$name			; store ss$pro of command WAKE-ACKNOWLEDGE text
+	001054	000006 				.word	6			; 6 number of chars to match
+	001056	003614'				.word	ss$pro			; the command routine's ss$pro
+	001060	001211'				  .word	st0.28			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     53	003314					command dialst ,WAKE-RATE	,6	,ss$wra	,st0.16
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-8
+SET DIAL		; /BBS/ substantially enhanced
+
+						.save
+						.list me
+	001045					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001045	   127 	   101 	   113 		.asciz	#WAKE-RATE#			; store the command WAKE-RATE
+	001062	001045'				.word	$$name			; store ss$wra of command WAKE-RATE text
+	001064	000006 				.word	6			; 6 number of chars to match
+	001066	004046'				.word	ss$wra			; the command routine's ss$wra
+	001070	000605'				  .word	st0.16			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     54	003314					command dialst ,WAKE-STRING	,6	,ss$wak	,st0.29
+						.list me
+						.save
+						.list me
+	001057					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001057	   127 	   101 	   113 		.asciz	#WAKE-STRING#			; store the command WAKE-STRING
+	001072	001057'				.word	$$name			; store ss$wak of command WAKE-STRING text
+	001074	000006 				.word	6			; 6 number of chars to match
+	001076	003600'				.word	ss$wak			; the command routine's ss$wak
+	001100	001237'				  .word	st0.29			; /63/ ya, stuff in its location
+						.list me
+	003314					.restore
+     55	003314					command dialst
+						.list me
+						.save
+						.list me
+	001102					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of dialst
+	001102	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	001073					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a dialst
+						.list me
+	003314					.restore
+     56
+     57	003314	012703 	000454 		ss$300:	mov	#300.	,r3		; connect at 300
+     58	003320	000432 				br	sd.res
+     59
+     60	003322	012703 	002260 		ss$120:	mov	#1200.	,r3		; 1200
+     61	003326	000427 				br	sd.res
+     62
+     63	003330	012703 	004540 		ss$240:	mov	#2400.	,r3		; 2400
+     64	003334	000424 				br	sd.res
+     65
+     66	003336	012703 	011300 		ss$480:	mov	#4800.	,r3		; 4800
+     67	003342	000421 				br	sd.res
+     68
+     69	003344	012703 	022600 		ss$960:	mov	#9600.	,r3		; 9600
+     70	003350	000416 				br	sd.res
+     71
+     72	003352	012703 	045400 		ss$192:	mov	#19200.	,r3		; 19.2k
+     73	003356	000413 				br	sd.res
+     74
+     75	003360	012703 	113000 		ss$384:	mov	#38400.	,r3		; /62/ 38.4k
+     76	003364	000410 				br	sd.res
+     77
+     78	003366	012703 	000002 		ss$suc:	mov	#2	,r3		; connect without speed change
+     79	003372	000405 				br	sd.res
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-9
+SET DIAL		; /BBS/ substantially enhanced
+
+     80
+     81	003374	012703 	000001 		ss$rin:	mov	#1	,r3		; ring, or rring if Telebit modem
+     82	003400	000402 				br	sd.res
+     83
+     84	003402	012703 	177777 		ss$fai:	mov	#-1	,r3		; call failed
+     85	003406					.br	sd.res			; /63/
+     86
+     87	003406				sd.res:	prsbuf	r4			; expand and copy string to workbuffer
+	003406	010400 				mov	r4	,r0
+	003410	004767 	000000G			call	prsarg
+     88	003414	005700 				tst	r0			; successful?
+     89	003416	001042 				bne	60$			; no
+     90	003420					strlen	r4			; get the length of the result
+	003420	010400 				mov	r4	,r0
+	003422	004767 	000000G			call	l$len
+     91	003426	062700 	000002 			add	#2	,r0		; plus one for the null terminator
+     92	003432	042700 	000001 			bic	#1	,r0		; ensure on a word boundary
+     93	003436	062700 	000004 			add	#4	,r0		; space for link and status
+     94	003442	012705 	000000G			mov	#usermd	,r5		; /BBS/ get base address of structure
+     95	003446	062705 	000000G			add	#res.hea,r5		; link to first entry
+     96	003452	005715 			20$:	tst	(r5)			; end of the chain yet?
+     97	003454	001402 				beq	30$			; yes
+     98	003456	011505 				mov	(r5)	,r5		; no, get the next one please
+     99	003460	000774 				br	20$			; and recheck
+    100	003462				30$:	malloc	r0			; ask for an allocation
+	003462	010000 				mov	r0	,r0
+	003464	004767 	002170 			call	malloc
+    101	003470	010015 				mov	r0	,(r5)		; /63/ get it?
+    102	003472	001410 				beq	40$			; no, exit
+    103	003474	011505 				mov	(r5)	,r5		; point directly to new area
+    104	003476	005025 				clr	(r5)+			; no link to next
+    105	003500	010325 				mov	r3	,(r5)+		; message class type
+    106	003502					strcpy	r5	,r4		; insert the string
+	003502	010446 				mov	r4	,-(sp)
+	003504	010546 				mov	r5	,-(sp)
+	003506	004767 	000000G			jsr	pc	,strcpy
+    107	003512	000403 				br	50$
+    108	003514	012700 	000000G		40$:	mov	#er$mal	,r0		; /BBS/ no space left for string
+    109	003520	000207 				return
+    110	003522	005000 			50$:	clr	r0			; /BBS/ no error
+    111	003524	000207 			60$:	return
+    112
+    113	003526	012705 	000000G		ss$abo:	mov	#dial.xabort,r5		; abort call from modem
+    114	003532	000457 				br	sd.chk
+    115
+    116	003534	012705 	000000G		ss$ans:	mov	#ph.answer,r5		; /62/ enable auto-answer mode
+    117	003540	000454 				br	sd.chk
+    118
+    119	003542	012705 	000000G		ss$anx:	mov	#ph.noanswer,r5		; /62/ disable auto-answer mode
+    120	003546	000451 				br	sd.chk
+    121
+    122	003550	012705 	000000G		ss$com:	mov	#mod.comment,r5		; brief modem description
+    123	003554	000446 				br	sd.chk
+    124
+    125	003556	012705 	000000G		ss$dak:	mov	#dial.ack,r5		; /62/ modem response to confirm
+    126	003562	000443 				br	sd.chk			; /62/ number is dialing (optional)
+    127
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-10
+SET DIAL		; /BBS/ substantially enhanced
+
+    128	003564	012705 	000000G		ss$idl:	mov	#dial.idle,r5		; place modem in idle state
+    129	003570	000440 				br	sd.chk
+    130
+    131	003572	012705 	000000G		ss$pau:	mov	#dial.wait,r5		; pause string
+    132	003576	000435 				br	sd.chk
+    133
+    134	003600	012705 	000000G		ss$wak:	mov	#wake.string,r5		; init string
+    135	003604	000432 				br	sd.chk
+    136
+    137	003606	012705 	000000G		ss$for:	mov	#dial.string,r5		; formatting for dialing
+    138	003612	000427 				br	sd.chk
+    139
+    140	003614	012705 	000000G		ss$pro:	mov	#wake.prompt,r5		; string modem returns for wakeup
+    141	003620	000424 				br	sd.chk
+    142
+    143	003622	012705 	000000G		ss$ini:	mov	#dmod.string,r5		; SET DIAL INITIATE string
+    144	003626	000421 				br	sd.chk
+    145
+    146	003630	012705 	000000G		ss$inp:	mov	#dmod.prompt,r5		; /62/ possible prompt returned after
+    147	003634	000416 				br	sd.chk			; /62/ INITIATE string is sent
+    148
+    149	003636	012705 	000000G		ss$con:	mov	#dial.confirm,r5	; to confirm number is correct
+    150	003642	000413 				br	sd.chk
+    151
+    152	003644	012705 	000000G		ss$cak:	mov	#dial.go,r5		; /62/ to confirm the confirmation
+    153	003650	000410 				br	sd.chk			; /62/ is correct (!)
+    154
+    155	003652	012705 	000000G		ss$bli:	mov	#dial.blind,r5		; /62/ BLIND dialing string
+    156	003656	000405 				br	sd.chk			; /62/
+    157
+    158	003660	012705 	000000G		ss$pul:	mov	#dial.pulse,r5		; /62/ PULSE dialing string
+    159	003664	000402 				br	sd.chk			; /62/
+    160
+    161	003666	012705 	000000G		ss$ton:	mov	#dial.nopulse,r5	; /62/ TONE dialing string
+    162	003672					.br	sd.chk			; /63/
+    163
+    164	003672				sd.chk:	prsbuf	r4			; expand and copy string to workbuffer
+	003672	010400 				mov	r4	,r0
+	003674	004767 	000000G			call	prsarg
+    165	003700	005700 				tst	r0			; successful?
+    166	003702	001310 				bne	60$			; no
+    167	003704					strlen	r4			; get the length of the result
+	003704	010400 				mov	r4	,r0
+	003706	004767 	000000G			call	l$len
+    168	003712	005200 				inc	r0			; plus one for the null terminator
+    169	003714	005200 				inc	r0			; ensure next allocation begins
+    170	003716	042700 	000001 			bic	#1	,r0		; on an even address boundary
+    171	003722					malloc	r0			; ask for the allocation
+	003722	010000 				mov	r0	,r0
+	003724	004767 	001730 			call	malloc
+    172	003730	005700 				tst	r0			; /BBS/ did we get it?
+    173	003732	001670 				beq	40$			; /BBS/ no, exit
+    174	003734	062705 	000000G			add	#usermd	,r5		; /BBS/ ya, point to next free address
+    175	003740	010015 				mov	r0	,(r5)		; insert the new buffer address
+    176	003742					strcpy	(r5)	,r4		; copy the string
+	003742	010446 				mov	r4	,-(sp)
+	003744	011546 				mov	(r5)	,-(sp)
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-11
+SET DIAL		; /BBS/ substantially enhanced
+
+	003746	004767 	000000G			jsr	pc	,strcpy
+    177	003752	000663 				br	50$			; /BBS/ share exit code
+    178
+    179	003754	012705 	000000G		ss$eko:	mov	#dial.echo,r5
+    180	003760	000413 				br	ss$$1			; /63/ modem echoes dial commands
+    181
+    182	003762	012705 	000000G		ss$ekx:	mov	#dial.echo,r5
+    183	003766	000415 				br	ss$$0			; /63/ modem doesn't echo commands
+    184
+    185	003770	012705 	000000G		ss$one:	mov	#init.once,r5
+    186	003774	000405 				br	ss$$1			; /63/ modem stays init'd
+    187
+    188	003776	012705 	000000G		ss$onx:	mov	#init.once,r5
+    189	004002	000407 				br	ss$$0			; /63/ modem does not stay init'd
+    190
+    191	004004	012705 	000000G		ss$bin:	mov	#res.bin,r5
+    192	004010	112701 	000061 		ss$$1:	movb	#'1	,r1		; /62/ modem does single char response
+    193	004014	000404 				br	ss$$$
+    194
+    195	004016	012705 	000000G		ss$bix:	mov	#res.bin,r5
+    196	004022	112701 	000060 		ss$$0:	movb	#'0	,r1		; /62/ modem responds normally
+    197	004026					.br	ss$$$			; /63/
+    198
+    199	004026	016700 	000000G		ss$$$:	mov	argbuf	,r0		; /62/ where to pass l$val's argument
+    200	004032	110120 				movb	r1	,(r0)+		; /62/ do it
+    201	004034	105010 				clrb	(r0)			; /62/ null terminate
+    202	004036	000405 				br	sd.val			; /62/ and off to common code..
+    203
+    204	004040	012705 	000000G		ss$dra:	mov	#dial.rate,r5		; in ticks
+    205	004044	000402 				br	sd.val
+    206
+    207	004046	012705 	000000G		ss$wra:	mov	#wake.rate,r5		; in ticks
+    208	004052					.br	sd.val			; /63/
+    209
+    210	004052				sd.val:	calls	l$val	,<argbuf>	; convert ascii number to integer
+	004052	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004054	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	004060	010605 				  mov	sp	,r5		; set pointer to argument list
+	004062	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	004066	005726 				  tst	(sp)+			; pop parameter list from stack
+	004070	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    211	004072	005700 				tst	r0			; success?
+    212	004074	001002 				bne	80$			; no
+    213	004076	010165 	000000G		70$:	mov	r1	,usermd(r5)	; yes, insert the value
+    214	004102	000207 			80$:	return				; /62/ done
+    215
+    216	004104				sst$st:	calls	l$val	,<argbuf>	; /62/ convert to an integer
+	004104	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004106	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	004112	010605 				  mov	sp	,r5		; set pointer to argument list
+	004114	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	004120	005726 				  tst	(sp)+			; pop parameter list from stack
+	004122	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    217	004124	005700 				tst	r0			; /62/ ok?
+    218	004126	001365 				bne	80$			; /62/ nope
+    219	004130	010167 	000000G			mov	r1	,settle		; /62/ ya, save it
+    220	004134	012705 	000000G			mov	#time.settle,r5		; /62/ prep to stuff into USER-DEFINED
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 22-12
+SET DIAL		; /BBS/ substantially enhanced
+
+    221	004140	000756 				br	70$			; /62/ go do it
+    222
+    223	004142				ss$tmo:	calls	l$val	,<argbuf>	; convert ascii number to integer
+	004142	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004144	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	004150	010605 				  mov	sp	,r5		; set pointer to argument list
+	004152	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	004156	005726 				  tst	(sp)+			; pop parameter list from stack
+	004160	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+    224	004162	005700 				tst	r0			; success?
+    225	004164	001346 				bne	80$			; no
+    226	004166	010167 	000000G			mov	r1	,diatmo		; number is ok
+    227	004172	012705 	000000G			mov	#dial.time,r5		; /62/ prep to stuff into USER-DEFINED
+    228	004176	000737 				br	70$			; /62/ go do it
+    229
+    230						.dsabl	lsb
+    231
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 23
+SET DIAL		; /BBS/ substantially enhanced
+
+      1
+      2						.sbttl	SET PHONE		; /45/ added
+      3
+      4	004200				set$ph::upone	argbuf			; /BBS/ upper case just next arg
+	004200	016700 	000000G			mov	argbuf	,r0
+	004204	004767 	000000G			call	upone			; /BBS/ upcase only to next delimiter
+      5	004210					calls	getcm0	,<argbuf,#pholst> ; which option was given?
+	004210	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004212	012746 	001104'			        mov	#pholst	,-(sp)	; push it
+	004216	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004222	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004224	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	004230	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004232	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      6	004234	005700 				tst	r0			; find one?
+      7	004236	100510 				bmi	sph$zz			; /63/ no, bad option
+      8	004240	005767 	000000G			tst	wasnul			; /BBS/ were commands listed via "?"
+      9	004244	001105 				bne	sph$zz			; /63/ ya
+     10	004246					calls	getcm1	,<argbuf,#pholst,r0> ; look for next argument
+	004246	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004250	010046 				        mov	r0	,-(sp)	; push it
+	004252	012746 	001104'			        mov	#pholst	,-(sp)	; push it
+	004256	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004262	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004264	004767 	000000G			  jsr	pc	,getcm1		; and go to the routine
+	004270	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	004274	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     11	004276	005700 				tst	r0			; find one?
+     12	004300	100467 				bmi	sph$zz			; /63/ no
+     13	004302	000111 				jmp	@r1			; /63/ ya, dispatch
+     14
+     15	004304					command pholst	,ANSWER	,1	,sph$an
+						.list me
+						.save
+						.list me
+	001074					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001074	   101 	   116 	   123 		.asciz	#ANSWER#			; store the command ANSWER
+	001104	001074'				.word	$$name			; store sph$an of command ANSWER text
+	001106	000001 				.word	1			; 1 number of chars to match
+	001110	004304'				.word	sph$an			; the command routine's sph$an
+	001112	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004304					.restore
+     16	004304					command pholst	,BLIND	,1	,sph$bl
+						.list me
+						.save
+						.list me
+	001103					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001103	   102 	   114 	   111 		.asciz	#BLIND#			; store the command BLIND
+	001114	001103'				.word	$$name			; store sph$bl of command BLIND text
+	001116	000001 				.word	1			; 1 number of chars to match
+	001120	004352'				.word	sph$bl			; the command routine's sph$bl
+	001122	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004304					.restore
+     17	004304					command pholst	,NOANSWER,2	,sph$no
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 23-1
+SET PHONE		; /45/ added
+
+						.save
+						.list me
+	001111					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001111	   116 	   117 	   101 		.asciz	#NOANSWER#			; store the command NOANSWER
+	001124	001111'				.word	$$name			; store sph$no of command NOANSWER text
+	001126	000002 				.word	2			; 2 number of chars to match
+	001130	004312'				.word	sph$no			; the command routine's sph$no
+	001132	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004304					.restore
+     18	004304					command pholst	,NUMBER	,2	,sph$nu	,st0.30
+						.list me
+						.save
+						.list me
+	001122					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001122	   116 	   125 	   115 		.asciz	#NUMBER#			; store the command NUMBER
+	001134	001122'				.word	$$name			; store sph$nu of command NUMBER text
+	001136	000002 				.word	2			; 2 number of chars to match
+	001140	004362'				.word	sph$nu			; the command routine's sph$nu
+	001142	001273'				  .word	st0.30			; /63/ ya, stuff in its location
+						.list me
+	004304					.restore
+     19	004304					command pholst	,PULSE	,1	,sph$pu
+						.list me
+						.save
+						.list me
+	001131					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001131	   120 	   125 	   114 		.asciz	#PULSE#			; store the command PULSE
+	001144	001131'				.word	$$name			; store sph$pu of command PULSE text
+	001146	000001 				.word	1			; 1 number of chars to match
+	001150	004342'				.word	sph$pu			; the command routine's sph$pu
+	001152	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004304					.restore
+     20	004304					command pholst	,TONE	,1	,sph$to
+						.list me
+						.save
+						.list me
+	001137					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001137	   124 	   117 	   116 		.asciz	#TONE#			; store the command TONE
+	001154	001137'				.word	$$name			; store sph$to of command TONE text
+	001156	000001 				.word	1			; 1 number of chars to match
+	001160	004332'				.word	sph$to			; the command routine's sph$to
+	001162	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004304					.restore
+     21	004304					command pholst	,XMODE	,1	,sph$xm	,st0.31
+						.list me
+						.save
+						.list me
+	001144					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001144	   130 	   115 	   117 		.asciz	#XMODE#			; store the command XMODE
+	001164	001144'				.word	$$name			; store sph$xm of command XMODE text
+	001166	000001 				.word	1			; 1 number of chars to match
+	001170	004462'				.word	sph$xm			; the command routine's sph$xm
+	001172	001317'				  .word	st0.31			; /63/ ya, stuff in its location
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 23-2
+SET PHONE		; /45/ added
+
+	004304					.restore
+     22	004304					command pholst
+						.list me
+						.save
+						.list me
+	001174					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of pholst
+	001174	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	001152					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a pholst
+						.list me
+	004304					.restore
+     23
+     24	004304	010667 	000000G		sph$an:	mov	sp	,answer		; /62/ modem not enabled until dialing
+     25	004310	000462 				br	sph$xx			; /62/ thus nothing special here..
+     26
+     27	004312	005067 	000000G		sph$no:	clr	answer			; /62/ don't enable next time dialing
+     28	004316	005767 	000000G			tst	mready			; /62/ is a modem currently on-line?
+     29	004322	001455 				beq	sph$xx			; /62/ no
+     30	004324	005726 				tst	(sp)+			; /62/ pop local dispatch return addr
+     31	004326	000167 	000000G			jmp	set$dtr			; /62/ reinit modem so no answer works
+     32
+     33	004332	012767 	000001 	000000G	sph$to:	mov	#1	,pulse		; make it tone dialing
+     34	004340	000446 				br	sph$xx			; /62/
+     35
+     36	004342	012767 	177777 	000000G	sph$pu:	mov	#-1	,pulse		; make it pulse dialing
+     37	004350	000442 				br	sph$xx			; /62/
+     38
+     39	004352	012767 	000001 	000000G	sph$bl:	mov	#1	,blind		; dial blindly
+     40	004360	000436 				br	sph$xx			; /62/
+     41
+     42	004362	012705 	000000G		sph$nu:	mov	#pnhead	,r5		; get listhead for phone numbers
+     43	004366	005715 			10$:	tst	(r5)			; found the last entry yet?
+     44	004370	001402 				beq	20$			; yes, insert new element here
+     45	004372	011505 				mov	(r5)	,r5		; no, check the next one
+     46	004374	000774 				br	10$			; keep looking
+     47	004376	004767 	000000G		20$:	call	skipit			; /BBS/ ignore comma in argument
+     48	004402					strlen	argbuf			; get total length of data
+	004402	016700 	000000G			mov	argbuf	,r0
+	004406	004767 	000000G			call	l$len
+     49	004412	062700 	000004 			add	#4	,r0		; add in space for nulls and ensure
+     50	004416	042700 	000001 			bic	#1	,r0		; even length, also link next field
+     51	004422					malloc	r0			; ask for the space please
+	004422	010000 				mov	r0	,r0
+	004424	004767 	001230 			call	malloc
+     52	004430	010015 				mov	r0	,(r5)		; insert the address
+     53	004432	001003 				bne	30$			; space is available
+     54	004434	012700 	000000G			mov	#er$mal	,r0		; /BBS/ no space left for string
+     55	004440	000207 				return
+     56	004442	005020 			30$:	clr	(r0)+			; this is now the tail
+     57	004444					strcpy	r0	,argbuf		; stuff the data in
+	004444	016746 	000000G			mov	argbuf	,-(sp)
+	004450	010046 				mov	r0	,-(sp)
+	004452	004767 	000000G			jsr	pc	,strcpy
+     58	004456	005000 			sph$xx:	clr	r0			; Indicate success
+     59	004460	000207 			sph$zz:	return				; /63/
+     60
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 23-3
+SET PHONE		; /45/ added
+
+     61	004462				sph$xm::upcase	argbuf			; /BBS/ global for SET CL LIN *
+	004462	016700 	000000G			mov	argbuf	,r0
+	004466	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     62	004472					calls	getcm0	,<argbuf,#xmlist> ; check the table for type
+	004472	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004474	012746 	001176'			        mov	#xmlist	,-(sp)	; push it
+	004500	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004504	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004506	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	004512	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004514	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     63	004516	005700 				tst	r0			; did it work?
+     64	004520	100405 				bmi	40$			; no
+     65	004522	005767 	000000G			tst	wasnul			; were commands listed via "?"
+     66	004526	001353 				bne	sph$xx			; /62/ ya
+     67	004530	004711 				jsr	pc	,@r1		; yes, dispatch on it please
+     68	004532	000751 				br	sph$xx			; /62/
+     69	004534	012700 	000000G		40$:	mov	#er$bad	,r0		; bad value or option error
+     70	004540	000207 				return
+     71
+     72	004542					command	xmlist	,0	,1	,sxm$st
+						.list me
+						.save
+						.list me
+	001152					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001152	   060 	   000 			.asciz	#0#			; store the command 0
+	001176	001152'				.word	$$name			; store sxm$st of command 0 text
+	001200	000001 				.word	1			; 1 number of chars to match
+	001202	004554'				.word	sxm$st			; the command routine's sxm$st
+	001204	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     73	004542					command	xmlist	,1	,1	,sxm$st
+						.list me
+						.save
+						.list me
+	001154					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001154	   061 	   000 			.asciz	#1#			; store the command 1
+	001206	001154'				.word	$$name			; store sxm$st of command 1 text
+	001210	000001 				.word	1			; 1 number of chars to match
+	001212	004554'				.word	sxm$st			; the command routine's sxm$st
+	001214	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     74	004542					command	xmlist	,2	,1	,sxm$st
+						.list me
+						.save
+						.list me
+	001156					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001156	   062 	   000 			.asciz	#2#			; store the command 2
+	001216	001156'				.word	$$name			; store sxm$st of command 2 text
+	001220	000001 				.word	1			; 1 number of chars to match
+	001222	004554'				.word	sxm$st			; the command routine's sxm$st
+	001224	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     75	004542					command	xmlist	,3	,1	,sxm$st
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 23-4
+SET PHONE		; /45/ added
+
+						.list me
+						.save
+						.list me
+	001160					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001160	   063 	   000 			.asciz	#3#			; store the command 3
+	001226	001160'				.word	$$name			; store sxm$st of command 3 text
+	001230	000001 				.word	1			; 1 number of chars to match
+	001232	004554'				.word	sxm$st			; the command routine's sxm$st
+	001234	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     76	004542					command	xmlist	,4	,1	,sxm$st
+						.list me
+						.save
+						.list me
+	001162					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001162	   064 	   000 			.asciz	#4#			; store the command 4
+	001236	001162'				.word	$$name			; store sxm$st of command 4 text
+	001240	000001 				.word	1			; 1 number of chars to match
+	001242	004554'				.word	sxm$st			; the command routine's sxm$st
+	001244	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     77	004542					command	xmlist	,5	,1	,sxm$st
+						.list me
+						.save
+						.list me
+	001164					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001164	   065 	   000 			.asciz	#5#			; store the command 5
+	001246	001164'				.word	$$name			; store sxm$st of command 5 text
+	001250	000001 				.word	1			; 1 number of chars to match
+	001252	004554'				.word	sxm$st			; the command routine's sxm$st
+	001254	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     78	004542					command	xmlist	,6	,1	,sxm$st
+						.list me
+						.save
+						.list me
+	001166					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001166	   066 	   000 			.asciz	#6#			; store the command 6
+	001256	001166'				.word	$$name			; store sxm$st of command 6 text
+	001260	000001 				.word	1			; 1 number of chars to match
+	001262	004554'				.word	sxm$st			; the command routine's sxm$st
+	001264	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     79	004542					command	xmlist	,10	,2	,sxm$st
+						.list me
+						.save
+						.list me
+	001170					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001170	   061 	   060 	   000 		.asciz	#10#			; store the command 10
+	001266	001170'				.word	$$name			; store sxm$st of command 10 text
+	001270	000002 				.word	2			; 2 number of chars to match
+	001272	004554'				.word	sxm$st			; the command routine's sxm$st
+	001274	000000 				  .word	0			; /63/ no, say so with a null here
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 23-5
+SET PHONE		; /45/ added
+
+						.list me
+	004542					.restore
+     80	004542					command	xmlist	,11	,2	,sxm$st
+						.list me
+						.save
+						.list me
+	001173					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001173	   061 	   061 	   000 		.asciz	#11#			; store the command 11
+	001276	001173'				.word	$$name			; store sxm$st of command 11 text
+	001300	000002 				.word	2			; 2 number of chars to match
+	001302	004554'				.word	sxm$st			; the command routine's sxm$st
+	001304	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     81	004542					command	xmlist	,12	,2	,sxm$st
+						.list me
+						.save
+						.list me
+	001176					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001176	   061 	   062 	   000 		.asciz	#12#			; store the command 12
+	001306	001176'				.word	$$name			; store sxm$st of command 12 text
+	001310	000002 				.word	2			; 2 number of chars to match
+	001312	004554'				.word	sxm$st			; the command routine's sxm$st
+	001314	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     82	004542					command	xmlist	,13	,2	,sxm$st
+						.list me
+						.save
+						.list me
+	001201					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001201	   061 	   063 	   000 		.asciz	#13#			; store the command 13
+	001316	001201'				.word	$$name			; store sxm$st of command 13 text
+	001320	000002 				.word	2			; 2 number of chars to match
+	001322	004554'				.word	sxm$st			; the command routine's sxm$st
+	001324	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     83	004542					command	xmlist	,14	,2	,sxm$st
+						.list me
+						.save
+						.list me
+	001204					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001204	   061 	   064 	   000 		.asciz	#14#			; store the command 14
+	001326	001204'				.word	$$name			; store sxm$st of command 14 text
+	001330	000002 				.word	2			; 2 number of chars to match
+	001332	004554'				.word	sxm$st			; the command routine's sxm$st
+	001334	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     84	004542					command	xmlist	,OFF	,1	,sxm$of
+						.list me
+						.save
+						.list me
+	001207					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001207	   117 	   106 	   106 		.asciz	#OFF#			; store the command OFF
+	001336	001207'				.word	$$name			; store sxm$of of command OFF text
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 23-6
+SET PHONE		; /45/ added
+
+	001340	000001 				.word	1			; 1 number of chars to match
+	001342	004542'				.word	sxm$of			; the command routine's sxm$of
+	001344	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004542					.restore
+     85	004542					command	xmlist
+						.list me
+						.save
+						.list me
+	001346					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of xmlist
+	001346	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	001213					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a xmlist
+						.list me
+	004542					.restore
+     86
+     87	004542	105067 	000000G		sxm$of:	clrb	xresult			; the default, no xmode selected
+     88	004546	012701 	177777 			mov	#-1	,r1		; /62/ update USER-DEFINED modem data
+     89	004552	000416 				br	sxm$$$			; /62/ common code
+     90
+     91	004554				sxm$st:	strcpy	#xresult,argbuf		; /62/ move argument into buffer
+	004554	016746 	000000G			mov	argbuf	,-(sp)
+	004560	012746 	000000G			mov	#xresult	,-(sp)
+	004564	004767 	000000G			jsr	pc	,strcpy
+     92	004570					calls	l$val	,<argbuf>	; /62/ convert ascii number to integer
+	004570	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004572	016746 	000000G			  mov	argbuf	,-(sp)		; doing it thusly generates less code
+	004576	010605 				  mov	sp	,r5		; set pointer to argument list
+	004600	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	004604	005726 				  tst	(sp)+			; pop parameter list from stack
+	004606	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     93	004610	012700 	000000G		sxm$$$:	mov	#usermd	,r0		; /62/ top of USER-DEFINED modem data
+     94	004614	010160 	000000G			mov	r1	,x.result(r0)	; /62/ update it too..
+     95	004620	000207 				return
+     96
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 24
+SET PHONE		; /45/ added
+
+      1
+      2						.sbttl	SET SL			; /BBS/ added..
+      3						.enabl	lsb			; /63/
+      4
+      5	004622				set$sl::upcase	argbuf			; upper case all args
+	004622	016700 	000000G			mov	argbuf	,r0
+	004626	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+      6	004632					calls	getcm0	,<argbuf,#sl.lst> ; which option was given?
+	004632	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004634	012746 	001350'			        mov	#sl.lst	,-(sp)	; push it
+	004640	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004644	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004646	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	004652	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004654	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+      7	004656	005700 				tst	r0			; well?
+      8	004660	100422 				bmi	20$			; bad option
+      9	004662	005767 	000000G			tst	wasnul			; were commands listed via "?"
+     10	004666	001017 				bne	20$			; ya
+     11	004670	004767 	000000G			call	kp.clr			; reset the keypad
+     12	004674	000111 				jmp	@r1			; /63/ dispatch
+     13
+     14	004676					command sl.lst	,KED	,1	,ssl$ke
+						.list me
+						.save
+						.list me
+	001214					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001214	   113 	   105 	   104 		.asciz	#KED#			; store the command KED
+	001350	001214'				.word	$$name			; store ssl$ke of command KED text
+	001352	000001 				.word	1			; 1 number of chars to match
+	001354	004676'				.word	ssl$ke			; the command routine's ssl$ke
+	001356	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004676					.restore
+     15	004676					command sl.lst	,NOKED	,1	,ssl$no
+						.list me
+						.save
+						.list me
+	001220					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001220	   116 	   117 	   113 		.asciz	#NOKED#			; store the command NOKED
+	001360	001220'				.word	$$name			; store ssl$no of command NOKED text
+	001362	000001 				.word	1			; 1 number of chars to match
+	001364	004704'				.word	ssl$no			; the command routine's ssl$no
+	001366	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004676					.restore
+     16	004676					command sl.lst	,OFF	,2	,ssl$of
+						.list me
+						.save
+						.list me
+	001226					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001226	   117 	   106 	   106 		.asciz	#OFF#			; store the command OFF
+	001370	001226'				.word	$$name			; store ssl$of of command OFF text
+	001372	000002 				.word	2			; 2 number of chars to match
+	001374	004712'				.word	ssl$of			; the command routine's ssl$of
+	001376	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 24-1
+SET SL			; /BBS/ added..
+
+	004676					.restore
+     17	004676					command sl.lst	,ON	,2	,ssl$on
+						.list me
+						.save
+						.list me
+	001232					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001232	   117 	   116 	   000 		.asciz	#ON#			; store the command ON
+	001400	001232'				.word	$$name			; store ssl$on of command ON text
+	001402	000002 				.word	2			; 2 number of chars to match
+	001404	004720'				.word	ssl$on			; the command routine's ssl$on
+	001406	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	004676					.restore
+     18	004676					command sl.lst
+						.list me
+						.save
+						.list me
+	001410					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of sl.lst
+	001410	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	001235					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a sl.lst
+						.list me
+	004676					.restore
+     19
+     20	004676	010667 	000000G		ssl$ke:	mov	sp	,sl.ked		; put SL into KED mode
+     21	004702	000410 				br	10$			; /63/
+     22
+     23	004704	005067 	000000G		ssl$no:	clr	sl.ked			; put SL in normal mode
+     24	004710	000405 				br	10$			; /63/
+     25
+     26	004712	005067 	000000G		ssl$of:	clr	sl.on			; turn SL off
+     27	004716	000402 				br	10$			; /63/
+     28
+     29	004720	010667 	000000G		ssl$on:	mov	sp	,sl.on		; turn SL on
+     30	004724	005000 			10$:	clr	r0			; no error
+     31	004726	000207 			20$:	return
+     32
+     33						.dsabl	lsb
+     34
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 25
+SET SL			; /BBS/ added..
+
+      1
+      2						.sbttl	SET CONTROL-CHARACTER	; /63/ all new..
+      3						.enabl	lsb
+      4
+      5					; Control character quoting may be disabled for each byte individually
+      6					; by making its corresponding flag byte in CLTFLGS <> 0.
+      7					;
+      8					;	flags offset	character controlled
+      9					;	------------    --------------------
+     10					;	CTLFLGS+  0  =  ascii 377  <200!DEL>
+     11					;	       +  1  =  ascii   0  <NUL>
+     12					;	        ...
+     13					;	       + 40  =  ascii  37  <US>
+     14					;	       + 41  =  ascii 177  <DEL>
+     15					;	       + 42  =  ascii 200  <200!NUL>
+     16					;	        ...
+     17					;	       +101  =  ascii 237  <200!US>
+     18
+     19					;	r2  =   buffer pointer for register indexing
+     20					;	r3  =	loop counter for sct$all
+     21					;	r4  =	command mode flag byte: 0 = unprefixed, 1 = prefixed
+     22					;	r5  =   error message text address
+     23
+     24		000040 				CL.FLOW	= 40			; CLSTAT spfun flow control type bit
+     25		000004 				CT.WID	= 4			; pad numbers in err msgs this wide
+     26
+     27	004730				set$ct::upcase	argbuf			; upper case the whole argument buffer
+	004730	016700 	000000G			mov	argbuf	,r0
+	004734	004767 	000000G			call	upcase			; /BBS/ upcase until null terminator
+     28	004740					calls	getcm0	,<argbuf,#ctset> ; try to parse the first arg
+	004740	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	004742	012746 	001412'			        mov	#ctset	,-(sp)	; push it
+	004746	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	004752	010605 				  mov	sp	,r5		; set up the argument list pointer
+	004754	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	004760	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	004762	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     29	004764	005700 				tst	r0			; did it work?
+     30	004766	100453 				bmi	ct.done			; nope
+     31	004770	005767 	000000G			tst	wasnul			; were commands listed via "?"
+     32	004774	001050 				bne	ct.done			; ya
+     33	004776					calls	getcm1	,<argbuf,#ctset,r0> ; get required second arg(s)
+	004776	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005000	010046 				        mov	r0	,-(sp)	; push it
+	005002	012746 	001412'			        mov	#ctset	,-(sp)	; push it
+	005006	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	005012	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005014	004767 	000000G			  jsr	pc	,getcm1		; and go to the routine
+	005020	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	005024	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     34	005026	005700 				tst	r0			; well?
+     35	005030	100432 				bmi	ct.done			; bad arg..
+     36	005032	000111 				jmp	@r1			; dispatch
+     37
+     38	005034					command	ctset	,PREFIXED   ,1	,sct$pr	,st0.32
+						.list me
+						.save
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 25-1
+SET CONTROL-CHARACTER	; /63/ all new..
+
+						.list me
+	001236					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001236	   120 	   122 	   105 		.asciz	#PREFIXED#			; store the command PREFIXED
+	001412	001236'				.word	$$name			; store sct$pr of command PREFIXED text
+	001414	000001 				.word	1			; 1 number of chars to match
+	001416	005034'				.word	sct$pr			; the command routine's sct$pr
+	001420	001337'				  .word	st0.32			; /63/ ya, stuff in its location
+						.list me
+	005034					.restore
+     39	005034					command	ctset	,UNPREFIXED ,1	,sct$un	,st0.32
+						.list me
+						.save
+						.list me
+	001247					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001247	   125 	   116 	   120 		.asciz	#UNPREFIXED#			; store the command UNPREFIXED
+	001422	001247'				.word	$$name			; store sct$un of command UNPREFIXED text
+	001424	000001 				.word	1			; 1 number of chars to match
+	001426	005042'				.word	sct$un			; the command routine's sct$un
+	001430	001337'				  .word	st0.32			; /63/ ya, stuff in its location
+						.list me
+	005034					.restore
+     40	005034					command	ctset
+						.list me
+						.save
+						.list me
+	001432					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of ctset
+	001432	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	001262					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a ctset
+						.list me
+	005034					.restore
+     41
+     42	005034	012704 	000001 		sct$pr:	mov	#1	,r4		; command was PREFIXED
+     43	005040	000401 				br	sct$$
+     44	005042	005004 			sct$un:	clr	r4			; or UNPREFIXED
+     45
+     46	005044				sct$$:	calls	getcm0	,<argbuf,#ctlst> ; look for "ALL"
+	005044	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005046	012746 	001434'			        mov	#ctlst	,-(sp)	; push it
+	005052	016746 	000000G			        mov	argbuf	,-(sp)	; push it
+	005056	010605 				  mov	sp	,r5		; set up the argument list pointer
+	005060	004767 	000000G			  jsr	pc	,getcm0		; and go to the routine
+	005064	022626 				  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+	005066	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     47	005070	005767 	000000G			tst	wasnul			; check this first here..
+     48	005074	001007 				bne	ct.exit			; commands were listed via "?"
+     49	005076	005700 				tst	r0			; did getcm0 work?
+     50	005100	001002 				bne	10$			; no
+     51	005102	004711 				jsr	pc	,@r1		; yes, dispatch on it please
+     52	005104	000556 				br	ct.loop			; then loop for more input
+     53	005106	020027 	000000G		10$:	cmp	r0	,#cmd$bad	; a ^C or ^Z abort?
+     54	005112	101402 				blos	ct.num			; it may be a number
+     55	005114	005000 			ct.exit:clr	r0			; no error here is fatal
+     56	005116	000207 			ct.done:return
+     57
+     58	005120	012700 	000000G		ct.num:	mov	#spare1	,r0		; handy buffer for current arg
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 25-2
+SET CONTROL-CHARACTER	; /63/ all new..
+
+     59	005124	016701 	000000G			mov	argbuf	,r1		; pointer to the arg to process
+     60	005130	112110 			20$:	movb	(r1)+	,(r0)		; is this char a null?
+     61	005132	001404 				beq	30$			; ya, done
+     62	005134	122027 	000040 			cmpb	(r0)+	,#space		; no, but is it a delimiter?
+     63	005140	001373 				bne	20$			; no, loop for more chars
+     64	005142	105040 				clrb	-(r0)			; ya, null terminate copy in spare1
+     65
+     66	005144				30$:	calls	l$val	,<#spare1>	; try to recover a number
+	005144	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	005146	012746 	000000G			  mov	#spare1	,-(sp)		; doing it thusly generates less code
+	005152	010605 				  mov	sp	,r5		; set pointer to argument list
+	005154	004767 	000000G			  jsr	pc	,l$val		; call the subroutine
+	005160	005726 				  tst	(sp)+			; pop parameter list from stack
+	005162	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     67	005164	005700 				tst	r0			; well?
+     68	005166	001017 				bne	ct.bad			; no, bad value
+     69	005170	032701 	177400 			bit	#^c<377>,r1		; if > 377
+     70	005174	001014 				bne	ct.bad			; it's a bad number
+     71	005176	105201 				incb	r1			; wrap 377 to 0, others ch=ch+1
+     72	005200	020127 	000041 			cmp	r1	,#41		; was char 37..0,377 (now 40..0)?
+     73	005204	103441 				blo	ct.all			; yes, it's a control char
+     74	005206	162701 	000137 			sub	#137	,r1		; bump 240..200 down to 101..41
+     75	005212	020127 	000041 			cmp	r1	,#41		; if now < 41 then it's
+     76	005216	103403 				blo	ct.bad			; not a control char
+     77	005220	020127 	000101 			cmp	r1	,#101		; if now <= 101 then
+     78	005224	101431 				blos	ct.all			; it's a control char
+     79
+     80	005226	005767 	000000G		ct.bad:	tst	infomsg			; report the bad number?
+     81	005232	001503 				beq	ct.loop			; no, info messages are disabled
+     82	005234					strlen	#spare1			; get length of the offending string
+	005234	012700 	000000G			mov	#spare1	,r0
+	005240	004767 	000000G			call	l$len
+     83	005244	162700 	000004 			sub	#ct.wid	,r0		; subtract total width allowed here
+     84	005250	005400 				neg	r0			; how much do we need to pad?
+     85	005252	003407 				ble	50$			; it's already there or overflowed..
+     86	005254	010001 				mov	r0	,r1		; copy number of blanks needed
+     87	005256	012700 	000040 			mov	#space	,r0		; load a blank into the output reg
+     88	005262	004767 	000000G		40$:	call	writ1char		; write it to the terminal
+     89	005266					sob	r1	,40$		; repeat until done
+	005266	005301 				dec	r1
+	005270	001374 				bne	40$
+     90	005272				50$:	wrtall	#spare1			; now write the number itself to tt
+	005272	012746 	000000G			mov	#spare1	,-(sp)		; pass the address
+	005276	004767 	000000G			call	wrtall			; do it
+     91	005302	012705 	002050'			mov	#st0.45	,r5		; load message tag text location
+     92	005306	000535 				br	110$			; go print it
+     93
+     94	005310	005704 			ct.all:	tst	r4			; allow anything
+     95	005312	001051 				bne	70$			; to be set prefixed
+     96	005314	020127 	000001 			cmp	r1	,#1		; unprefixing, is this a NULL?
+     97	005320	103446 				blo	70$			; no but it is ascii 377
+     98	005322	001472 				beq	90$			; ya
+     99	005324	020127 	000022 			cmp	r1	,#22		; an XON?
+    100	005330	001411 				beq	60$			; ya
+    101	005332	020127 	000024 			cmp	r1	,#24		; an XOFF?
+    102	005336	001406 				beq	60$			; ya
+    103	005340	020127 	000063 			cmp	r1	,#63		; maybe it's <200!XON>
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 25-3
+SET CONTROL-CHARACTER	; /63/ all new..
+
+    104	005344	001403 				beq	60$			; ya
+    105	005346	020127 	000065 			cmp	r1	,#65		; how about <200!XOFF>
+    106	005352	001031 				bne	70$			; nope..
+    107	005354	005767 	000000G		60$:	tst	km.lock			; hardware flow control here is
+    108	005360	001445 				beq	80$			; only supported on the KM handler
+    109	005362	005046 				clr	-(sp)			; a one word buffer
+    110	005364	010602 				mov	sp	,r2		; pointer to it
+    111	005366					.spfun	#rtwork,#xc.control,#clstat,r2,#0,#1 ; get the status
+	005366	012700 	000000G			MOV	#rtwork,R0
+	005372	012710 	015000G			MOV	#xc.control+<26.*^O400>,@R0
+	005376	012760 	000001 	000002 		MOV	#1,2.(R0)
+	005404	010260 	000004 			MOV	r2,4.(R0)
+	005410	005060 	000006 			CLR	6.(R0)
+	005414	012760 	000000C	000010 		MOV	#clstat*^O400+^O377,8.(R0)
+	005422	005060 	000012 			CLR	10.(R0)
+	005426	104375 				EMT	^O375
+    112	005430	032726 	000040 			bit	#cl.flow,(sp)+		; if <> it's done in hardware
+    113	005434	001417 				beq	80$			; it's software flow control
+    114	005436	110461 	000000G		70$:	movb	r4	,ctlflgs(r1)	; set or clear as req'd ..
+    115
+    116	005442	004767 	000172 		ct.loop:call	nextarg			; look for another arg
+    117	005446	105711 				tstb	(r1)			; find one?
+    118	005450	001621 				beq	ct.exit			; nothing left to do
+    119	005452					copyz	r1 ,argbuf ,#ln$max-4	; pull it up to top of argument buffer
+	005452	012746 	000114 			mov	#ln$max-4	,-(sp)
+	005456	010146 				mov	r1	,-(sp)
+	005460	016746 	000000G			mov	argbuf	,-(sp)
+	005464	004767 	000000G			call	copyz$
+    120	005470	000167 	177350 			jmp	sct$$			; loop back and give it a go..
+    121
+    122	005474	012705 	001761'		80$:	mov	#st0.43	,r5		; enter here for XOFF warning
+    123	005500	112761 	000001 	000000G		movb	#1	,ctlflgs(r1)	; ensure char gets quoted
+    124	005506	000402 				br	ct.err
+    125	005510	012705 	002021'		90$:	mov	#st0.44	,r5		; enter here for NULL warning
+    126	005514	005767 	000000G		ct.err:	tst	infomsg			; info messages on?
+    127	005520	001750 				beq	ct.loop			; no, skip this stuff
+    128	005522	020127 	000041 			cmp	r1	,#41		; is this a shifted down char?
+    129	005526	103402 				blo	100$			; no
+    130	005530	062701 	000137 			add	#137	,r1		; ya, bump 101..41 back to 240..200
+    131	005534	105301 			100$:	decb	r1			; now back to where we started
+    132	005536	012702 	000000G			mov	#errtxt	,r2		; a handy buffer
+    133	005542					deccvt	r1 ,r2 ,#ct.wid		; integer > ascii, right justify
+	005542	010546 				mov	r5	,-(sp)
+	005544	012746 	000004 			mov	#ct.wid	,-(sp)
+	005550	010146 				mov	r1	,-(sp)
+	005552	010246 				mov	r2	,-(sp)
+	005554	010605 				mov	sp	,r5
+	005556	004767 	000000G			call	l$cvtnum
+	005562	062706 	000006 			add	#6	,sp
+	005566	012605 				mov	(sp)+	,r5
+    134	005570	105062 	000004 			clrb	ct.wid(r2)		; null terminate the ascii string
+    135	005574					wrtall	r2			; display it then
+	005574	010246 				mov	r2	,-(sp)		; pass the address
+	005576	004767 	000000G			call	wrtall			; do it
+    136	005602				110$:	wrtall	r5			; add the appropriate tag line
+	005602	010546 				mov	r5	,-(sp)		; pass the address
+	005604	004767 	000000G			call	wrtall			; do it
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 25-4
+SET CONTROL-CHARACTER	; /63/ all new..
+
+    137	005610					.newline
+	005610	004767 	000000G			call	l$pcrlf
+    138	005614	000712 				br	ct.loop
+    139
+    140	005616					command	ctlst	,ALL	,1	,sct$al
+						.list me
+						.save
+						.list me
+	001262					.psect	cmdtxt	,ro,d,lcl,rel,con
+	001262	   101 	   114 	   114 		.asciz	#ALL#			; store the command ALL
+	001434	001262'				.word	$$name			; store sct$al of command ALL text
+	001436	000001 				.word	1			; 1 number of chars to match
+	001440	005616'				.word	sct$al			; the command routine's sct$al
+	001442	000000 				  .word	0			; /63/ no, say so with a null here
+						.list me
+	005616					.restore
+    141	005616					command	ctlst
+						.list me
+						.save
+						.list me
+	001444					.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of ctlst
+	001444	000000 				.word	0			; /62/ mark it with a null
+						.list me			; /63/
+	001266					.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
+						.even				; /63/ doing this at the end of a ctlst
+						.list me
+	005616					.restore
+    142
+    143	005616	005003 			sct$al:	clr	r3			; start off at offset = zero
+    144	005620	010301 			120$:	mov	r3	,r1		; do this character position in table
+    145	005622	004767 	177462 			call	ct.all			; ..one by one
+    146	005626	005203 				inc	r3			; next time do next char
+    147	005630	020327 	000101 			cmp	r3	,#101		; there are 65. total control chars
+    148	005634	101771 				blos	120$			; loop until they've all been done
+    149	005636	000207 				return
+    150
+    151						.dsabl	lsb
+    152
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 26
+SET CONTROL-CHARACTER	; /63/ all new..
+
+      1
+      2						.sbttl	Get the next argument
+      3
+      4	005640	016701 	000000G		nextarg:mov	argbuf	,r1		; pointer to top of args buffer
+      5	005644	105711 			10$:	tstb	@r1			; is this char a null?
+      6	005646	001403 				beq	20$			; ya, done
+      7	005650	122127 	000040 			cmpb	(r1)+	,#space		; no, but is it a delimiter?
+      8	005654	001373 				bne	10$			; no, try the next char..
+      9	005656	000207 			20$:	return
+     10
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 27
+Get the next argument
+
+      1
+      2						.sbttl	Memory allocation	; /62/ moved this here
+      3
+      4					;	input:   r0	Amount of memory needed
+      5
+      6	005660	005200 			malloc:	inc	r0			; ensure r0 is pointing
+      7	005662	042700 	000001 			bic	#1	,r0		; to an even word boundary
+      8	005666	010046 				mov	r0	,-(sp)		; save a copy of this address
+      9	005670	067716 	000000G			add	@albuff	,(sp)		; add used part of buffer to it
+     10	005674	021627 	001000 			cmp	(sp)	,#alsize	; is there any room left?
+     11	005700	103011 				bhis	10$			; no
+     12	005702	016700 	000000G			mov	albuff	,r0		; ya, compute pointer to this
+     13	005706	062700 	000002 			add	#2	,r0		; new allocation
+     14	005712	067700 	000000G			add	@albuff	,r0		; it begins here..
+     15	005716	012677 	000000G			mov	(sp)+	,@albuff	; this is the new start of free memory
+     16	005722	000207 				return
+     17	005724	005000 			10$:	clr	r0			; indicate failure
+     18	005726	005726 				tst	(sp)+			; dump needed memory buffer
+     19	005730	000207 				return
+     20
+     21		000001 				.end
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 27-1
+Symbol table
+
+ALBUFF= ****** GX	DIAL.A= ****** GX	LCELST  000300R     006	P.REPT= 000010   	SIN$KP  003166R     002
+ALSIZE= 001000   	DIAL.B= ****** GX	LF    = 000012   	P.SPSI= 000000   	SIZOF = ****** GX
+ANSWER= ****** GX	DIAL.C= ****** GX	LN$CNT= 000003   	P.TIME= 000001   	SKIPIT= ****** GX
+ARGBUF= ****** GX	DIAL.E= ****** GX	LN$MAX= 000120   	P.VEND= 000017   	SL.KED= ****** GX
+ARGPNT= ****** GX	DIAL.G= ****** GX	LOGEXT  000013R     003	P.WIND= 000012   	SL.LST  001350R     006
+AT.ALL  000177   	DIAL.I= ****** GX	LOGFIL= ****** GX	RAWCHK  001712R     002	SL.ON = ****** GX
+AT.CDT  000001   	DIAL.N= ****** GX	LOG$AL= 000003   	RES.BI= ****** GX	SOH   = 000001
+AT.INF  000002   	DIAL.P= ****** GX	LOG$CO= 000002   	RES.HE= ****** GX	SPACE = 000040
+AT.LEN  000004   	DIAL.R= ****** GX	LOG$DE= 000020   	RTWORK= ****** GX	SPARE1= ****** GX
+AT.ON   100000   	DIAL.S= ****** GX	LOG$IO= 000010   	SAVPNT  000000R     004	SPA$EV  002076R     002
+AT.PRO  000010   	DIAL.T= ****** GX	LOG$ON= 040000   	SCANCH= ****** GX	SPA$MA  002112R     002
+AT.SYS  000020   	DIAL.W= ****** GX	LOG$OP= 100000   	SCOLON= 000073   	SPA$NO  002126R     002
+AT.TYP  000040   	DIAL.X= ****** GX	LOG$PA= 000001   	SCT$AL  005616R     002	SPA$OD  002104R     002
+AT.XLE  000100   	DIATMO= ****** GX	LOG$RP= 000004   	SCT$PR  005034R     002	SPA$SP  002120R     002
+BELL  = 000007   	DIRER$= ****** GX	LOG2LP  000000R     003	SCT$UN  005042R     002	SPH$AN  004304R     002
+BINARY  000001   	DMOD.P= ****** GX	LOOKUP= ****** GX	SCT$$   005044R     002	SPH$BL  004352R     002
+BLIND = ****** GX	DMOD.S= ****** GX	LUN.LO= ****** GX	SDOPEN  001602R     002	SPH$NO  004312R     002
+BLIP  = ****** GX	DOT   = 000056   	LUN.SR= ****** GX	SDU$FU  002356R     002	SPH$NU  004362R     002
+BS    = 000010   	DQUOTE= 000042   	L$CVTN= ****** GX	SDU$HA  002350R     002	SPH$PU  004342R     002
+CAPA.A= 000010   	DULC    002302R     002	L$LEN = ****** GX	SD$CON  001312R     002	SPH$TO  004332R     002
+CAPA.L= 000002   	DUPLEX= ****** GX	L$PCRL= ****** GX	SD$NON  001344R     002	SPH$XM  004462RG    002
+CAPA.S= 000004   	DUPLST  000256R     006	L$VAL = ****** GX	SD$NOT  001356R     002	SPH$XX  004456R     002
+CLOSE = ****** GX	EFLIST  000366R     006	L1$     000356R     002	SD$NRP  001366R     002	SPH$ZZ  004460R     002
+CLOSIT  000031R     003	ERBFSI= 000170   	L10266= ****** GX	SD$OFF  001376RG    002	SQUOTE= 000047
+CLSTAT= ****** GX	ERRBYT= 000052   	MALLOC  005660R     002	SD$ON   001504R     002	SRV$NT  003016R     002
+CL.FLO= 000040   	ERROR$= 000004   	MAXLNG= 001130   	SD$PAK  001530R     002	SRV$TI  002750R     002
+CMD$BA= ****** GX	ERRTXT= ****** GX	MAXPAK  000136   	SD$RAW  001730R     002	SSL$KE  004676R     002
+COMMA = 000054   	ER$BAD= ****** GX	MAXTRY= ****** GX	SD$RPA  001562R     002	SSL$NO  004704R     002
+CON$ES= 000034   	ER$LGF= ****** GX	MOD.CO= ****** GX	SD$TER  001572R     002	SSL$OF  004712R     002
+COPYZ$= ****** GX	ER$MAL= ****** GX	MREADY= ****** GX	SD.CHK  003672R     002	SSL$ON  004720R     002
+CR    = 000015   	ER$RAW= ****** GX	NEXTAR  005640R     002	SD.RES  003406R     002	SST$ST  004104R     002
+CREATE= ****** GX	ER$RAX= ****** GX	NONEIS= 000001   	SD.VAL  004052R     002	SS$ABO  003526R     002
+CTLFLG= ****** GX	ER$TRY= ****** GX	NOSCOP= 000000   	SEF$EX  003106R     002	SS$ANS  003534R     002
+CTLST   001434R     006	ESC   = 000033   	OVRWRT  000057R     003	SEF$NE  003100R     002	SS$ANX  003542R     002
+CTRL$N= 000016   	EXIEOF= ****** GX	PARITY= ****** GX	SERWAI= ****** GX	SS$BIN  004004R     002
+CTRL$O= 000017   	FATAL$= 000020   	PARLST  000162R     006	SETTLE= ****** GX	SS$BIX  004016R     002
+CTSET   001412R     006	FF    = 000014   	PAR$EV  000002   	SET$CT  004730RG    002	SS$BLI  003652R     002
+CT.ALL  005310R     002	FILTYP= ****** GX	PAR$MA  000003   	SET$DE  001242RG    002	SS$CAK  003644R     002
+CT.BAD  005226R     002	FPARSE= ****** GX	PAR$NO  000000   	SET$DI  003204RG    002	SS$COM  003550R     002
+CT.DON  005116R     002	GETCM0= ****** GX	PAR$OD  000001   	SET$DT= ****** GX	SS$CON  003636R     002
+CT.ERR  005514R     002	GETCM1= ****** GX	PAR$SP  000004   	SET$DU  002276RG    002	SS$DAK  003556R     002
+CT.EXI  005114R     002	HANDCH= ****** GX	PHOLST  001104R     006	SET$EF  003030RG    002	SS$DRA  004040R     002
+CT.LOO  005442R     002	HANLST  000234R     006	PH.ANS= ****** GX	SET$HA  002160RG    002	SS$EKO  003754R     002
+CT.NUM  005120R     002	INCFIL= ****** GX	PH.NOA= ****** GX	SET$IN  003116RG    002	SS$EKX  003762R     002
+CT.WID= 000004   	INCLIS  000410R     006	PNHEAD= ****** GX	SET$LC  002270RG    002	SS$FAI  003402R     002
+CVTARG= 000274   	INCSTS= ****** GX	PREFIX  000020R     003	SET$LO  000024RG    002	SS$FOR  003606R     002
+CVT$$ = ****** GX	INDEX = ****** GX	PRSARG= ****** GX	SET$NU  002366RG    002	SS$IDL  003564R     002
+C$LOGF  000000RG    002	INFOMS= ****** GX	PULSE = ****** GX	SET$PA  002026RG    002	SS$INI  003622R     002
+C.CRLF= 000004   	INITRY= ****** GX	P.CAPA= 000011   	SET$PH  004200RG    002	SS$INP  003630R     002
+C.LCUC= 000040   	INIT.O= ****** GX	P.CHKT= 000007   	SET$RE  002430RG    002	SS$ONE  003770R     002
+C.LSPA= 000010   	ISWILD= ****** GX	P.EOL = 000004   	SET$SL  004622RG    002	SS$ONX  003776R     002
+C.SSPA= 000020   	JSW   = 000044   	P.MXL1= 000013   	SET$SV  002644RG    002	SS$PAU  003572R     002
+C.TSPA= 000200   	KBREAD= ****** GX	P.MXL2= 000014   	SET$UP  002376RG    002	SS$PRO  003614R     002
+DBGLST  000000R     006	KM.LOC= ****** GX	P.NPAD= 000002   	SEVER$= 000010   	SS$PUL  003660R     002
+DECNAT  000002   	KP.CLR= ****** GX	P.PADC= 000003   	SHA$CR  002254R     002	SS$RIN  003374R     002
+DEL   = 000177   	KRTCDF= 000001   	P.QBIN= 000006   	SHA$NO  002250R     002	SS$SUC  003366R     002
+DIALST  000432R     006	KRTINC= 000001   	P.QCTL= 000005   	SIN$DS  003174R     002	SS$TMO  004142R     002
+KRTST0	SET command overlay zer	MACRO V05.03b  00:01  Page 27-2
+Symbol table
+
+SS$TON  003666R     002	ST0.04  000157R     003	ST0.25  001113R     003	SUCCS$= 000001   	WAKE.S= ****** GX
+SS$WAK  003600R     002	ST0.05  000213R     003	ST0.26  001154R     003	SVLST   000344R     006	WARN$ = 000002
+SS$WRA  004046R     002	ST0.06  000242R     003	ST0.27  001166R     003	SXM$OF  004542R     002	WASNUL= ****** GX
+SS$$$   004026R     002	ST0.07  000266R     003	ST0.28  001211R     003	SXM$ST  004554R     002	WRIT1C= ****** GX
+SS$$0   004022R     002	ST0.08  000317R     003	ST0.29  001237R     003	SXM$$$  004610R     002	WRTALL= ****** GX
+SS$$1   004010R     002	ST0.09  000351R     003	ST0.30  001273R     003	TAB   = 000011   	XC.CON= ****** GX
+SS$120  003322R     002	ST0.10  000403R     003	ST0.31  001317R     003	TERMIN  177777   	XMLIST  001176R     006
+SS$192  003352R     002	ST0.11  000435R     003	ST0.32  001337R     003	TEXT    000000   	XOFF  = 000023
+SS$240  003330R     002	ST0.12  000467R     003	ST0.33  001360R     003	TILDE = 000176   	XON   = 000021
+SS$300  003314R     002	ST0.13  000522R     003	ST0.34  001405R     003	TIME.S= ****** GX	XRESUL= ****** GX
+SS$384  003360R     002	ST0.14  000555R     003	ST0.35  001417R     003	TRACE = ****** GX	X.RESU= ****** GX
+SS$480  003336R     002	ST0.15  000566R     003	ST0.36  001426R     003	TRYLST  000322R     006	$ALLSI= 001144
+SS$960  003344R     002	ST0.16  000605R     003	ST0.37  001430R     003	TTY   = 000001   	$LISTL= 000004 G
+STRCAT= ****** GX	ST0.17  000615R     003	ST0.38  001517R     003	UPCASE= ****** GX	$$    = 000001
+STRCPY= ****** GX	ST0.18  000643R     003	ST0.39  001531R     003	UPONE = ****** GX	$$NAME= 001262R     005
+STRY$I  002534R     002	ST0.19  000670R     003	ST0.40  001554R     003	USERMD= ****** GX	$$TRIP= 000000
+STRY$P  002552R     002	ST0.20  000715R     003	ST0.41  001606R     003	USERRB= 000053   	$$1   = 000001
+STRY$$  002570R     002	ST0.21  000747R     003	ST0.42  001674R     003	VT100 = 000002   	$$2   = 000000
+ST0.01  000105R     003	ST0.22  001010R     003	ST0.43  001761R     003	VT200 = 000003   	$$5   = 000027
+ST0.02  000116R     003	ST0.23  001045R     003	ST0.44  002021R     003	WAKE.P= ****** GX	...V1 = 000003
+ST0.03  000130R     003	ST0.24  001071R     003	ST0.45  002050R     003	WAKE.R= ****** GX	...V2 = 000027
+
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	005732    002	(RO,I,LCL,REL,CON)
+$PDATA	002104    003	(RO,D,LCL,REL,CON)
+$RWDAT	000002    004	(RW,D,LCL,REL,CON)
+CMDTXT	001266    005	(RO,D,LCL,REL,CON)
+CMDDSP	001446    006	(RO,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 77
+Work  file writes: 83
+Size of work file: 14804 Words  ( 58 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:01.32
+KRTST0,KRTST0=KRTNHD,KRTST0

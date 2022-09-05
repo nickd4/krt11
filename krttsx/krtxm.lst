@@ -1,0 +1,58 @@
+KRTXM	Kermit-11 root module f	MACRO V05.03b  00:01  Page 1
+
+
+      1						.title	KRTXM	Kermit-11 root module for RT-11XB,XM,ZB,ZM or TSX-Plus
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	for EXTENDED MEMORY OVERLAYS
+      7
+      8					;	19-May-86  Brian Nelson
+      9
+     10	000000					.ASECT
+     11		000044 			. = 44					  ; job status word
+     12	000044	002000 				.word	2000			  ; set the virtual image bit
+     13		000056 			. = 56					  ; TSX-Plus set size location
+     14	000056	000040 				.word	40			  ; SETSIZ KRTTSX/T:64.
+     15
+     16	000000					.psect	$RTQUE	,rw,d,gbl,rel,con ; MUST be in root
+     17	000000					.psect	HNBUFF	,rw,d,lcl,rel,con ; MUST be in root
+     18	000000	000000 			xmflow::.word	0			  ; use LINK's /E:nnnn to expand
+     19	000000					.psect	HNBEND	,rw,d,lcl,rel,con ; MUST be in root
+     20	000000	000000 			xmftop::.word	0			  ; end of the line for XM fetching..
+     21	000000					.psect	IMGTYPE	,ro,d,lcl,rel,con
+     22	000000	000001 			imgtyp::.word	1			  ; /62/ flag it's the XM image
+     23	000002	000000 	000000 		$limit::.limit				  ; /62/ in root for separate I&D assy
+     24	000000					.psect	USERMD	,rw,d,gbl,rel,con
+     25	000000					.psect	XMSTART	,ro,i,lcl,rel,con
+     26	000000	000167 	000000G		xmstart::jmp	kermit			  ; force transfer address here
+     27
+     28		000000'				.end	xmstart
+KRTXM	Kermit-11 root module f	MACRO V05.03b  00:01  Page 1-1
+Symbol table
+
+IMGTYP  000000RG    005	XMFLOW  000000RG    003	XMFTOP  000000RG    004	XMSTAR  000000RG    007	$LIMIT  000002RG    005
+KERMIT= ****** GX
+
+. ABS.	000060    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$RTQUE	000000    002	(RW,D,GBL,REL,CON)
+HNBUFF	000002    003	(RW,D,LCL,REL,CON)
+HNBEND	000002    004	(RW,D,LCL,REL,CON)
+IMGTYP	000006    005	(RO,D,LCL,REL,CON)
+USERMD	000000    006	(RW,D,GBL,REL,CON)
+XMSTAR	000004    007	(RO,I,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 0
+Work  file writes: 0
+Size of work file: 64 Words  ( 1 Pages)
+Size of core pool: 12800 Words  ( 50 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.00
+KRTXM,KRTXM=KRTXM

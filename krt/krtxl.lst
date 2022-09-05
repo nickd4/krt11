@@ -1,0 +1,1608 @@
+.MAIN.	MACRO V05.03b  00:01
+Table of contents
+
+    1-   1	KRTNHD	EIS macros for a non-EIS CPU
+    5-   1	KRTMAC	Various handy constants and macros
+    7-   2	Utility macros
+    9-   2	Global and local data
+   10-   2	List of supported comm handlers
+   11-   2	CL handler options	; /37/
+   12-   2	Map speed to set same (50 baud is unsupported here)
+   13-   2	SPFUN codes for the CL/KM/XC/XL drivers
+   14-   3	Assign a handler as the link ; /BBS/ substantially changed..
+   15-   2	Init the handler	; /BBS/ enhanced..
+   16-   2	Check device by getting its physical name
+   17-   2	Rad50 to ascii (legal device name chars only)
+   18-   2	ALLOCATE a device
+   19-   2	Close the link		; /BBS/ many changes..
+   20-   2	Binary read
+   21-   2	Binary write
+   22-   2	Dump all I/O (cancel type_ahead), if possible
+   23-   2	Hose the handler	; /BBS/ routine added
+   24-   2	XON the handler
+   25-   2	Drop DTR for 0.5 sec
+   26-   2	Check status of DTR or DCD  ; /BBS/ added this..
+   27-   2	DCD status tester	; /62/ new..
+   28-   2	SET SPEED
+   29-   2	Fake getting the speed
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 1
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.sbttl	KRTNHD	EIS macros for a non-EIS CPU
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      6					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+      7					;
+      8					;	Assemble Kermit-11 modules with this for use on a
+      9					;	non-EIS CPU.  This calls p$mul and p$div, assembly
+     10					;	of which into KRTSUB depends on defining "NONEIS".
+     11					;	KRTASM.NON assembles everything for non-EIS use.
+     12
+     13					;	10-Apr-84  09:37:15  Brian Nelson
+     14
+     15		000001 				NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
+     16
+     17						.macro	mul	src,reg		; single precision
+     18						.ntype	$$	,reg		; save number of input register
+     19						mov	src	,-(sp)		; pass multiplier to p$mul
+     20						mov	reg	,-(sp)		; pass multiplicand too
+     21						call	p$mul			; multiply, returns a 16-bit product
+     22						.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
+     23						.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     24						.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
+     25						.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+     26						.endm	mul
+     27
+     28						.macro	div	src,reg		; /BBS/ made this double precision
+     29						.ntype	$$	,reg		; # of register with dividend hi word
+     30						mov	src	,-(sp)		; divisor
+     31						.if eq $$			; hi word is in r0
+     32						mov	r1	,-(sp)		; dividend low word
+     33						mov	r0	,-(sp)		; dividend high word
+     34						.endc
+     35						.if eq $$-2			; hi word is in r2
+     36						mov	r3	,-(sp)
+     37						mov	r2	,-(sp)
+     38						.endc
+     39						.if eq $$-4			; hi word is in r4
+     40						mov	r5	,-(sp)
+     41						mov	r4	,-(sp)
+     42						.endc
+     43						call	p$div			; divide
+     44						.if eq $$			; using r0..
+     45						mov	(sp)+	,r1		; remainder
+     46						mov	(sp)+	,r0		; this only returns a 16-bit quotient
+     47						.endc
+     48						.if eq $$-2			; using r2..
+     49						mov	(sp)+	,r3
+     50						mov	(sp)+	,r2
+     51						.endc
+     52						.if eq $$-4			; using r4..
+     53						mov	(sp)+	,r5
+     54						mov	(sp)+	,r4
+     55						.endc
+     56						.endm	div
+     57
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 1-1
+KRTNHD	EIS macros for a non-EIS CPU
+
+     58						.macro	sob	reg,dst		; subtract one and branch if not zero
+     59						dec	reg
+     60						bne	dst
+     61						.endm	sob
+     62
+     63						.macro	ash	amount,reg	; arithmetic shift
+     64						.ntype	$$$0	,amount
+     65						.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+     66						$$type	= 1			; assume left shift
+     67						$$size	= 0			; how many ASLs or ASRs to generate
+     68						  .irpc	$a ,<amount>		; parse the first argument
+     69						  $c	= ''$a			; get the character as a literal
+     70						  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
+     71						  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
+     72						  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+     73						  $c	= $c - '0		; check for a digit now
+     74						    .if ge $c			; perhaps a digit
+     75						      .if le $c-7		; got a digit
+     76						      $$size = <$$size*10>+$c	; add into accumulator
+     77						      .endc
+     78						    .endc
+     79						  .endr
+     80						.rept	$$size
+     81						.iif gt <$$type>  asl	reg
+     82						.iif lt <$$type>  asr	reg
+     83						.endr
+     84						.endm
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 2
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1						.title	KRTXL	I/O for CL/KM/XC/XL handlers
+      2						.ident	"V03.63"
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5
+      6					; /62/	27-Jul-93  Billy Youdelman  V03.62
+      7					;
+      8					;	corrected suggested XL BUFSIZ to 256.
+      9					;	keep XL open even for XM, to accommodate RT-11 V5.6
+     10					;	add support for KM handler
+     11					;	add version testing to support RT-11 V4
+     12					;	add DCDTST for status during file transfers
+     13					;	skip .ABTIO for XC/XL under ALL RT-11 V5.6 monitors
+     14					;	to avoid hang/race/?
+     15
+     16					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     17					;
+     18					;	DTR drop sped up to a 0.5 second interval..
+     19					;	dumped waitti as multiple byte reads accomplish the same thing
+     20					;	CLHOSE defined for use in clearing CL handler, uses spfun 265
+     21					;	CLSTAT defined and inqdtr added, for CL lines only..
+     22					;	enhanced set$speed error handling
+     23					;	mapxl now allocates the handler under TSX
+     24					;	added inqcd
+     25					;
+     26					;	mapxl now uses .cstat to get physical name from logical name
+     27					;	one may ASS CL0 PHN then run Kermit and SET LINE PHN within it
+     28					;
+     29					;	dropped TSX hi-eff term mode when data are going thru a handler
+     30					;	allowing use of ^A and etc during transfers under TSX
+     31					;
+     32					;	allow LFOUT operation of CL handler.  under TSX return is made
+     33					;	an activation character, thus no LF is appended..
+     34
+     35					;	13-Oct-84  11:02:39  Brian Nelson
+     36					;
+     37					;	6-May-85             Basically had to add in checks for XL and TSX
+     38					;                            and then roll in some of the code from k11tsx
+     39					;                            in order to properly use the CL lines under
+     40					;                            TSX.  (Ned W. Rhodes)
+     41					;	04-Nov-85  13:59:39  Mods suggested by Chuck Sadoian for TSX (BDN)
+     42					;	31-Dec-85  04:25:02  Added DTR control for RT-11 5.2 and XC/XL
+     43					;	02-Sep-86  09:31:48  Fix SET SPEED for TSX+, edit /54/
+     44
+     45					;	Copyright 1984,1985 Change Software, Inc.
+     46
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 3
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2					;			      NOTICE: !!!!!!
+      3					;
+      4					;   To operate properly at high speeds (2400 and up) and with Kermits
+      5					;   not supporting XOFF flow control the XL or XC device handler MUST
+      6					;   be modified to increase the internal buffer size and repress XOFF
+      7					;   transmission within a packet.  This is very easy to do.
+      8					;
+      9					;   First copy XM.MAC, XL.MAC, XM.ANS, SYSGEN.COM and for the PRO/300
+     10					;   XC.MAC from the RT-11 distribution to DK, ASSIGN DK SRC, and then
+     11					;   in the copy of the file XL.MAC change the line:
+     12					;
+     13					;	from:	BUFSIZ	= 64.
+     14					;	to:	BUFSIZ	= 256.
+     15					;
+     16					;   Then IND SYSGEN and tell it to use the saved answer file XM.ANS.
+     17					;   When SYSGEN exits, it  will  have created, among other things, a
+     18					;   file called XM.CND which is needed for the driver assembly.  For
+     19					;   the PRO/300 series substitute XC for XL in the following command
+     20					;   procedure to build the handler:
+     21					;
+     22					;	.COPY SY:XLX.SYS SY:XLX.OLD		! save a copy
+     23					;	.REN/NOPRO SY:XLX.SYS SY:XLX.SYS	! unprotect file
+     24					;	.UNLOAD XL				! unload handler
+     25					;	.REMOVE XL				! and remove it
+     26					;	.MACRO/OBJ:XLX (XM,XM.CND,XL)		! assemble new
+     27					;	.LINK/EXE:SY:XLX.SYS XLX		! RT V4, handler on SY
+     28					;	.LINK/NOBIT/EXE:SY:XLX.SYS XLX		! if RT V5, do this
+     29					;	.INSTALL XL				! install it and
+     30					;	.LOAD XL				! load into memory
+     31
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 4
+KRTNHD	EIS macros for a non-EIS CPU
+
+      1
+      2						.include "IN:KRTMAC.MAC"
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 5
+KRTMAC	Various handy constants and macros
+
+      1						.sbttl	KRTMAC	Various handy constants and macros
+      2					;	.ident	"V03.63"		; this is an .include file
+      3
+      4					; /63/	27-Sep-97  Billy Youdelman  V03.63
+      5					;
+      6					;	add support for SET ATTRIBUTES
+      7					;	add flag to suspend logging to a disk file
+      8					;	make $LN$MAX 132. bytes for EIS assembly
+      9					;	pulled message macro, no longer used..
+     10
+     11					; /62/	27-Jul-93  Billy Youdelman  V03.62
+     12					;
+     13					;	move dispatch macro to KRTSER
+     14					;	move erbfsiz here from KRTPAK
+     15					;	condense logging (debug) modes
+     16					;	increase efficiency of incm64 macro
+     17					;	increase MAXLNG (long-packet size) to 1920.
+     18					;	reduce MAXLNG to 600. for NONEIS assembly, so pgm loads under FB..
+     19					;	ditto for ALSIZE (phone # buffer) and LN$CNT (SL # of lines saved)
+     20
+     21					; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
+     22					;
+     23					;	modified message macro to call .newline instead of saving CR/LF
+     24					;	and null for each new line, knocking 1042. bytes off the size
+     25					;	of this version..  also changed ".print" emulation to wrtall,
+     26					;	for a similar savings in compiled program size.
+     27					;
+     28					;	dump raw I/O logging from log$al (SET DEB ALL) - too confusing
+     29					;	also pulled log$rp out and made it a completely separate item..
+     30					;
+     31					;	added a couple upper case macros
+     32
+     33					;	include file for Kermit-11
+     34					;
+     35					;	Brian Nelson  01-Dec-83  13:56:12
+     36
+     37						.NLIST	BEX
+     38						.LIST	MEB			; /62/
+     39
+     40		000001 				KRTINC	=	1		; for .include error checking
+     41
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 6
+KRTMAC	Various handy constants and macros
+
+      1
+      2	000000					.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
+      3	000000					.psect	$pdata	,ro,d,lcl,rel,con
+      4
+      5					;	various ascii chars
+      6		000001 				SOH	=   1		; default packet start of header
+      7		000007 				BELL	=   7		; beep
+      8		000010 				BS	=  10		; backspace
+      9		000011 				TAB	=  11		; tab
+     10		000012 				LF	=  12		; line feed
+     11		000014 				FF	=  14		; form feed
+     12		000015 				CR	=  15		; carriage return
+     13		000016 				CTRL$N	=  16		; ^N VT-100 line drawing on
+     14		000017 				CTRL$O	=  17		; ^O VT-100 line drawing off
+     15		000021 				XON	=  'Q&37	; ^Q
+     16		000023 				XOFF	=  'S&37	; ^S
+     17		000033 				ESC	=  33		; escape
+     18		000040 				SPACE	=  40
+     19		000054 				COMMA	=  54
+     20		000056 				DOT	=  56		; /63/
+     21		000073 				SCOLON	=  73		; /63/
+     22		000176 				TILDE	= 176		; /63/
+     23		000177 				DEL	= 177		; delete
+     24
+     25					;	system data locations
+     26		000044 				JSW	= 44		; job status word
+     27		000052 				ERRBYT	= 52		; emt error byte
+     28		000053 				USERRB	= 53		; /62/ user error byte
+     29		000001 					SUCCS$	=  1	; no error
+     30		000002 					WARN$	=  2	; warning
+     31		000004 					ERROR$	=  4	; error
+     32		000010 					SEVER$	= 10	; sever error
+     33		000020 					FATAL$	= 20	; fatal error
+     34
+     35					;	byte offsets into SINIT parameter vector
+     36		000000 				P.SPSIZ	= 0		; set packet length
+     37		000001 				P.TIME	= 1		; time-out
+     38		000002 				P.NPAD	= 2		; number of pad chars
+     39		000003 				P.PADC	= 3		; the pad character
+     40		000004 				P.EOL	= 4		; eol char
+     41		000005 				P.QCTL	= 5		; control char quoting
+     42		000006 				P.QBIN	= 6		; 8-bit quote
+     43		000007 				P.CHKT	= 7		; checksum type
+     44		000010 				P.REPT	= 10		; repeated character prefix
+     45		000011 				P.CAPAS	= 11		; capability bitmask
+     46		000010 					CAPA.A	= 10	; attribute handling
+     47		000002 					CAPA.L	= 2	; /42/ long packets
+     48		000004 					CAPA.S	= 4	; /42/ sliding windows
+     49		000012 				P.WINDS	= 12		; /43/ window size, # of packets
+     50		000013 				P.MXL1	= 13		; /43/ high order of long packet size
+     51		000014 				P.MXL2	= 14		; /43/ low order of long packet size
+     52		000017 				P.VEND	= 17		; end of parameter vector
+     53
+     54					; /62/	bits in doattr (file attribute processing)
+     55		000001 				AT.CDT	=: 1		; create date
+     56		000002 				AT.INF	=: 2		; /63/ system specific info
+     57		000004 				AT.LEN	=: 4		; length
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 6-1
+KRTMAC	Various handy constants and macros
+
+     58		000010 				AT.PRO	=: 10		; file protection
+     59		000020 				AT.SYS	=: 20		; system ID
+     60		000040 				AT.TYP	=: 40		; file type
+     61		000100 				AT.XLE	=: 100		; exact length in bytes
+     62		100000 				AT.ON	=: 100000	; /63/ do attribute processing
+     63		000177 				AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+     64
+     65					;	bits in trace (debug status word)
+     66		000001 				LOG$PA	= 1		; log all packets
+     67		000002 				LOG$CO	= 2		; /62/ CONNECT logging to disk
+     68		000004 				LOG$RP	= 4		; /62/ rpack chars to TT
+     69		000010 				LOG$IO	= 10		; /62/ everything received or sent
+     70		000020 				LOG$DE	= 20		; /62/ debugging to TT
+     71		040000 				LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
+     72		100000 				LOG$OP	= 100000	; logfile is open
+     73		000003 				LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+     74
+     75					;	parity options
+     76		000000 				PAR$NO	=: 0		; none
+     77		000001 				PAR$OD	=: 1		; odd
+     78		000002 				PAR$EV	=: 2		; even
+     79		000003 				PAR$MA	=: 3		; mark
+     80		000004 				PAR$SP	=: 4		; space
+     81
+     82					;	file types
+     83		177777 				TERMINAL=: -1		; file to term ala xreply, not to disk
+     84		000000 				TEXT	=:  0		; normal ascii text files
+     85		000001 				BINARY	=:  1		; image mode
+     86		000002 				DECNAT	=:  2		; /52/ 8-bit text files
+     87
+     88					;	terminal types
+     89		000000 				NOSCOPE	= 0		; /BBS/ hard copy terminal
+     90		000001 				TTY	= 1		; a dumb tube terminal
+     91		000002 				VT100	= 2		; itself
+     92		000003 				VT200	= 3		; ditto..
+     93
+     94					;	supported CVT$$ cvt_bit_pattern bits
+     95		000004 				C.CRLF	= 4		; discard CR LF FF ESC
+     96		000010 				C.LSPA	= 10		; discard leading spaces and tabs
+     97		000020 				C.SSPA	= 20		; reduce spaces and tabs to a single space
+     98		000040 				C.LCUC	= 40		; lower case to upper case
+     99		000200 				C.TSPA	= 200		; discard trailing spaces and tabs
+    100
+    101		000034 				CON$ESC	=  '\-100	; default CONNECT escape char
+    102		000170 				ERBFSIZ	=  120.		; /62/ error msg text buff size
+    103		000136 				MAXPAK	=:  94.		; /63/ max_packet_length - max_checksum_length
+    104
+    105						.if df	NONEIS		; /62/ using NONEIS for convenience..
+    106		001000 				ALSIZE	=   1000	; /63/ bufsiz for SET DIAL/PHO NUM
+    107		000003 				LN$CNT	=      3.	; /62/ save/recall 3. commands
+    108		000120 				LN$MAX	=     80.	; /63/ max command line length
+    109		001130 				MAXLNG	=    600.	; /63/ so image is small enuff to run
+    110						.iff
+    111						ALSIZE	=   2000	; /62/ bufsiz for SET DIAL/PHO NUM
+    112						LN$CNT	=     10.	; /63/ save/recall 10. commands
+    113						LN$MAX	=    132.	; /63/ max command line length
+    114						MAXLNG	=   1920.	; /63/ use max long-packet buff size
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 6-2
+KRTMAC	Various handy constants and macros
+
+    115						.endc
+    116		001144 				$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+    117
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 7
+KRTMAC	Various handy constants and macros
+
+      1
+      2						.sbttl	Utility macros
+      3
+      4						.macro	.br to		; /63/ added
+      5						.if df	to
+      6						.if ne	to-.
+      7						.error	<; not at location to;>
+      8						.endc
+      9						.endc
+     10						.endm	.br
+     11
+     12						.macro	.chksp	arg
+     13						.ntype	$$5	,arg
+     14						.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+     15						.endm	.chksp
+     16
+     17						.macro	calls	name	,arglst
+     18					;	subroutine call with arguments passed in an area pointed to by r5
+     19					;	(as with F4 and BP2).  all args are pushed onto the stack in the
+     20					;	order specified.  r5 points to the sp before the call and is saved
+     21					;	and restored.
+     22						$$ = 0				; init # of args count
+     23						  .irp x ,<arglst>		; count up # of args passed
+     24						  $$ = $$+1			; one at a time
+     25						  .endr				; got it
+     26						.if eq $$			; no args present?
+     27						jsr	pc	,name		; if so, substitute a simple call
+     28						.iff				; at least one arg in <arglst>
+     29						mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+     30						  .if eq $$-1			; is it one or more than one arg?
+     31						  .chksp	arglst		; one arg, check for legal SP modes
+     32						  mov	arglst	,-(sp)		; doing it thusly generates less code
+     33						  mov	sp	,r5		; set pointer to argument list
+     34						  jsr	pc	,name		; call the subroutine
+     35						  tst	(sp)+			; pop parameter list from stack
+     36						  mov	(sp)+	,r5		; /63/ restore r5
+     37						  .iff				; arg_count > 1
+     38						  $$2 = $$			; extract the args in
+     39						    .rept	$$		; reverse order so that
+     40						    $$1 = 0			; we might save a little
+     41						      .irp x ,<arglst>		; core (four words)
+     42						      $$1 = $$1+1		; scan the arg list until we come to
+     43						        .if eq $$2-$$1		; the last one before one we just did
+     44						        .chksp	x		; check for SP addressing mode
+     45						        mov	x	,-(sp)	; push it
+     46						        .mexit			; and exit the .irp
+     47						        .endc
+     48						      .endr
+     49						    $$2 = $$2-1			; backwards to previous arg
+     50						    .endr
+     51						  mov	sp	,r5		; set up the argument list pointer
+     52						  jsr	pc	,name		; and go to the routine
+     53						  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
+     54						  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+     55						  mov	(sp)+	,r5		; /63/ restore r5
+     56						  .endc
+     57						.endc
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 7-1
+Utility macros
+
+     58						.endm	calls
+     59
+     60						.macro	ctl	src ,dst
+     61						clr	-(sp)
+     62						bisb	src	,@sp
+     63						call	l$xor
+     64						movb	(sp)+	,dst
+     65						.endm	ctl
+     66
+     67						.macro	copyz	from ,to ,maxlen
+     68						.if  b	<maxlen>
+     69						clr	-(sp)
+     70						.iff
+     71						mov	maxlen	,-(sp)
+     72						.endc
+     73						mov	from	,-(sp)
+     74						mov	to	,-(sp)
+     75						call	copyz$
+     76						.endm	copyz
+     77
+     78						.macro	deccvt	val ,buf ,width
+     79						mov	r5	,-(sp)
+     80						.if  b	<width>
+     81						clr	-(sp)
+     82						.iff
+     83						mov	width	,-(sp)
+     84						.endc
+     85						mov	val	,-(sp)
+     86						mov	buf	,-(sp)
+     87						mov	sp	,r5
+     88						call	l$cvtnum
+     89						add	#6	,sp
+     90						mov	(sp)+	,r5
+     91						.endm	deccvt
+     92
+     93						.macro	decout	val
+     94						mov	r5	,-(sp)
+     95						mov	val	,-(sp)		; /62/ l$wrdec pops this buffer
+     96						mov	sp	,r5
+     97						call	l$wrdec
+     98						mov	(sp)+	,r5
+     99						.endm	decout
+    100
+    101						.macro	direrr	val
+    102						mov	val	,-(sp)
+    103						call	direr$
+    104						.endm	direrr
+    105
+    106						.macro	incm64	val
+    107						inc	val
+    108						bic	#^c<77>	,val		; /62/ faster
+    109						.endm	incm64
+    110
+    111						.macro	indexm	reg		; check for auto increment/decrement
+    112						.ntype	$$$0	,reg		; modes for macros that can't have..
+    113						.if  ne	$$$0-27			; always allow pc autoincrement
+    114						$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 7-2
+Utility macros
+
+    115						.ift				; get the mode into 0..7
+    116						  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
+    117						  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+    118						  .endc
+    119						.endc
+    120						.endm	indexm
+    121
+    122						.macro	ixor	reg ,dst
+    123					;	get around the mode restrictions for the hardware XOR instruction
+    124					;	and fix for RT-11 systems that don't have the EIS chip option
+    125						.chksp	reg			; can't allow sp args
+    126						.chksp	dst			; in either register
+    127						indexm	reg			; check for allowed
+    128						indexm	dst			; addressing mode
+    129						mov	reg	,-(sp)		; it's much simpler to do this
+    130						bic	dst	,@sp		; for all RT-11 systems rather
+    131						bic	reg	,dst		; than to be selective
+    132						bis	(sp)+	,dst		; done
+    133						.endm	ixor
+    134
+    135						.macro	.newline		; print CR/LF on TT
+    136						call	l$pcrlf
+    137						.endm	.newline
+    138
+    139						.macro	octout	val
+    140						calls	l$wroct	,<val>
+    141						.endm	octout
+    142
+    143						.macro	prsbuf	dst
+    144						mov	dst	,r0
+    145						call	prsarg
+    146						.endm	prsbuf
+    147
+    148						.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
+    149						sub	#10	,sp
+    150						mov	sp	,r1
+    151						calls	rpack$	,<msg.a,r1,max.len>
+    152						mov	(r1)+	,len.a
+    153						mov	(r1)+	,pakn.a
+    154						mov	@r1	,r1
+    155						add	#10	,sp
+    156						.endm	rpack
+    157
+    158						.macro	save	list
+    159						.if  b	<list>
+    160						 save	<r0,r1,r2,r3,r4,r5>
+    161						.iff
+    162						.irp	x ,<list>
+    163						 mov	x	,-(sp)
+    164						.endr
+    165						.endc
+    166						.endm	save
+    167
+    168						.macro	scan	ch ,str
+    169						mov	str	,-(sp)
+    170						clr	-(sp)
+    171						bisb	ch	,@sp
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 7-3
+Utility macros
+
+    172						call	scanch
+    173						.endm	scan
+    174
+    175						.macro	setpar	src ,dst
+    176						movb	src	,-(sp)
+    177						call	dopari
+    178						movb	(sp)+	,dst
+    179						.endm	setpar
+    180
+    181						.macro	spack	type ,pnum ,len ,msg
+    182						.if  b	<len>
+    183						.iif nb	<msg>	.error	<; bad call to SPACK macro>
+    184						calls	spack$	,<type,pnum,#0,#null>
+    185						.iff
+    186						calls	spack$	,<type,pnum,len,msg>
+    187						.endc
+    188						.endm	spack
+    189
+    190						.macro	strcat	dst ,src
+    191						mov	src	,-(sp)
+    192						mov	dst	,-(sp)
+    193						jsr	pc	,strcat
+    194						.endm	strcat
+    195
+    196						.macro	strcpy	dst ,src
+    197						mov	src	,-(sp)
+    198						mov	dst	,-(sp)
+    199						jsr	pc	,strcpy
+    200						.endm	strcpy
+    201
+    202						.macro	strlen	string
+    203						mov	string	,r0
+    204						call	l$len
+    205						.endm	strlen
+    206
+    207						.macro	textsrc	text
+    208						.if  b	<text>
+    209						clr	getcroutine		; /62/ reset to file I/O
+    210						clr	tgetaddr
+    211						.iff
+    212						mov	#tgetcr0,getcroutine
+    213						mov	text	,tgetaddr
+    214						.endc
+    215						.endm	textsrc
+    216
+    217						.macro	tochar	src ,dst
+    218						clr	-(sp)
+    219						bisb	src	,@sp
+    220						add	#40	,@sp
+    221						movb	(sp)+	,dst
+    222						.endm	tochar
+    223
+    224						.macro	unchar	src ,dst
+    225						clr	-(sp)
+    226						bisb	src	,@sp
+    227						sub	#40	,@sp
+    228						movb	(sp)+	,dst
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 7-4
+Utility macros
+
+    229						.endm	unchar
+    230
+    231						.macro	unsave	list
+    232						.if b <list>
+    233						unsave	<r5,r4,r3,r2,r1,r0>
+    234						.iff
+    235						.irp	x ,<list>
+    236						 mov	(sp)+	,x
+    237						.endr
+    238						.endc
+    239						.endm	unsave
+    240
+    241						.macro	upcase	s		; /BBS/ added ..
+    242						mov	s	,r0
+    243						call	upcase			; /BBS/ upcase until null terminator
+    244						.endm	upcase
+    245
+    246						.macro	upone	s		; /BBS/ added ..
+    247						mov	s	,r0
+    248						call	upone			; /BBS/ upcase only to next delimiter
+    249						.endm	upone
+    250
+    251						.macro	wrtall	arg		; IO.WAL for an .asciz string
+    252						mov	arg	,-(sp)		; pass the address
+    253						call	wrtall			; do it
+    254						.endm	wrtall
+    255
+    256						.macro	xor	reg ,dst
+    257						ixor	reg	,dst
+    258						.endm	xor
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 8
+Utility macros
+
+      1						.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+      2
+      3
+      4					; /62/	.ABTIO bypassed for V4, also expanded to allow assembly under same
+      5
+      6						.mcall	.CLOSE	,.CSTAT	,.GVAL	,.LOOKUP,.MRKT
+      7						.mcall	.PURGE	,.SPFUN	,.TWAIT	,.WRITC
+      8
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 9
+Utility macros
+
+      1
+      2						.sbttl	Global and local data
+      3
+      4	000000					.psect	xcdata	,rw,d,gbl,rel,con
+      5	000000	   000 	   156 		alloc:	.byte	0 ,156			; /BBS/ allocate a device emt args
+      6	000002	000000G				.word	dblk			; /BBS/ device name goes here
+      7	000004	000000 			xcsts::	.word	0			; /62/ saved from stsdrv
+      8	000006	000000 	000000 	000000 	xcwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; for async calls to the handler
+      9	000022	000000 			xcwrite:.word	0			; if <> write is in progress
+     10
+     11	000000					.psect	xcrw	,rw,d,lcl,rel,con
+     12	000000	000000 			getspd:	.word	0			; /62/ buffer speed until confirmed ok
+     13	000002	000000 			rdmode:	.word	0			; read mode "XON if no data" flag..
+     14	000004	   000 	   150 		setpri:	.byte	0 ,150			; /BBS/ TSX set priority emt
+     15	000006	000000 				.word	0			; /BBS/ raise to this for CL handler
+     16
+     17	000000					.psect	$pdata
+     18	000000	000000 	000024 		third:	.word	0 ,20.			; wait 1/3 second
+     19	000004	000000 	000001 		wait:	.word	0 ,1			; wait one tick (1/60 second)
+     20	000010	   040 	   101 	   102 	r50tbl:	.asciz  " ABCDEFGHIJKLMNOPQRSTUVWXYZ   0123456789" ; /62/ device only
+     21	000061	   045 	   007 	   113 	xl.01:	.asciz	"%"<bell>"KRTXL-W-Carrier " ;^^a space'll never get this far..
+     22	000104	   154 	   157 	   163 	xl.02:	.asciz	"lost"
+     23	000111	   144 	   145 	   164 	xl.03:	.asciz	"detected"
+     24						.even
+     25
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 10
+Global and local data
+
+      1
+      2						.sbttl	List of supported comm handlers
+      3
+      4	000122	012240 			dev.ok:	.rad50	"CL "		; use rad50 space, not zero
+      5	000124	012277 				.rad50	"CL1"
+      6	000126	012300 				.rad50	"CL2"
+      7	000130	012301 				.rad50	"CL3"
+      8	000132	012302 				.rad50	"CL4"
+      9	000134	012303 				.rad50	"CL5"		; test to set tsxcl flag above requires
+     10	000136	012304 				.rad50	"CL6"		; the first 8 here to be the CL lines!!
+     11	000140	012305 				.rad50	"CL7"		; add handlers below this line only
+     12	000142	043310 				.rad50	"KM "		; /62/
+     13	000144	113170 				.rad50	"XC "
+     14	000146	113740 				.rad50	"XL "
+     15	000150	000000 				.word	0
+     16
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 11
+List of supported comm handlers
+
+      1
+      2						.sbttl	CL handler options	; /37/
+      3
+      4					;	0    1	send \014 <FF>		10     400  send \015 <CR>
+      5					;	1    2	send \011 <HT>		11    1000  send CTL chars
+      6					;	2    4	send lower case		12    2000  raise DTR
+      7					;	3   10	send \012 <LF>		13    4000  accept/send 8-bit chars
+      8					;	4   20	accept \012 <LF>	14   10000  undefined
+      9					;	5   40	FF on block 0 write	15   20000      "
+     10					;	6  100	send binary output	16   40000      "
+     11					;	7  200	accept binary input	17  100000      "
+     12
+     13	000152	007437 			cl.set:	.word	1!2!4!10!20!400!1000!2000!4000	; /62/ spell out options
+     14	000154	000340 			cl.clr:	.word	40!100!200			; /62/ NOLFOUT dropped
+     15
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 12
+CL handler options	; /37/
+
+      1
+      2						.sbttl	Map speed to set same (50 baud is unsupported here)
+      3
+      4	000156	000113 	000156 	000206 	splst:	.word	75.	,110.	,134.	,150.	,300.	,600.	; /44/
+      5	000172	002260 	003410 	003720 		.word	1200.	,1800.	,2000.	,2400.	,3600.	,4800.	; /44/
+      6	000206	016040 	022600 	045400 		.word	7200.	,9600.	,19200.	,38400.	,0		; /62/
+      7
+      8	000220	000001 	000002 	000003 	spmap:	.word	1	,2	,3	,4	,5	,6	; /44/
+      9	000234	000007 	000010 	000011 		.word	7	,10	,11	,12	,13	,14	; /44/
+     10	000250	000015 	000016 	000017 		.word	15	,16	,17	,20			; /62/
+     11
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 13
+Map speed to set same (50 baud is unsupported here)
+
+      1
+      2						.sbttl	SPFUN codes for the CL/KM/XC/XL drivers
+      3
+      4		000257 				CLCLR	=	257		; /37/ reset w/o dropping DTR
+      5		000265 				CLHOSE	=	265		; /BBS/ better reset for TSX V6.0 + up
+      6		000201 				CLRDRV	=	201		; undo XOFF, send an XON
+      7		000251 				CLRSET	=	251		; reset CL options for TSX-Plus
+      8		000250 				CLSET	=	250		; set CL options for TSX-Plus
+      9		000256 				CLSPEED	=	256		; /44/ speed control
+     10		000255 				CLSTAT	==	255		; /BBS/ CL modem status
+     11		000206 				DTRDRV	=	206		; RT-11 V5.2 + up, set/clear DTR
+     12		000204 				STSDRV	=	204		; low byte status, high byte version
+     13
+     14		000014 				XC.CONTROL ==	14		; control channel for the driver
+     15
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 14
+SPFUN codes for the CL/KM/XC/XL drivers
+
+      1
+      2	000000					.psect	$code
+      3						.sbttl	Assign a handler as the link ; /BBS/ substantially changed..
+      4
+      5	000000				x.assdev::save	<r2,r1>			; mods to stop ANY bad name
+	000000	010246 				 mov	r2	,-(sp)
+	000002	010146 				 mov	r1	,-(sp)
+      6	000004	011501 				mov	@r5	,r1		; address of the device name
+      7	000006					strlen	r1			; how long is it?
+	000006	010100 				mov	r1	,r0
+	000010	004767 	000000G			call	l$len
+      8	000014	020027 	000004 			cmp	r0	,#4		; 4 is max
+      9	000020	003016 				bgt	20$			; too much
+     10	000022	010002 				mov	r0	,r2		; copy of length for testing string
+     11	000024	005302 				dec	r2			; ignore colon at end
+     12	000026				10$:	scan	(r1)+	,#r50tbl	; verify each char is ok
+	000026	012746 	000010'			mov	#r50tbl	,-(sp)
+	000032	005046 				clr	-(sp)
+	000034	152116 				bisb	(r1)+	,@sp
+	000036	004767 	000000G			call	scanch
+     13	000042	005700 				tst	r0			; this prevents "XX::" & etc..
+     14	000044	001404 				beq	20$			; found a bad one..
+     15	000046					sob	r2	,10$		; check next char
+	000046	005302 				dec	r2
+	000050	001366 				bne	10$
+     16	000052	011501 				mov	@r5	,r1		; restore address
+     17	000054	000404 				br	30$
+     18
+     19	000056	012700 	000000G		20$:	mov	#er$ukn	,r0		; unknown name
+     20	000062	000261 				sec				; flag error
+     21	000064	000564 				br	90$
+     22
+     23	000066	004767 	000422 		30$:	call	mapxl			; do we know about this dev?
+     24	000072	103561 				bcs	90$			; no, return error in r0
+     25
+     26	000074	005767 	000000G			tst	xl.lock			; /62/ need to open?
+     27	000100	100450 				bmi	40$			; /62/ no
+     28	000102					.lookup	#rtwork,#lun.xk,#r50dev	; /62/ try to open the port up please
+	000102	012700 	000000G			MOV	#rtwork,R0
+	000106	012710 	000400G			MOV	#lun.xk+<1.*^O400>,@R0
+	000112	012760 	000000G	000002 		MOV	#r50dev,2.(R0)
+	000120	104375 				EMT	^O375
+     29	000122	103524 				bcs	70$			; /62/ oops
+     30	000124					.lookup	#rtwork,#xc.control,#r50dev ; /62/ also open a control channel
+	000124	012700 	000000G			MOV	#rtwork,R0
+	000130	012710 	000414 			MOV	#xc.control+<1.*^O400>,@R0
+	000134	012760 	000000G	000002 		MOV	#r50dev,2.(R0)
+	000142	104375 				EMT	^O375
+     31	000144	103513 				bcs	70$			; /62/ should never happen, of course
+     32	000146	005767 	000000G			tst	xl.lock			; /62/ locking it up?
+     33	000152	001423 				beq	40$			; /62/ no
+     34	000154	005167 	000000G			com	xl.lock			; /62/ ya, flag channels are now open
+     35	000160					.spfun	#rtwork,#xc.control,#stsdrv,#xcsts,#0,#0 ; /62/ init queues
+	000160	012700 	000000G			MOV	#rtwork,R0
+	000164	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	000170	005060 	000002 			CLR	2.(R0)
+	000174	012760 	000004'	000004 		MOV	#xcsts,4.(R0)
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 14-1
+Assign a handler as the link ; /BBS/ substantially changed..
+
+	000202	005060 	000006 			CLR	6.(R0)
+	000206	012760 	102377 	000010 		MOV	#stsdrv*^O400+^O377,8.(R0)
+	000214	005060 	000012 			CLR	10.(R0)
+	000220	104375 				EMT	^O375
+     36
+     37	000222	005767 	000000G		40$:	tst	tsxcl			; is it TSX and CL handler?
+     38	000226	001446 				beq	50$			; /62/ no, can't do this to XL
+     39	000230					.spfun	#rtwork,#xc.control,#clset ,#cl.set,#1,#0 ; /62/ set some opts
+	000230	012700 	000000G			MOV	#rtwork,R0
+	000234	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	000240	005060 	000002 			CLR	2.(R0)
+	000244	012760 	000152'	000004 		MOV	#cl.set,4.(R0)
+	000252	012760 	000001 	000006 		MOV	#1,6.(R0)
+	000260	012760 	124377 	000010 		MOV	#clset*^O400+^O377,8.(R0)
+	000266	005060 	000012 			CLR	10.(R0)
+	000272	104375 				EMT	^O375
+     40	000274					.spfun	#rtwork,#xc.control,#clrset,#cl.clr,#1,#1 ; /62/ reset others
+	000274	012700 	000000G			MOV	#rtwork,R0
+	000300	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	000304	012760 	000001 	000002 		MOV	#1,2.(R0)
+	000312	012760 	000154'	000004 		MOV	#cl.clr,4.(R0)
+	000320	012760 	000001 	000006 		MOV	#1,6.(R0)
+	000326	012760 	124777 	000010 		MOV	#clrset*^O400+^O377,8.(R0)
+	000334	005060 	000012 			CLR	10.(R0)
+	000340	104375 				EMT	^O375
+     41	000342	000406 				br	60$			; /62/
+     42	000344	005767 	000000G		50$:	tst	km.lock			; /62/
+     43	000350	001003 				bne	60$			; /62/ KM is an 8-bit device
+     44	000352	112767 	000004 	000000G		movb	#par$sp	,parity		; XL is a 7-bit handler
+     45	000360	005067 	000000G		60$:	clr	tt$io			; /62/ force I/O thru handler
+     46	000364	004767 	001332 			call	x.cantyp		; /62/ flush driver and its buffer
+     47	000370	005000 				clr	r0			; /62/ success
+     48	000372	000421 				br	90$
+     49
+     50	000374	012701 	000000G		70$:	mov	#xcierr	,r1		; /62/ preset error mapping
+     51	000400	113700 	000052 			movb	@#errbyt,r0		; /62/ get RT-11's error code
+     52	000404	100003 				bpl	80$			; /62/ normal error
+     53	000406	005100 				com	r0			; /62/ hard error code
+     54	000410	012701 	000000G			mov	#faterr	,r1		; /62/ map into the hard errors
+     55	000414	006300 			80$:	asl	r0			; /62/ word addressing
+     56	000416	060001 				add	r0	,r1		; /62/ map the error
+     57	000420					.purge	#xc.control		; /62/ don't leave
+	000420	012700 	001414 			MOV	#xc.control+<3.*^O400>,R0
+	000424	104374 				EMT	^O374
+     58	000426					.purge	#lun.xk			; /62/ these lingering
+	000426	012700 	001400G			MOV	#lun.xk+<3.*^O400>,R0
+	000432	104374 				EMT	^O374
+     59	000434	011100 				mov	@r1	,r0		; /62/ restore pre-purge error
+     60
+     61	000436				90$:	unsave	<r1,r2>
+	000436	012601 				 mov	(sp)+	,r1
+	000440	012602 				 mov	(sp)+	,r2
+     62	000442	000207 				return
+     63
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 15
+Assign a handler as the link ; /BBS/ substantially changed..
+
+      1
+      2						.sbttl	Init the handler	; /BBS/ enhanced..
+      3
+      4					;	T T Y I N I
+      5					;
+      6					;	input:	  (r5)	= TSX ^W/^B flag, only used by T.TTYINI
+      7					;	output:	   r0	= is <>, error code
+      8
+      9	000444	005767 	000000G		x.ttyini::tst	tsxsav			; running under TSX?
+     10	000450	001406 				beq	10$			; /62/ no
+     11	000452	016767 	000000G	000006'		mov	cl.pri	,setpri+2	; ya, load priority for using handler
+     12	000460	012700 	000004'			mov	#setpri	,r0		; and bump it up,
+     13	000464	104375 				emt	375			; down or reload the default..
+     14	000466	004767 	001746 		10$:	call	x.inqcd			; carrier present?
+     15	000472	005700 				tst	r0
+     16	000474	003002 				bgt	20$			; ya, don't flush buffer now
+     17	000476	004767 	001220 			call	x.cantyp		; no, flush driver and its buffer
+     18	000502	012767 	000002 	000000G	20$:	mov	#2	,cc$max		; make ^C-ing give warning beeps first
+     19	000510	005000 				clr	r0			; all is well today
+     20	000512	000207 				return
+     21
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 16
+Init the handler	; /BBS/ enhanced..
+
+      1
+      2						.sbttl	Check device by getting its physical name
+      3
+      4	000514				mapxl:	save	<r1,r2,r3>		; /BBS/ heavily hacked..
+	000514	010146 				 mov	r1	,-(sp)
+	000516	010246 				 mov	r2	,-(sp)
+	000520	010346 				 mov	r3	,-(sp)
+      5	000522	162706 	000050 			sub	#50	,sp		; /44/ allocate a buffer for new name
+      6	000526	010602 				mov	sp	,r2		; /44/ and also a pointer to it
+      7	000530	121127 	000072 		10$:	cmpb	(r1)	,#':		; /44/ while (*devnam != ':')
+      8	000534	001404 				beq	20$			; /44/   {
+      9	000536	111122 				movb	(r1)	,(r2)+		; /44    *newnam++ = *devnam
+     10	000540	001402 				beq	20$			; /44/   if (*devnam == null) break
+     11	000542	005201 				inc	r1			; /44/   devnam++
+     12	000544	000771 				br	10$			; /44/   }
+     13	000546	105012 			20$:	clrb	(r2)			; /44/ *newnam = null
+     14	000550	010602 				mov	sp	,r2		; /44/ newnam = newnam_base_address
+     15
+     16	000552	004767 	000360 			call	140$			; get first rad50 char of name
+     17	000556					mul	#50*50	,r3		; convert to rad50 value
+	000556	012746 	003100 			mov	#50*50	,-(sp)		; pass multiplier to p$mul
+	000562	010346 				mov	r3	,-(sp)		; pass multiplicand too
+	000564	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	000570	012603 				.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     18	000572	010300 				mov	r3	,r0		; r0 is the accumulator
+     19	000574	004767 	000336 			call	140$			; get next rad50 char in name
+     20	000600					mul	#50	,r3		; convert to rad50 value
+	000600	012746 	000050 			mov	#50	,-(sp)		; pass multiplier to p$mul
+	000604	010346 				mov	r3	,-(sp)		; pass multiplicand too
+	000606	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	000612	012603 				.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     21	000614	001404 				beq	30$			; null marks end, don't do junk after
+     22	000616	060300 				add	r3	,r0		; add into the accumulator
+     23	000620	004767 	000312 			call	140$			; get possible third char of name
+     24	000624	060300 				add	r3	,r0		; r0 now has rad50 name
+     25	000626	010067 	000000G		30$:	mov	r0	,dblk		; save it here
+     26
+     27	000632					calls	fetch	,<dblk>		; load handler
+	000632	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	000634	016746 	000000G			  mov	dblk	,-(sp)		; doing it thusly generates less code
+	000640	010605 				  mov	sp	,r5		; set pointer to argument list
+	000642	004767 	000000G			  jsr	pc	,fetch		; call the subroutine
+	000646	005726 				  tst	(sp)+			; pop parameter list from stack
+	000650	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     28	000652	005700 				tst	r0			; did it work?
+     29	000654	001112 				bne	120$			; no
+     30
+     31	000656					.lookup	#rtwork,#lun.sr,#dblk	; open chan to device
+	000656	012700 	000000G			MOV	#rtwork,R0
+	000662	012710 	000400G			MOV	#lun.sr+<1.*^O400>,@R0
+	000666	012760 	000000G	000002 		MOV	#dblk,2.(R0)
+	000674	104375 				EMT	^O375
+     32	000676	103477 				bcs	110$			; didn't work..
+     33	000700					.cstat	#rtwork,#lun.sr,#cstat	; get physical name
+	000700	012700 	000000G			MOV	#rtwork,R0
+	000704	012710 	013400G			MOV	#lun.sr+<23.*^O400>,@R0
+	000710	012760 	000000G	000002 		MOV	#cstat,2.(R0)
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 16-1
+Check device by getting its physical name
+
+	000716	104375 				EMT	^O375
+     34	000720	103466 				bcs	110$			; didn't work..
+     35	000722	016701 	000012G			mov	cstat+12,r1		; copy dev name
+     36	000726	116700 	000010G			movb	cstat+10,r0		; get unit number
+     37	000732	001402 				beq	40$			; if 0, use space, not "0"
+     38	000734	062700 	000036 			add	#36	,r0		; convert to rad50
+     39	000740	060001 			40$:	add	r0	,r1		; add unit
+     40	000742	010167 	000000G			mov	r1	,dblk		; save copy of the rad50 physical name
+     41
+     42	000746	005003 				clr	r3			; init index
+     43	000750	005763 	000122'		50$:	tst	dev.ok(r3)		; end of the list?
+     44	000754	001445 				beq	100$			; ya, exit with er$ukn
+     45	000756	020163 	000122'			cmp	r1	,dev.ok(r3)	; find it in the list?
+     46	000762	001402 				beq	60$			; ya
+     47	000764	005723 				tst	(r3)+			; no, try next entry
+     48	000766	000770 				br	50$
+     49
+     50	000770	005067 	000000G		60$:	clr	tsxcl			; ok device, not sure it's CL yet tho
+     51	000774	005067 	000000G			clr	xkspeed			; don't know its speed yet
+     52	001000	005067 	000000G			clr	b4speed			; clear possible old fallback speed
+     53	001004	004767 	000154 			call	170$			; see if device is ALLOCATE-able
+     54	001010	005700 				tst	r0			; well?
+     55	001012	001033 				bne	120$			; nope, error is in r0
+     56	001014	020327 	000020 			cmp	r3	,#2*10		; /62/ ya, is it a CL device?
+     57	001020	003013 				bgt	80$			; /62/ it's XC or XL
+     58	001022	001406 				beq	70$			; /62/ it's KM
+     59	001024	010667 	000000G			mov	sp	,tsxcl		; ya, flag it is
+     60	001030	012767 	000016 	000000G		mov	#16	,xkspeed	; CL defaults to 9600
+     61	001036	000406 				br	90$
+     62
+     63	001040	005267 	000000G		70$:	inc	km.lock			; /62/ it's KM, flag for set$speed
+     64	001044	005067 	000000G			clr	parity			; /62/ KM is an 8-bit device
+     65	001050	005267 	000000G		80$:	inc	xl.lock			; /62/ keep it, XC or XL open forever
+     66
+     67	001054	010167 	000000G		90$:	mov	r1	,r50dev		; if r50dev <> 0 then device is valid
+     68	001060	062706 	000050 			add	#50	,sp		; pop local buffer
+     69	001064	005000 				clr	r0			; no error, also clears carry
+     70	001066	000410 				br	130$
+     71
+     72	001070	012700 	000000G		100$:	mov	#er$ukn	,r0		; not in list
+     73	001074	000402 				br	120$
+     74	001076	012700 	000000G		110$:	mov	#er$dev	,r0		; device not responding
+     75	001102	062706 	000050 		120$:	add	#50	,sp		; pop local buffer
+     76	001106	000261 				sec				; flag error
+     77	001110				130$:	save	<r0>			; save error
+	001110	010046 				 mov	r0	,-(sp)
+     78	001112	006146 				rol	-(sp)			; save carry
+     79	001114					.purge	#lun.sr			; dump channel open for .cstat
+	001114	012700 	001400G			MOV	#lun.sr+<3.*^O400>,R0
+	001120	104374 				EMT	^O374
+     80	001122	006026 				ror	(sp)+			; pop carry
+     81	001124					unsave	<r0>			; pop error
+	001124	012600 				 mov	(sp)+	,r0
+     82	001126					unsave	<r3,r2,r1>
+	001126	012603 				 mov	(sp)+	,r3
+	001130	012602 				 mov	(sp)+	,r2
+	001132	012601 				 mov	(sp)+	,r1
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 16-2
+Check device by getting its physical name
+
+     83	001134	000207 				return
+     84
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 17
+Check device by getting its physical name
+
+      1
+      2						.sbttl	Rad50 to ascii (legal device name chars only)
+      3
+      4	001136	005003 			140$:	clr	r3			; the answer
+      5	001140	112201 				movb	(r2)+	,r1		; get a byte
+      6	001142	001407 				beq	160$			; not there
+      7	001144	012703 	000047 			mov	#47	,r3		; end of r50tbl
+      8	001150	126301 	000010'		150$:	cmpb	r50tbl(r3),r1		; is this it?
+      9	001154	001402 				beq	160$			; ya
+     10	001156					sob	r3	,150$		; no, try next one
+	001156	005303 				dec	r3
+	001160	001373 				bne	150$
+     11	001162	000207 			160$:	return
+     12
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 18
+Rad50 to ascii (legal device name chars only)
+
+      1
+      2						.sbttl	ALLOCATE a device
+      3
+      4	001164	005767 	000000G		170$:	tst	tsxsav			; this only works with TSX
+      5	001170	001411 				beq	180$			; can't under RT-11
+      6	001172	012700 	000000'			mov	#alloc	,r0		; try to
+      7	001176	104375 				emt	375			; allocate the device
+      8	001200	103412 				bcs	200$			; didn't work
+      9	001202	005700 				tst	r0			; allocated to some other job?
+     10	001204	001423 				beq	220$			; no, it's ok
+     11	001206	020067 	000000G			cmp	r0	,tsxsav		; ya, is it this same job?
+     12	001212	001002 				bne	190$			; no, it's some other job
+     13	001214	005000 			180$:	clr	r0			; same job = no error
+     14	001216	000416 				br	220$
+     15
+     16	001220	112700 	000000G		190$:	movb	#er$137	,r0		; no, load the appropriate error
+     17	001224	000413 				br	220$			; and bail out
+     18
+     19	001226	012701 	000000G		200$:	mov	#alloerr,r1		; error mapping for allocate
+     20	001232	113700 	000052 			movb	@#errbyt,r0		; get the error code
+     21	001236	100003 				bpl	210$			; normal error
+     22	001240	005100 				com	r0			; hard error code
+     23	001242	012701 	000000G			mov	#faterr	,r1		; map into the hard errors
+     24	001246	006300 			210$:	asl	r0			; word addressing
+     25	001250	060001 				add	r0	,r1		; get the mapped error
+     26	001252	011100 				mov	(r1)	,r0		; copy and exit
+     27	001254	000207 			220$:	return
+     28
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 19
+ALLOCATE a device
+
+      1
+      2						.sbttl	Close the link		; /BBS/ many changes..
+      3
+      4	001256				x.ttyfin::.twait #rtwork,#wait		; force at least 1 tick wait
+	001256	012700 	000000G			MOV	#rtwork,R0
+	001262	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	001266	012760 	000004'	000002 		MOV	#wait,2.(R0)
+	001274	104375 				EMT	^O375
+      5	001276	005767 	000000G			tst	cccnt			; ^C abort?
+      6	001302	001402 				beq	10$			; no
+      7	001304	005067 	000022'			clr	xcwrite			; ya, ignore any pending output
+      8	001310	005767 	000022'		10$:	tst	xcwrite			; ensure ack for B packet done
+      9	001314	001360 				bne	x.ttyfin		; it's not done yet
+     10	001316	004767 	001116 			call	x.inqcd			; carrier present?
+     11	001322	005700 				tst	r0
+     12	001324	003002 				bgt	20$			; ya, don't flush buffer now
+     13	001326	004767 	000370 			call	x.cantyp		; flush driver and its buffer
+     14	001332	005767 	000000G		20$:	tst	tsxsav			; running under TSX?
+     15	001336	001406 				beq	30$			; no
+     16	001340	016767 	000000G	000006'		mov	defpri	,setpri+2	; ya, recover start-up priority
+     17	001346	012700 	000004'			mov	#setpri	,r0		; and use it to
+     18	001352	104375 				emt	375			; reset current priority
+     19	001354	005000 			30$:	clr	r0			; no error is possible
+     20	001356	000207 				return
+     21
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 20
+Close the link		; /BBS/ many changes..
+
+      1
+      2						.sbttl	Binary read
+      3
+      4					;	B I N R E A
+      5					;
+      6					;	input:	  (r5)	= time-out in secs, 0=max (65535 ticks), -1=one tick
+      7					;	output:    r1	= character just read
+      8					;		   r0	= if <>, error code
+      9
+     10					; /BBS/ The -1 time-out option's now used to speed up eatjunk in
+     11					;	KRTDIA.MAC's dial/redial routines.   This routine _MUST_
+     12					;	share spfun 203 with CONNECT as a pending read to XL can
+     13					;	only be dumped by exiting Kermit.
+     14					;
+     15					;	For the normal Kermit timed packet read, we post the QIO
+     16					;	and loop waiting for it to complete.  If it doesn't com-
+     17					;	plete  within the specified time, we cancel  the I/O and
+     18					;	reset the driver, except for the -1 time-out option when
+     19					;	no action is taken if no data are present.
+     20
+     21	001360	010667 	000002'		x.xbin::mov	sp	,rdmode		; don't XON if no data present
+     22	001364	000402 				br	rdcom
+     23	001366	005067 	000002'		x.binr::clr	rdmode			; try to reset XOFF if no data show up
+     24
+     25	001372				rdcom:	save	<r2,r3>
+	001372	010246 				 mov	r2	,-(sp)
+	001374	010346 				 mov	r3	,-(sp)
+     26	001376	026727 	000000G	000000C		cmp	xkpoint	,#xkbuff+xksize	; ensure no buffer overflows
+     27	001404	103003 				bhis	10$			; gone too far, driver is %$#@!
+     28	001406	105777 	000000G			tstb	@xkpoint		; anything left in the read buffer?
+     29	001412	001004 				bne	20$			; ya
+     30	001414	004767 	000026 		10$:	call	xxread			; load buffer with as much as can be..
+     31	001420	005700 				tst	r0			; did this read succeed?
+     32	001422	001006 				bne	30$			; no
+     33	001424	005001 			20$:	clr	r1			; avoid sxt
+     34	001426	157701 	000000G			bisb	@xkpoint,r1		; to accommodate 8-bit data
+     35	001432	005267 	000000G			inc	xkpoint			; point to the next one in the buffer
+     36	001436	005000 				clr	r0			; say it succeeded
+     37	001440				30$:	unsave	<r3,r2>
+	001440	012603 				 mov	(sp)+	,r3
+	001442	012602 				 mov	(sp)+	,r2
+     38	001444	000207 				return
+     39
+     40	001446	011503 			xxread:	mov	(r5)	,r3		; time-out in seconds here
+     41	001450	020327 	177777 			cmp	r3	,#-1		; no wait?
+     42	001454	001407 				beq	10$			; yes
+     43	001456					mul	clkflg	,r3		; no, convert time to ticks then
+	001456	016746 	000000G			mov	clkflg	,-(sp)		; pass multiplier to p$mul
+	001462	010346 				mov	r3	,-(sp)		; pass multiplicand too
+	001464	004767 	000000G			call	p$mul			; multiply, returns a 16-bit product
+	001470	012603 				.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+     44	001472	000401 				br	20$			; and check on the I/O status
+     45	001474	005403 			10$:	neg	r3			; /62/ no wait is really one tick
+     46	001476	004767 	000000G		20$:	call	readxk			; read routine is shared with CONNECT
+     47	001502	005767 	000000G		30$:	tst	xcdone			; finished already?
+     48	001506	001002 				bne	50$			; /62/ no
+     49	001510	005000 			40$:	clr	r0			; /62/ ya, flag no error
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 20-1
+Binary read
+
+     50	001512	000426 				br	70$
+     51	001514				50$:	.twait	#rtwork,#wait		; no, sleep for one tick
+	001514	012700 	000000G			MOV	#rtwork,R0
+	001520	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	001524	012760 	000004'	000002 		MOV	#wait,2.(R0)
+	001532	104375 				EMT	^O375
+     52	001534					sob	r3	,30$		; and see if we should keep waiting
+	001534	005303 				dec	r3
+	001536	001361 				bne	30$
+     53	001540	005767 	000000G			tst	xcdone			; /62/ one last check just in case..
+     54	001544	001761 				beq	40$			; /62/ got something
+     55	001546	005215 				inc	(r5)			; /62/ don't XON
+     56	001550	001405 				beq	60$			; if looping without timeout
+     57	001552	005767 	000002'			tst	rdmode			; /45/ from CONNECT, DIAL or TRANSMIT?
+     58	001556	001002 				bne	60$			; /45/ yes, please don't XON then
+     59	001560	004767 	000432 			call	x.ttxon			; ensure interrupts ok, also send XON
+     60	001564	012700 	000000G		60$:	mov	#er$nin	,r0		; no data have come in yet
+     61	001570	000207 			70$:	return
+     62
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 21
+Binary read
+
+      1
+      2						.sbttl	Binary write
+      3
+      4					;	B I N W R I
+      5					;
+      6					;	output:	  r0	= if <>, error code
+      7
+      8	001572				x.binwri::save	<r1,r2,r3,r4>
+	001572	010146 				 mov	r1	,-(sp)
+	001574	010246 				 mov	r2	,-(sp)
+	001576	010346 				 mov	r3	,-(sp)
+	001600	010446 				 mov	r4	,-(sp)
+      9	001602	016504 	000002 			mov	2(r5)	,r4		; byte count for the write
+     10	001606	001434 				beq	20$			; /BBS/ no I/O to do..
+     11	001610	011503 				mov	(r5)	,r3		; copy the data to a local buffer
+     12	001612	016702 	000000G			mov	xklgbuf	,r2		; pick up pointer to a buffer
+     13	001616	010401 				mov	r4	,r1		; set byte count for the copy
+     14	001620	112322 			10$:	movb	(r3)+	,(r2)+		; for (i=bytecount;i>0;i--)
+     15	001622					sob	r4	,10$		;   *buffer++ = *source++
+	001622	005304 				dec	r4
+	001624	001375 				bne	10$
+     16	001626	105022 				clrb	(r2)+			; *buffer++ = null
+     17	001630	005201 				inc	r1			; bytecount++
+     18	001632	006201 				asr	r1			; bytecount = bytecount/2
+     19	001634	010667 	000022'			mov	sp	,xcwrite	; /BBS/ write is now pending
+     20	001640					.writc	#xcwork,#lun.xk,xklgbuf,r1,#30$,#1 ; queue the write
+	001640	012700 	000006'			MOV	#xcwork,R0
+	001644	012710 	004400G			MOV	#lun.xk+<9.*^O400>,@R0
+	001650	012760 	000001 	000002 		MOV	#1,2.(R0)
+	001656	016760 	000000G	000004 		MOV	xklgbuf,4.(R0)
+	001664	010160 	000006 			MOV	r1,6.(R0)
+	001670	012760 	001714'	000010 		MOV	#30$,8.(R0)
+	001676	104375 				EMT	^O375
+     21	001700	005000 			20$:	clr	r0			; success (this is never tested..)
+     22	001702					unsave	<r4,r3,r2,r1>
+	001702	012604 				 mov	(sp)+	,r4
+	001704	012603 				 mov	(sp)+	,r3
+	001706	012602 				 mov	(sp)+	,r2
+	001710	012601 				 mov	(sp)+	,r1
+     23	001712	000207 				return
+     24
+     25	001714	005067 	000022'		30$:	clr	xcwrite			; /BBS/ .writc completion routine
+     26	001720	000207 				return
+     27
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 22
+Binary write
+
+      1
+      2						.sbttl	Dump all I/O (cancel type_ahead), if possible
+      3
+      4	001722				x.cantyp::save	<r1,r2>
+	001722	010146 				 mov	r1	,-(sp)
+	001724	010246 				 mov	r2	,-(sp)
+      5	001726	026727 	000000G	000005 		cmp	rt11ver	,#5		; /62/ is this RT-11 V5 or above?
+      6	001734	002420 				blt	20$			; /62/ no, V4 can't abort I/O..
+      7	001736	026727 	000000G	000006 		cmp	rt11upd	,#6		; /62/ neither can V5.6
+      8	001744	002406 				blt	10$			; /62/
+      9	001746	005767 	000000G			tst	km.lock			; /62/ determine handler type
+     10	001752	001003 				bne	10$			; /62/ it's KM
+     11	001754	005767 	000000G			tst	tsxcl			; /62/ is it CL?
+     12	001760	001406 				beq	20$			; /62/ not CL, thus must be XC/XL..
+     13	001762	005767 	000000G		10$:	tst	montyp			; /62/ if SJ monitor
+     14	001766	002403 				blt	20$			; /62/ .abtio = .wait so skip it !!
+     15					; /62/	.abtio	#lun.xk			; reinit the driver
+     16	001770	012700 	005400G			MOV	#lun.xk+<11.*^o400>,R0	; /62/ expanded for assy under V4
+     17	001774	104374 				EMT	^o374			; /62/ even though V4 can't run it
+     18	001776	004767 	000214 		20$:	call	x.ttxon			; /BBS/ make sure it's read-able
+     19	002002	012702 	001144 			mov	#$allsiz,r2		; /BBS/ loop for max possible
+     20	002006				30$:	calls	binrea	,<#-1>		; try to get something
+	002006	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002010	012746 	177777 			  mov	#-1	,-(sp)		; doing it thusly generates less code
+	002014	010605 				  mov	sp	,r5		; set pointer to argument list
+	002016	004767 	000000G			  jsr	pc	,binrea		; call the subroutine
+	002022	005726 				  tst	(sp)+			; pop parameter list from stack
+	002024	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     21	002026	005700 				tst	r0			; did it work?
+     22	002030	001002 				bne	40$			; no, exit
+     23	002032					sob	r2	,30$		; yes, eat some more characters
+	002032	005302 				dec	r2
+	002034	001364 				bne	30$
+     24	002036	012767 	000000G	000000G	40$:	mov	#xkbuff	,xkpoint	; /BBS/ reset buffer read pointer
+     25	002044	105067 	000000G			clrb	xkbuff			; init buffer
+     26	002050					unsave	<r2,r1>
+	002050	012602 				 mov	(sp)+	,r2
+	002052	012601 				 mov	(sp)+	,r1
+     27	002054	005000 				clr	r0			; flag success
+     28	002056	000207 				return
+     29
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 23
+Dump all I/O (cancel type_ahead), if possible
+
+      1
+      2						.sbttl	Hose the handler	; /BBS/ routine added
+      3
+      4	002060				x.hose::save	<r1>			; /62/ add KM support
+	002060	010146 				 mov	r1	,-(sp)
+      5	002062	005767 	000000G			tst	km.lock			; /62/ KM?
+      6	002066	001011 				bne	10$			; /62/ ya, it emulates spfun 257
+      7	002070	005767 	000000G			tst	tsxcl			; TSX and CL?
+      8	002074	001433 				beq	30$			; /62/ no
+      9	002076	012701 	000265 			mov	#clhose	,r1		; /62/ preset for TSX V6.0 and up
+     10	002102	026727 	000000G	001130 		cmp	tsxver	,#600.		; is it V6.00 or above?
+     11	002110	002002 				bge	20$			; /62/ ya
+     12	002112	012701 	000257 		10$:	mov	#clclr	,r1		; /62/ no, do it the old way..
+     13	002116				20$:	.spfun	#rtwork,#xc.control,r1,#0,#0,#1 ; /62/ hose CL handler
+	002116	012700 	000000G			MOV	#rtwork,R0
+	002122	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	002126	012760 	000001 	000002 		MOV	#1,2.(R0)
+	002134	005060 	000004 			CLR	4.(R0)
+	002140	005060 	000006 			CLR	6.(R0)
+	002144	112760 	000377 	000010 		MOVB	#^O377,8.(R0)
+	002152	110160 	000011 			MOVB	r1,9.(R0)
+	002156	005060 	000012 			CLR	10.(R0)
+	002162	104375 				EMT	^O375
+     14	002164	004767 	177532 		30$:	call	x.cantyp		; /62/ hose XL or XC
+     15	002170					.twait	#rtwork,#third		; let things settle
+	002170	012700 	000000G			MOV	#rtwork,R0
+	002174	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	002200	012760 	000000'	000002 		MOV	#third,2.(R0)
+	002206	104375 				EMT	^O375
+     16	002210					unsave	<r1>			; /62/
+	002210	012601 				 mov	(sp)+	,r1
+     17	002212	005000 				clr	r0			; no error possible
+     18	002214	000207 				return
+     19
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 24
+Hose the handler	; /BBS/ routine added
+
+      1
+      2						.sbttl XON the handler
+      3
+      4	002216				x.ttxon::.spfun	#rtwork,#xc.control,#clrdrv,#0,#0,#1 ; clear the driver
+	002216	012700 	000000G			MOV	#rtwork,R0
+	002222	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	002226	012760 	000001 	000002 		MOV	#1,2.(R0)
+	002234	005060 	000004 			CLR	4.(R0)
+	002240	005060 	000006 			CLR	6.(R0)
+	002244	012760 	100777 	000010 		MOV	#clrdrv*^O400+^O377,8.(R0)
+	002252	005060 	000012 			CLR	10.(R0)
+	002256	104375 				EMT	^O375
+      5	002260	005000 				clr	r0			; flag success
+      6	002262	000207 				return
+      7
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 25
+XON the handler
+
+      1
+      2						.sbttl	Drop DTR for 0.5 sec
+      3
+      4	002264				x.ttyhan::save	<r1>
+	002264	010146 				 mov	r1	,-(sp)
+      5	002266					.spfun	#rtwork,#xc.control,#dtrdrv,#0,#0,#1 ;/62/ drop DTR
+	002266	012700 	000000G			MOV	#rtwork,R0
+	002272	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	002276	012760 	000001 	000002 		MOV	#1,2.(R0)
+	002304	005060 	000004 			CLR	4.(R0)
+	002310	005060 	000006 			CLR	6.(R0)
+	002314	012760 	103377 	000010 		MOV	#dtrdrv*^O400+^O377,8.(R0)
+	002322	005060 	000012 			CLR	10.(R0)
+	002326	104375 				EMT	^O375
+      6	002330	016701 	000000G			mov	clkflg	,r1		; /62/ number of ticks in one second
+      7	002334	006201 				asr	r1			; /62/ wait 0.5sec here
+      8	002336				10$:	.twait	#rtwork,#wait		; /BBS/ do it one tick at a time
+	002336	012700 	000000G			MOV	#rtwork,R0
+	002342	012710 	012000 			MOV	#20.*^O400+0.,@R0
+	002346	012760 	000004'	000002 		MOV	#wait,2.(R0)
+	002354	104375 				EMT	^O375
+      9	002356					sob	r1	,10$		; so it remains abort-able..
+	002356	005301 				dec	r1
+	002360	001366 				bne	10$
+     10	002362					.spfun	#rtwork,#xc.control,#dtrdrv,#0,#1,#1 ;/62/ then bring DTR up
+	002362	012700 	000000G			MOV	#rtwork,R0
+	002366	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	002372	012760 	000001 	000002 		MOV	#1,2.(R0)
+	002400	005060 	000004 			CLR	4.(R0)
+	002404	012760 	000001 	000006 		MOV	#1,6.(R0)
+	002412	012760 	103377 	000010 		MOV	#dtrdrv*^O400+^O377,8.(R0)
+	002420	005060 	000012 			CLR	10.(R0)
+	002424	104375 				EMT	^O375
+     11	002426	005000 				clr	r0			; /41/ assume it worked, and assume
+     12	002430	005067 	000000G			clr	mready			; /BBS/ the DTR drop resets the modem
+     13	002434					unsave	<r1>
+	002434	012601 				 mov	(sp)+	,r1
+     14	002436	000207 				return
+     15
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 26
+Drop DTR for 0.5 sec
+
+      1
+      2						.sbttl	Check status of DTR or DCD  ; /BBS/ added this..
+      3						.enabl	lsb
+      4
+      5					;	I N Q C D			; all handlers
+      6					;	I N Q D T R			; CL or KM only
+      7					;
+      8					;	Returns:  r0 =	 4  DTR or DCD is asserted
+      9					;			 0  DTR or DCD is not asserted
+     10					;			-1  status is not available
+     11
+     12	002440				x.inqcd::save	<r1>
+	002440	010146 				 mov	r1	,-(sp)
+     13	002442	005767 	000000G			tst	mready			; modem must be on-line
+     14	002446	001433 				beq	30$			; no modem = can't do DCD..
+     15	002450	012701 	000204 			mov	#stsdrv	,r1		; DCD arg
+     16	002454	004767 	000066 			call	50$			; goto common code..
+     17	002460	005700 				tst	r0			; did it work
+     18	002462	002427 				blt	40$			; no
+     19	002464	005767 	000000G			tst	tsxcl			; ya, which handler is it
+     20	002470	001017 				bne	20$			; CL uses bit 2
+     21	002472	006200 				asr	r0			; KM or XL uses bit 3, make it 2 here
+     22	002474	000415 				br	20$			; goto common code..
+     23
+     24	002476				x.inqdtr::save	<r1>
+	002476	010146 				 mov	r1	,-(sp)
+     25	002500	005767 	000000G			tst	tsxcl			; is this TSX and CL handler?
+     26	002504	001003 				bne	10$			; /62/ ya
+     27	002506	005767 	000000G			tst	km.lock			; /62/ is it KM?
+     28	002512	001411 				beq	30$			; nope..
+     29	002514	012701 	000255 		10$:	mov	#clstat	,r1		; DTR argument
+     30	002520	004767 	000022 			call	50$			; common code
+     31	002524	005700 				tst	r0			; did it work?
+     32	002526	002405 				blt	40$			; no
+     33	002530	042700 	177773 		20$:	bic	#^c<4>	,r0		; ya, hose unneeded bits
+     34	002534	000402 				br	40$
+     35	002536	012700 	177777 		30$:	mov	#-1	,r0		; DTR status not available
+     36	002542				40$:	unsave	<r1>
+	002542	012601 				 mov	(sp)+	,r1
+     37	002544	000207 				return
+     38
+     39	002546				50$:	.spfun	#rtwork,#xc.control,r1,#xcsts,#0,#1 ; /62/ get status
+	002546	012700 	000000G			MOV	#rtwork,R0
+	002552	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	002556	012760 	000001 	000002 		MOV	#1,2.(R0)
+	002564	012760 	000004'	000004 		MOV	#xcsts,4.(R0)
+	002572	005060 	000006 			CLR	6.(R0)
+	002576	112760 	000377 	000010 		MOVB	#^O377,8.(R0)
+	002604	110160 	000011 			MOVB	r1,9.(R0)
+	002610	005060 	000012 			CLR	10.(R0)
+	002614	104375 				EMT	^O375
+     40	002616	103403 				bcs	60$			; failed..
+     41	002620	016700 	000004'			mov	xcsts	,r0		; return the current status
+     42	002624	000207 				return
+     43	002626	012700 	177777 		60$:	mov	#-1	,r0		; status not available
+     44	002632	000207 				return
+     45
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 26-1
+Check status of DTR or DCD  ; /BBS/ added this..
+
+     46						.dsabl	lsb
+     47
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 27
+Check status of DTR or DCD  ; /BBS/ added this..
+
+      1
+      2						.sbttl	DCD status tester	; /62/ new..
+      3
+      4	002634				x.dcdtst::save	<r1,r0>
+	002634	010146 				 mov	r1	,-(sp)
+	002636	010046 				 mov	r0	,-(sp)
+      5	002640	016701 	000004'			mov	xcsts	,r1		; save prior status
+      6	002644	005767 	000000G			tst	tsxcl			; which handler is it?
+      7	002650	001001 				bne	10$			; CL uses bit 2
+      8	002652	006201 				asr	r1			; KM, XC and XL use bit 3, make it 2
+      9	002654	042701 	177773 		10$:	bic	#^c<4>	,r1		; recover the carrier detect bit
+     10	002660	004767 	177554 			call	x.inqcd			; now get current DCD status
+     11	002664	005700 				tst	r0			; well?
+     12	002666	002427 				blt	40$			; it's not available, bail out..
+     13	002670	020001 				cmp	r0	,r1		; any change?
+     14	002672	001425 				beq	40$			; no
+     15	002674	005700 				tst	r0			; ya, did we loose it?
+     16	002676	001005 				bne	20$			; no, must have just gotten it
+     17	002700	012701 	000104'			mov	#xl.02	,r1		; ya, load "lost" tag
+     18	002704	004767 	177306 			call	x.ttxon			; clear the driver just in case
+     19	002710	000402 				br	30$
+     20	002712	012701 	000111'		20$:	mov	#xl.03	,r1		; load "detected" tag
+     21	002716				30$:	calls	printm	,<#2,#xl.01,r1>	; say what's up
+	002716	010546 				mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
+	002720	010146 				        mov	r1	,-(sp)	; push it
+	002722	012746 	000061'			        mov	#xl.01	,-(sp)	; push it
+	002726	012746 	000002 			        mov	#2	,-(sp)	; push it
+	002732	010605 				  mov	sp	,r5		; set up the argument list pointer
+	002734	004767 	000000G			  jsr	pc	,printm		; and go to the routine
+	002740	062706 	000006 			  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	002744	012605 				  mov	(sp)+	,r5		; /63/ restore r5
+     22	002746				40$:	unsave	<r0,r1>
+	002746	012600 				 mov	(sp)+	,r0
+	002750	012601 				 mov	(sp)+	,r1
+     23	002752	000207 				return
+     24
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 28
+DCD status tester	; /62/ new..
+
+      1
+      2						.sbttl	SET SPEED
+      3
+      4					;	input:  (r5)	= desired speed
+      5
+      6	002754				x.setspd::save	<r3>
+	002754	010346 				 mov	r3	,-(sp)
+      7	002756	005767 	000000G			tst	tsxcl			; /44/ TSX+ and CL?
+      8	002762	001003 				bne	10$			; /62/ ya
+      9	002764	005767 	000000G			tst	km.lock			; /62/ KM uses the CL speed spfun..
+     10	002770	001445 				beq	50$			; /62/ no can do if not
+     11	002772	005003 			10$:	clr	r3			; /44/ match passed speed in table
+     12	002774	005763 	000156'		20$:	tst	splst(r3)		; /44/ end of the speed table?
+     13	003000	001436 				beq	40$			; /44/ yes, exit please
+     14	003002	026315 	000156'			cmp	splst(r3),(r5)		; /BBS/ speeds match up?
+     15	003006	001402 				beq	30$			; /44/ yes, exit loop
+     16	003010	005723 				tst	(r3)+			; /44/ no, try next entry then
+     17	003012	000770 				br	20$			; /44/ next please
+     18	003014	062703 	000220'		30$:	add	#spmap	,r3		; /45/ for the speed
+     19	003020					.spfun	#rtwork,#xc.control,#clspeed,r3,#1,#1 ; /62/ address NOT value
+	003020	012700 	000000G			MOV	#rtwork,R0
+	003024	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	003030	012760 	000001 	000002 		MOV	#1,2.(R0)
+	003036	010360 	000004 			MOV	r3,4.(R0)
+	003042	012760 	000001 	000006 		MOV	#1,6.(R0)
+	003050	012760 	127377 	000010 		MOV	#clspeed*^O400+^O377,8.(R0)
+	003056	005060 	000012 			CLR	10.(R0)
+	003062	104375 				EMT	^O375
+     20	003064	103412 				bcs	60$			; /BBS/ oops
+     21	003066	011367 	000000G			mov	(r3)	,xkspeed	; /52/ save it please
+     22	003072	005000 				clr	r0			; /BBS/ moved this here, say success
+     23	003074	000410 				br	70$
+     24
+     25	003076	012700 	000000G		40$:	mov	#er$spe	,r0		; /44/ return unknown speed
+     26	003102	000405 				br	70$
+     27	003104	012700 	000000G		50$:	mov	#er$spx	,r0		; /BBS/ speed not settable
+     28	003110	000402 				br	70$
+     29	003112	012700 	000000G		60$:	mov	#er$wer	,r0		; /BBS/ device write error
+     30	003116				70$:	unsave	<r3>
+	003116	012603 				 mov	(sp)+	,r3
+     31	003120	000207 				return
+     32
+     33
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 29
+SET SPEED
+
+      1
+      2						.sbttl	Fake getting the speed
+      3
+      4	003122	005767 	000000G		x.ttsp::tst	tsxcl			; /54/ CL and TSX?
+      5	003126	001034 				bne	30$			; /62/ ya
+      6	003130	005767 	000000G			tst	km.lock			; /62/ KM?
+      7	003134	001424 				beq	10$			; /62/ no
+      8	003136					.spfun	#rtwork,#xc.control,#clspeed,#getspd,#-1,#1 ; /62/ get speed
+	003136	012700 	000000G			MOV	#rtwork,R0
+	003142	012710 	015014 			MOV	#xc.control+<26.*^O400>,@R0
+	003146	012760 	000001 	000002 		MOV	#1,2.(R0)
+	003154	012760 	000000'	000004 		MOV	#getspd,4.(R0)
+	003162	012760 	177777 	000006 		MOV	#-1,6.(R0)
+	003170	012760 	127377 	000010 		MOV	#clspeed*^O400+^O377,8.(R0)
+	003176	005060 	000012 			CLR	10.(R0)
+	003202	104375 				EMT	^O375
+      9	003204	103002 				bcc	20$			; /62/ got it
+     10	003206	005000 			10$:	clr	r0			; /62/ didn't..
+     11	003210	000410 				br	40$			; /62/ ..work
+     12	003212	016767 	000000'	000000G	20$:	mov	getspd	,xkspeed	; /62/ ok, ensure it's the real thing
+     13	003220	016700 	000000G		30$:	mov	xkspeed	,r0		; /54/ or get from last SET SPEED
+     14	003224	006300 				asl	r0			; /54/ word indexing
+     15	003226	016000 	000154'			mov	splst-2(r0),r0		; /54/ copy and exit
+     16	003232	000207 			40$:	return
+     17
+     18		000001 				.end
+KRTXL	I/O for CL/KM/XC/XL han	MACRO V05.03b  00:01  Page 29-1
+Symbol table
+
+ALLOC   000000R     004	CTRL$O= 000017   	LOG$DE= 000020   	P.WIND= 000012   	XCWORK  000006R     004
+ALLOER= ****** GX	C.CRLF= 000004   	LOG$IO= 000010   	RDCOM   001372R     002	XCWRIT  000022R     004
+ALSIZE= 001000   	C.LCUC= 000040   	LOG$ON= 040000   	RDMODE  000002R     005	XC.CON= 000014 G
+AT.ALL  000177   	C.LSPA= 000010   	LOG$OP= 100000   	READXK= ****** GX	XKBUFF= ****** GX
+AT.CDT  000001   	C.SSPA= 000020   	LOG$PA= 000001   	RTWORK= ****** GX	XKLGBU= ****** GX
+AT.INF  000002   	C.TSPA= 000200   	LOG$RP= 000004   	RT11UP= ****** GX	XKPOIN= ****** GX
+AT.LEN  000004   	DBLK  = ****** GX	LUN.SR= ****** GX	RT11VE= ****** GX	XKSIZE= ****** GX
+AT.ON   100000   	DECNAT  000002   	LUN.XK= ****** GX	R50DEV= ****** GX	XKSPEE= ****** GX
+AT.PRO  000010   	DEFPRI= ****** GX	L$LEN = ****** GX	R50TBL  000010R     003	XL.LOC= ****** GX
+AT.SYS  000020   	DEL   = 000177   	MAPXL   000514R     002	SCANCH= ****** GX	XL.01   000061R     003
+AT.TYP  000040   	DEV.OK  000122R     003	MAXLNG= 001130   	SCOLON= 000073   	XL.02   000104R     003
+AT.XLE  000100   	DOT   = 000056   	MAXPAK  000136   	SETPRI  000004R     005	XL.03   000111R     003
+BELL  = 000007   	DTRDRV= 000206   	MONTYP= ****** GX	SEVER$= 000010   	XOFF  = 000023
+BINARY  000001   	ERBFSI= 000170   	MREADY= ****** GX	SOH   = 000001   	XON   = 000021
+BINREA= ****** GX	ERRBYT= 000052   	NONEIS= 000001   	SPACE = 000040   	XXREAD  001446R     002
+BS    = 000010   	ERROR$= 000004   	NOSCOP= 000000   	SPLST   000156R     003	X.ASSD  000000RG    002
+B4SPEE= ****** GX	ER$DEV= ****** GX	PARITY= ****** GX	SPMAP   000220R     003	X.BINR  001366RG    002
+CAPA.A= 000010   	ER$NIN= ****** GX	PAR$EV  000002   	STSDRV= 000204   	X.BINW  001572RG    002
+CAPA.L= 000002   	ER$SPE= ****** GX	PAR$MA  000003   	SUCCS$= 000001   	X.CANT  001722RG    002
+CAPA.S= 000004   	ER$SPX= ****** GX	PAR$NO  000000   	TAB   = 000011   	X.DCDT  002634RG    002
+CCCNT = ****** GX	ER$UKN= ****** GX	PAR$OD  000001   	TERMIN  177777   	X.HOSE  002060RG    002
+CC$MAX= ****** GX	ER$WER= ****** GX	PAR$SP  000004   	TEXT    000000   	X.INQC  002440RG    002
+CLCLR = 000257   	ER$137= ****** GX	PRINTM= ****** GX	THIRD   000000R     003	X.INQD  002476RG    002
+CLHOSE= 000265   	ESC   = 000033   	P$MUL = ****** GX	TILDE = 000176   	X.SETS  002754RG    002
+CLKFLG= ****** GX	FATAL$= 000020   	P.CAPA= 000011   	TSXCL = ****** GX	X.TTSP  003122RG    002
+CLRDRV= 000201   	FATERR= ****** GX	P.CHKT= 000007   	TSXSAV= ****** GX	X.TTXO  002216RG    002
+CLRSET= 000251   	FETCH = ****** GX	P.EOL = 000004   	TSXVER= ****** GX	X.TTYF  001256RG    002
+CLSET = 000250   	FF    = 000014   	P.MXL1= 000013   	TTY   = 000001   	X.TTYH  002264RG    002
+CLSPEE= 000256   	GETSPD  000000R     005	P.MXL2= 000014   	TT$IO = ****** GX	X.TTYI  000444RG    002
+CLSTAT= 000255 G 	JSW   = 000044   	P.NPAD= 000002   	USERRB= 000053   	X.XBIN  001360RG    002
+CL.CLR  000154R     003	KM.LOC= ****** GX	P.PADC= 000003   	VT100 = 000002   	$ALLSI= 001144
+CL.PRI= ****** GX	KRTINC= 000001   	P.QBIN= 000006   	VT200 = 000003   	$$    = 000003
+CL.SET  000152R     003	LF    = 000012   	P.QCTL= 000005   	WAIT    000004R     003	$$1   = 000001
+COMMA = 000054   	LN$CNT= 000003   	P.REPT= 000010   	WARN$ = 000002   	$$2   = 000000
+CON$ES= 000034   	LN$MAX= 000120   	P.SPSI= 000000   	XCDONE= ****** GX	$$5   = 000027
+CR    = 000015   	LOG$AL= 000003   	P.TIME= 000001   	XCIERR= ****** GX	...V1 = 000003
+CSTAT = ****** GX	LOG$CO= 000002   	P.VEND= 000017   	XCSTS   000004RG    004	...V2 = 000027
+CTRL$N= 000016
+
+. ABS.	000000    000	(RW,I,GBL,ABS,OVR)
+      	000000    001	(RW,I,LCL,REL,CON)
+$CODE 	003234    002	(RO,I,LCL,REL,CON)
+$PDATA	000260    003	(RO,D,LCL,REL,CON)
+XCDATA	000024    004	(RW,D,GBL,REL,CON)
+XCRW  	000010    005	(RW,D,LCL,REL,CON)
+Errors detected:  0
+
+*** Assembler statistics
+
+
+Work  file  reads: 74
+Work  file writes: 68
+Size of work file: 14568 Words  ( 57 Pages)
+Size of core pool: 12544 Words  ( 49 Pages)
+Operating  system: RT-11
+
+Elapsed time: 00:00:00.32
+KRTXL,KRTXL=KRTNHD,KRTXL
