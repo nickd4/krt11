@@ -1,4 +1,5 @@
 krt.ihx: \
+ohandl.rel \
 krtsj.rel \
 krtpak.rel \
 krtdat.rel \
@@ -38,6 +39,9 @@ div60.rel \
 ispy.rel \
 syslbv.rel
 	aslink -p0 -il -m -u -w -q -z -o $@ $^
+
+ohandl.rel: macro-11.mac sysmac.mac syslib/ohandl.mac
+	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^
 
 krtatr.rel: macro-11.mac sysmac.mac krtnhd.mac krtatr.mac
 	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^

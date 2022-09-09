@@ -10,7 +10,8 @@ sed -ne 's/^\t\t\t//p' <krt/krt.map \
 >good
 
 # extract symbols from aslink map file
-sed -ne 's/^        \([0-7]\{6\}\)  \(.\)/\1 \2/p' <krt.map \
+sed -ne 's/^        \([0-7]\{6\}\)  \(......\).*/\1 \2/p' <krt.map \
+|sed -e 's/ \+$//' \
 |tr 'A-Z' 'a-z' \
 |LC_ALL=C sort \
 >bad
