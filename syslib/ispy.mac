@@ -1,0 +1,9 @@
+; .module is in sysmac.mac and doesn't seem to work yet
+;	.module	ispy
+.ispy	==	1
+	.globl	$syslb
+	.area	sys$i (rel,con)
+ispy::	.word	017500,000002			; 000000
+$gval::	.word	010046,012746			; 000004
+	.word	016000,010600,104375,022626	; 000010
+	.word	000207				; 000020

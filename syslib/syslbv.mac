@@ -1,0 +1,8 @@
+; .module is in sysmac.mac and doesn't seem to work yet
+;	.module	syslbv
+.syslb	==	20
+$sysv$	==	20
+	.area	sys$s (rel,con)
+$syslb::.word	000000				; 000000
+$lock::	.byte	001				; 000002
+$crash:	.byte	000				; 000003

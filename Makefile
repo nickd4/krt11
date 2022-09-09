@@ -32,7 +32,11 @@ krtcom.rel \
 krtutl.rel \
 krtcvt.rel \
 krterr.rel \
-krtmdm.rel
+krtmdm.rel \
+cvttim.rel \
+div60.rel \
+ispy.rel \
+syslbv.rel
 	aslink -p0 -il -m -u -w -q -z -o $@ $^
 
 krtatr.rel: macro-11.mac sysmac.mac krtnhd.mac krtatr.mac
@@ -138,6 +142,18 @@ krtxm.rel: macro-11.mac sysmac.mac krtnhd.mac krtxm.mac
 	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^
 
 krtxmo.rel: macro-11.mac sysmac.mac krtnhd.mac krtxmo.mac
+	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^
+
+cvttim.rel: macro-11.mac sysmac.mac syslib/cvttim.mac
+	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^
+
+div60.rel: macro-11.mac sysmac.mac syslib/div60.mac
+	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^
+
+ispy.rel: macro-11.mac sysmac.mac syslib/ispy.mac
+	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^
+
+syslbv.rel: macro-11.mac sysmac.mac syslib/syslbv.mac
 	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^
 
 clean:

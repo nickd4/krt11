@@ -1,0 +1,9 @@
+; .module is in sysmac.mac and doesn't seem to work yet
+;	.module	cvttim
+.cvtti	==	2
+	.area	sys$i (rel,con)
+cvttim::.word	005725,012501,012100,011101	; 000000
+	.word	062705,000010,004767,divtk	; 000010
+	.word	010355,004767,div60,010355	; 000020
+	.word	004767,div60,010355,010155	; 000030
+	.word	000207				; 000040
