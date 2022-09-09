@@ -1,5 +1,9 @@
 	.title	KRTXMO	XMODEM, SEND command interface
+	.include "macro-11.mac"
+	.segment 000011
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -54,7 +58,7 @@
 	NAK	= 25			; negative acknowledge (not ok)
 	NKWAIT	= 13.			; initial wait for first NAK in secs
 
-	.psect	segment_000011_xmodat	,rw,d,lcl,rel,con
+	.psect	xmodat	,rw,d,lcl,rel,con
 aflag:	.word	0			; abort flag
 blkcnt:	.word	0			; for .readw, block just read
 block:	.word	0			; file size in RT-11 blocks
@@ -80,7 +84,7 @@ xmosts:	.word	0			; status word
 xrecno:	.word	0			; record number for packets
 xtime:	.word	0 ,30.			; wait 0.5sec when finished or abort
 
-	.psect	segment_000011_$pdata			; /63/ consolidate here..
+	.psect	$pdata			; /63/ consolidate here..
 $beep2:	.byte	bell ,bell ,0		; two bells
 sen.10:	.asciz	^/bell/"Send completed"	; /62/
 sen.11:	.asciz	^/bell/"Send failed"
@@ -95,7 +99,7 @@ xmo.05:	.asciz	"File transfer completed"
 	.even
 
 	.page
-	.psect	segment_000011_$code
+	.psect	$code
 	.sbttl	Send file(s)		; /BBS/ somewhat modified..
 					; /62/ moved here for smaller root
 c$send::clr	wasmore			; init multi-args display flag

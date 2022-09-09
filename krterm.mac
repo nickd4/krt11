@@ -1,5 +1,9 @@
 	.title	KRTERM	Packet I/O via TT
+	.include "macro-11.mac"
+	.segment 000001
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -39,11 +43,11 @@
 		CRLF$	=	2	; ignore width bit
 		PAGE$	=	200	; /BBS/ SET TT [NO]PAGE bit
 
-	.psect	segment_000001_$pdata
+	.psect	$pdata
 ttime:	.word	0 ,1			; a tick sleep for .twait
 w$suspen:.byte	3 ,161			; /BBS/ suspend TSX window processing
 
-	.psect	segment_000001_$rwdata	,rw,d,lcl,rel,con
+	.psect	$rwdata	,rw,d,lcl,rel,con
 xonemt:	.byte	1 ,154			; /BBS/ TSX SET TT XON emt
 xonlin:	.byte	0 ,0			; /BBS/ line_to_XON ,0
 	.word	0			; /BBS/ speed (unused here)
@@ -52,7 +56,7 @@ wrtloc:	.word	0			; /63/ address of buffer to write
 wrtlen:	.word	0			; /63/ write this many chars
 
 	.page
-	.psect	segment_000001_$code
+	.psect	$code
 	.sbttl	Initialize the terminal	; /BBS/ heavily hacked
 
 ;	T T Y I N I

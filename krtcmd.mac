@@ -1,7 +1,10 @@
 	.title	KRTCMD	Kermit-11 main loop, commands calling O:1 or APR4
 
 	.macro	krt.id	RLS=V03	,VER=63	,PAT=0	,LASTED=^/27-Sep-97/
+	.include "macro-11.mac"
 	.ident	"'RLS'.'VER'"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 	.ASECT
 	.org	110

@@ -1,5 +1,9 @@
 	.title	KRTATR	Process attribute packets
+	.include "macro-11.mac"
+	.segment 000017
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 
@@ -44,7 +48,7 @@
 	.mcall	.DATE	,.GTIM		; /BBS/
 
 
-	.psect	segment_000017_$rwdata	,rw,d,lcl,rel,con
+	.psect	$rwdata	,rw,d,lcl,rel,con
 atrctx::.word	0			; /E64/ send attrs context (index)
 curatr:	.blkb	200			; current attribute scratch buffer
 day.x:	.word	0			; /BBS/ integer file create day
@@ -57,7 +61,7 @@ yr.x:	.word	0			; /BBS/ integer file create year
 yr.y:	.byte	0 ,0 ,0 ,0 ,0 ,0	; /BBS/ ascii file create year
 
 	.page
-	.psect	segment_000017_$code
+	.psect	$code
 	.sbttl	Send all attributes in a single packet	; /BBS/ modified to..
 
 ;	W $ A T T R
@@ -92,7 +96,7 @@ w$attr::save	^/r2,r3,r4/
 	return
 
 	.save
-	.psect	segment_000017_$pdata
+	.psect	$pdata
 watt:	.word	sn.sys	,sn.typ	,sn.pro	,sn.len	,sn.inf	,sn.cdt	,sn.xle
 at.rx:	.word	0			; /62/ also terminates watt
 at.tx:	.word	at.sys	,at.typ	,at.pro	,at.len	,at.inf	,at.cdt	,at.xle
@@ -174,7 +178,7 @@ sn.inf:	movb	#'0	,(r4)+		; DEC-specific file type
 	br	sn.end			; /63/ go make it .asciz
 
 	.save
-	.psect	segment_000017_$pdata
+	.psect	$pdata
 sn$inf:	.byte	'A&137	,'I&137	,'N&137
 	.even
 	.restore
@@ -336,7 +340,7 @@ r$attr::save	^/r1,r2,r5/		; /BBS/ cleaned this up a bit..
 	return
 
 	.save
-	.psect	segment_000017_$pdata
+	.psect	$pdata
 attrty:	.byte	56	,42	,55	,41	,60	,43	,61
 	.byte	0
 	.even
@@ -552,7 +556,7 @@ rx.inf:	call	ispdp			; are we
 	return
 
 	.save
-	.psect	segment_000017_$pdata
+	.psect	$pdata
 rx$in0:	.byte	'A&137	,'B&137	,'I&137	,'N&137	; /63/ add "B" type
 	.byte	0
 	.even
@@ -614,7 +618,7 @@ ispdp:	clr	r0			; presume failure
 10$:	return
 
 	.save
-	.psect	segment_000017_$pdata
+	.psect	$pdata
 pdplst:	.byte	pd$rsx	,pd$ias	,pd$rsts,pd$rt	,pd$pos	,0
 	.even
 	.restore

@@ -1,5 +1,9 @@
 	.title	KRTREC	Receive file processing
+	.include "macro-11.mac"
+	.segment 000006
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -58,7 +62,7 @@
 	.page
 	.sbttl	Local data
 
-	.psect	segment_000006_$pdata			; /62/ consolidated this stuff here..
+	.psect	$pdata			; /62/ consolidated this stuff here..
 fillst:	.word	10$	,20$	,30$	; /63/
  10$:	.asciz	"ASCII (7-bit text)"	; /63/
  20$:	.asciz	"BINARY (fixed 512)"	; /63/
@@ -86,7 +90,7 @@ rec.16:	.asciz	" renamed to "
 	.even
 
 	.page
-	.psect	segment_000006_$code
+	.psect	$code
 	.sbttl	Receive file(s)		; /62/ moved this here..
 
 c$rec::	call	opentt			; initialize the link device
@@ -151,7 +155,7 @@ rec.sw::movb	@r5	,state		; load passed state
 	return
 
 	.save
-	.psect	segment_000006_$pdata
+	.psect	$pdata
 50$:	.byte	sta.abo	,sta.com,sta.dat,sta.fil,sta.rin,sta.cca
 	.byte	0
 	.even
@@ -265,7 +269,7 @@ rinit:	inc	numtry			; check for retry count
 	jmp	@30$(r0)		; /62/ dispatch to it
 
 	.save
-	.psect	segment_000006_$pdata
+	.psect	$pdata
 20$:	.byte	msg$error,msg$snd,timout,badchk
 	.byte	0
 	.even
@@ -310,7 +314,7 @@ rfile:	inc	numtry			; check for retry count
 	jmp	@50$(r0)		; /62/ and dispatch to it
 
 	.save
-	.psect	segment_000006_$pdata
+	.psect	$pdata
 40$:	.byte	msg$break,msg$error,msg$file,msg$snd,msg$text,msg$eof
 	.byte	timout	,badchk
 	.byte	0
@@ -469,7 +473,7 @@ rdata:	inc	numtry			; abort of retry count is too large
 	jmp	@30$(r0)		; /62/ case statement
 
 	.save
-	.psect	segment_000006_$pdata
+	.psect	$pdata
 20$:	.byte	msg$atr	,msg$data,msg$error,msg$file,msg$text,msg$eof
 	.byte	timout	,badchk
 	.byte	0

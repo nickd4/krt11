@@ -1,5 +1,9 @@
 	.title	KRTTRA	ASCII transfer to remote
+	.include "macro-11.mac"
+	.segment 000012
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 
@@ -29,13 +33,13 @@
 	.mcall	.TTYOUT	,.TWAIT
 
 
-	.psect	segment_000012_$pdata
+	.psect	$pdata
 fifteen:.word	0 ,15			; wait fifteen ticks after EOF
 short:	.word	0 ,1			; wait up to 1 tick for remote to echo
 twarea:	.word	0 ,0			; .twait work area
 
 	.page
-	.psect	segment_000012_$code
+	.psect	$code
 	.sbttl	TRANSMIT		; /BBS/ heavily hacked..
 
 ;	input:	argbuf	= name of file to send

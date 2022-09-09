@@ -1,5 +1,8 @@
 	.title	KRTSJ	Kermit-11 root module for RT-11FB,SB,SJ or TSX-Plus
+	.include "macro-11.mac"
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/  27-Sep-97  Billy Youdelman  V03.63
 ;

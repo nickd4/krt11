@@ -1,5 +1,8 @@
 	.title	Watch LCDTIM and stop tailgating
+	.include "macro-11.mac"
 	.ident	"09B"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman
 ; /62/	27-Jul-93  Billy Youdelman

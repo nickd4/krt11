@@ -1,19 +1,23 @@
 	.title	KRTIDX	HELP RMS Index	27-Sep-97  15:34:33
+	.include "macro-11.mac"
+	.segment 000014
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
 ;	moved this into a module of its own as KRTHLP was > 4096. words
 
 	.page
-	.psect	segment_000014_$code	,ro,i,lcl,rel,con
+	.psect	$code	,ro,i,lcl,rel,con
 	.sbttl	Pass top of index back to caller
 
 loahlp::mov	#hlphead,r0		; calling this also loads this overlay
 	return
 
 	.page
-	.psect	segment_000014_$pdata	,ro,d,lcl,rel,con
+	.psect	$pdata	,ro,d,lcl,rel,con
 	.sbttl	Fake RMS for help text file under RT-11
 
 ;	Note here the "block" and "offset" point to the first line FOLLOWING

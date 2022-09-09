@@ -1,5 +1,9 @@
 	.title	KRTINI	Initialization and rarely used routines
+	.include "macro-11.mac"
+	.segment 000016
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 
@@ -81,7 +85,7 @@ a:	inc	reg			; next time, do next one
 	.page
 	.sbttl	Local data		; /63/ consolidated here..
 
-	.psect	segment_000016_$pdata
+	.psect	$pdata
 ini.00:	.word	ini.01	,ini.02	,ini.03	,ini.04	,0 ; /63/ init file name list
 ini.01:	.asciz	"INI:KRT.INI"		; /BBS/ try this logical first
 ini.02:	.asciz	"KRT:KRT.INI"		; /BBS/ then this one, etc..
@@ -117,7 +121,7 @@ dpox:	.asciz	^/cr/^/esc/"[54C"		; /BBS/ col 54.
 	.even
 
 	.page
-	.psect	segment_000016_$code
+	.psect	$code
 	.sbttl	Initialize ourselves	; /62/ rearranged for clarity..
 
 kerini::mov	#rwdata	,r0		; first of all, clear all read/write
@@ -717,7 +721,7 @@ reclog::save	^/r1/
 	return
 
 	.save
-	.psect	segment_000016_$pdata
+	.psect	$pdata
 recdsp:	.word	rectty	,rectty	,recvt1	,recvt1	,recvt1
 	.restore
 
@@ -780,7 +784,7 @@ senlog::save	^/r1/
 	return
 
 	.save
-	.psect	segment_000016_$pdata
+	.psect	$pdata
 sendsp:	.word	sentty	,sentty	,senvt1	,senvt1	,senvt1
 	.restore
 

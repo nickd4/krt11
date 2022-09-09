@@ -1,5 +1,9 @@
 	.title	KRTSTD	SET command list overlay
+	.include "macro-11.mac"
+	.segment 000017
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -27,7 +31,7 @@
 	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
 
 	.page
-	.psect	segment_000017_$pdata
+	.psect	$pdata
 	.sbttl	Local data		; /63/ consolidate data here..
 
 std.01:	.asciz	"On, Off? "
@@ -59,7 +63,7 @@ std.26:	.asciz	"Local or Remote? "
 	.even
 
 	.page
-	.psect	segment_000017_$code
+	.psect	$code
 	.sbttl	Define the SET commands
 
 loaset::mov	#setcmd	,r0		; calling this also loads this overlay

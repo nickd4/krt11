@@ -1,5 +1,9 @@
 	.title	KRTXL	I/O for CL/KM/XC/XL handlers
+	.include "macro-11.mac"
+	.segment 000002
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 
@@ -90,20 +94,20 @@
 	.page
 	.sbttl	Global and local data
 
-	.psect	xcdata	,rw,d,gbl,rel,con
+	.area	xcdata (rel,con) ;.psect	xcdata	,rw,d,gbl,rel,con
 alloc:	.byte	0 ,156			; /BBS/ allocate a device emt args
 	.word	dblk			; /BBS/ device name goes here
 xcsts::	.word	0			; /62/ saved from stsdrv
 xcwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; for async calls to the handler
 xcwrite:.word	0			; if ^// write is in progress
 
-	.psect	segment_000002_xcrw	,rw,d,lcl,rel,con
+	.psect	xcrw	,rw,d,lcl,rel,con
 getspd:	.word	0			; /62/ buffer speed until confirmed ok
 rdmode:	.word	0			; read mode "XON if no data" flag..
 setpri:	.byte	0 ,150			; /BBS/ TSX set priority emt
 	.word	0			; /BBS/ raise to this for CL handler
 
-	.psect	segment_000002_$pdata
+	.psect	$pdata
 third:	.word	0 ,20.			; wait 1/3 second
 wait:	.word	0 ,1			; wait one tick (1/60 second)
 r50tbl:	.asciz  " ABCDEFGHIJKLMNOPQRSTUVWXYZ   0123456789" ; /62/ device only
@@ -170,7 +174,7 @@ spmap:	.word	1	,2	,3	,4	,5	,6	; /44/
 	XC.CONTROL ==	14		; control channel for the driver
 
 	.page
-	.psect	segment_000002_$code
+	.psect	$code
 	.sbttl	Assign a handler as the link ; /BBS/ substantially changed..
 
 x.assdev::save	^/r2,r1/			; mods to stop ANY bad name

@@ -1,5 +1,9 @@
 	.title	KRTERR	Error code to message text translation
+	.include "macro-11.mac"
+	.segment 000023
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -24,7 +28,7 @@
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 
-	.psect	segment_000023_$pdata
+	.psect	$pdata
 	.sbttl	Error codes defined
 
 	; Kermit's main loop handles these five errors
@@ -284,7 +288,7 @@ baderr:	.asciz	"Unknown error  r0 = "
 	.even
 
 	.page
-	.psect	segment_000023_$code
+	.psect	$code
 	.sbttl	Error message generator	; /BBS/ somewhat changed..
 
 ;	S Y S E R R
@@ -293,7 +297,7 @@ baderr:	.asciz	"Unknown error  r0 = "
 ;	output:	 2(r5)	= buffer for error message text
 
 ;	.save
-;	.psect	segment_000023_$pdata
+;	.psect	$pdata
 ;prefix:.asciz	"?KRTBBS-E-"		; error message header for the bbs
 ;	.even
 ;	.restore

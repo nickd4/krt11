@@ -1,5 +1,5 @@
 	.sbttl	KRTNHD	EIS macros for a non-EIS CPU
-	.ident	"V03.63"
+;	.ident	"V03.63"		; this is an .include file
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ; /62/	27-Jul-93  Billy Youdelman  V03.62

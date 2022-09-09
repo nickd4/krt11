@@ -1,5 +1,8 @@
 	.title	KRTKM	Kermit-11 RT-11/TSX modem driver
+	.include "macro-11.mac"
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 	.ASECT
 . = 110					; for RESORC/V

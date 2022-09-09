@@ -1,5 +1,9 @@
 	.title	KRTUTL	Mount, rename, delete, copy, paksta, asctim, etc..
+	.include "macro-11.mac"
+	.segment 000022
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 
@@ -33,7 +37,7 @@
 	.page
 	.sbttl	Local data		; /63/ consolidated here..
 
-	.psect	segment_000022_$rwdata	,rw,d,lcl,rel,con
+	.psect	$rwdata	,rw,d,lcl,rel,con
 mntemt:	.byte	lun.ld ,163		; emt args to mount a logical device..
 ldunit:	.byte	0 ,0			; second byte is read/write flag
 elfmop:	.word	elfmo			; pointer to .rad50 file name
@@ -62,7 +66,7 @@ timemt:	.byte	5			; /62/ number of arguments
 	.word	secs			; /62/ secs
 	.word	ticks			; /62/ ticks
 
-	.psect	segment_000022_$pdata
+	.psect	$pdata
 pepmsg:	.asciz	"Error message from remote:"^/cr/^/lf/  ; /63/
 sta.0:	.byte	STA.CCA	,STA.ABO,STA.BRK,STA.COM,STA.DAT,STA.FIL
 	.byte	STA.ATR	,STA.INI,STA.RIN,STA.SIN,STA.TYP,STA.EOF
@@ -93,7 +97,7 @@ sta.7:	.asciz	" = STA."
 	.even
 
 	.page
-	.psect	segment_000022_$code
+	.psect	$code
 	.sbttl	The real work of MOUNT	; /BBS/ added
 
 ;	input:	argbuf	= entire argument string, unparsed

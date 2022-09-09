@@ -1,5 +1,9 @@
 	.title	KRTOSI	One shot init
+	.include "macro-11.mac"
+	.segment 000004
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -138,7 +142,7 @@
 	.page
 	.sbttl	Local data
 
-	.psect	segment_000004_mapwin	,rw,d,gbl,rel,con  ; ensure window data in ROOT
+	.psect	mapwin	,rw,d,gbl,rel,con  ; ensure window data in ROOT
 apr7re:	; /62/	.rdbbk	alloc/100	; define symbols and reserve space
 	R.GID=:0			; /62/ expanded to assemble under V4
 	R.GSIZ=:2.			; /62/ even though it won't run there
@@ -177,13 +181,13 @@ apr7wi:	; /62/	.wdbbk	7,alloc/100,0,0,alloc/100,ws.map ; for memory region
 	.WORD	0,alloc/100,0,0,alloc/100,ws.map
 mapwrk:	.word	0 ,0			; mapping work buffer
 
-	.psect	segment_000004_$rwdata	,rw,d,lcl,rel,con
+	.psect	$rwdata	,rw,d,lcl,rel,con
 chkbuf:	.word	0 ,0			; /BBS/ check for running clock buff
 timbuf:	.word	0 ,0			; roll the clock over buffer
 tsxmem:	.byte	0 ,141			; TSX-Plus get more memory emt
 	.word	0			; /BBS/ xinit puts size in here
 
-	.psect	segment_000004_$pdata
+	.psect	$pdata
 cl0asn:	.byte	0 ,155			; try to assign
 	.word	0			; CL0 to
 	.word	3			; line 3
@@ -240,7 +244,7 @@ osi.15:	.asciz	" free to load handlers"^/cr/^/lf/
 	.even
 
 	.page
-	.psect	segment_000004_$code
+	.psect	$code
 	.sbttl	Init for RT-11/TSX-Plus
 
 xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover

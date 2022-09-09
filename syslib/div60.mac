@@ -1,3 +1,4 @@
+	.include "./macro-11.mac"
 ; .module is in sysmac.mac and doesn't seem to work yet
 ;	.module	div60
 .div60	==	2

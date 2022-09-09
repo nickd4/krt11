@@ -1,5 +1,9 @@
 	.title	KRTCOM	Main_loop and REMOTE command lists overlay
+	.include "macro-11.mac"
+	.segment 000021
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -34,7 +38,7 @@
 	.page
 	.sbttl	Local data		; /63/ consolidate data here..
 
-	.psect	segment_000021_$pdata
+	.psect	$pdata
 com.01:	.asciz	"File: "
 com.02:	.asciz	"From: "
 com.03:	.asciz	"Number: "
@@ -46,7 +50,7 @@ com.08:	.asciz	"Username Password: "
 	.even
 
 	.page
-	.psect	segment_000021_$code
+	.psect	$code
 	.sbttl	Define the main_loop commands
 
 loacmd::mov	#cmdlst	,r0		; calling this also loads this overlay

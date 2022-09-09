@@ -1,5 +1,9 @@
 	.title	KRTDIR	RT-11 directory services
+	.include "macro-11.mac"
+	.segment 000020
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -85,7 +89,7 @@
 ;	STAR	=	134745		; RTEM (RSTS) .csispc for a "*"
 	STAR	=	132500		; real RT-11 .csispc for a "*"
 
-	.psect	rtdir	,rw,d,gbl,rel,con
+	.area	rtdir (rel,con) ;.psect	rtdir	,rw,d,gbl,rel,con
 csidev:	.word	0 ,0 ,0 ,0		; /62/ rad50 dev name + 3 null words..
 dirsiz: .word	0			; length of a file's dir entry
 dirbuf:	.blkw	1000			; 2 block buffer for one dir segment
@@ -98,12 +102,12 @@ name2:	.blkb	12			; /62/ disk file name, for matching
 numblks:.word	0			; /BBS/ total blocks of listed files
 numfree:.word	0			; /BBS/ total blocks empty+tent files
 
-	.psect	segment_000020_$rwdata	,rw,d,lcl,rel,con
+	.psect	$rwdata	,rw,d,lcl,rel,con
 L310$:	.word	0			; /58/ searched string base address
 L311$:	.word	0			; /58/ string width
 sluggy:	.blkw	41.			; /62/ slug buffer, .csispc, etc, etc.
 
-	.psect	segment_000020_$pdata			; /BBS/ all new..
+	.psect	$pdata			; /BBS/ all new..
 defext:	.word	star ,0 ,0 ,0		; /62/ input default extent is wild
 months:	.ascii "-ERR-Jan-Feb-Mar-Apr-May-Jun-Jul-Aug-Sep-Oct-Nov-Dec-" ; /BBS/
 nodate:	.asciz " No Date "		; /BBS/
@@ -120,7 +124,7 @@ vms:	.asciz	"DECVMSEX"		; /54/ from EXCHANGE under VMS4.x
 	.even
 
 	.page
-	.psect	segment_000020_$code
+	.psect	$code
 	.sbttl	Wildcarded lookup
 
 ;	L O O K U P			; /62/ merged getnth into this..

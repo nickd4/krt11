@@ -1,5 +1,9 @@
 	.title	KRTDEB	Examine data in memory
+	.include "macro-11.mac"
+	.segment 000015
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 
@@ -30,20 +34,20 @@
 	.macro	entry	name ,type ,size
 	.save
 	.if  b	^/name/
-	.psect	segment_000015_$addr
+	.psect	$addr
 	.word	0
 	.iff
 	;.dsabl	lc
-	.psect	segment_000015_$name	,ro,d,lcl,rel,con
+	.psect	$name	,ro,d,lcl,rel,con
 	$$ = .
 	.asciz	#name#
-	.psect	segment_000015_$addr
+	.psect	$addr
 	.word	$$
-	.psect	segment_000015_$addr1
+	.psect	$addr1
 	.word	name
-	.psect	segment_000015_$type
+	.psect	$type
 	.word	type
-	.psect	segment_000015_$size
+	.psect	$size
 	.word	size
 	;.enabl	lc
 	.endc
@@ -53,7 +57,7 @@
 	.page
 	.sbttl	Local data			; /63/ consolidated here..
 
-	.psect	segment_000015_$pdata
+	.psect	$pdata
 deb.01:	.word	pbyte ,pint
 deb.02:	.word	deb.03 ,deb.04
 deb.03:	.asciz	^/tab/"Byte data, size"	; /BBS/ added tabs
@@ -67,7 +71,7 @@ deb.10:	.asciz	")   "			; /BBS/ added spaces for formatting
 octpad:	.asciz	"    "			; /BBS/ dummy octal number element
 	.even
 
-	.psect	segment_000015_$rwdata	,rw,d,lcl,rel,con
+	.psect	$rwdata	,rw,d,lcl,rel,con
 togo:	.word	0			; /BBS/ number of bytes
 ascbuf:	.blkb	24			; /BBS/ ascii buffer for byte dump
 	.even
@@ -75,15 +79,15 @@ ascbuf:	.blkb	24			; /BBS/ ascii buffer for byte dump
 	.page
 	.sbttl	Symbol name data table
 
-	.psect	segment_000015_$addr	,ro,d,lcl,rel,con
+	.psect	$addr	,ro,d,lcl,rel,con
 texadr:
-	.psect	segment_000015_$addr1	,ro,d,lcl,rel,con
+	.psect	$addr1	,ro,d,lcl,rel,con
 virtad:
-	.psect	segment_000015_$type	,ro,d,lcl,rel,con
+	.psect	$type	,ro,d,lcl,rel,con
 symtyp:
-	.psect	segment_000015_$size	,ro,d,lcl,rel,con
+	.psect	$size	,ro,d,lcl,rel,con
 symsiz:
-	.psect	segment_000015_$code
+	.psect	$code
 
 	entry	^/$image/, int, 1
 	entry	^/$limit/, int, 2

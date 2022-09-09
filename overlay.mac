@@ -1,4 +1,6 @@
-	; region addresses and segment/psect order taken from krt/krt.map
+; region addresses and segment/psect order taken from krt/krt.map
+
+	.radix	o
 
 region_000001 = 045106
 region_000002 = 050634

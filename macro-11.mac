@@ -1,5 +1,7 @@
 ; macros for DEC MACRO-11 compatibility
 
+	.radix	o
+
 	.macro	.ident str
 	.endm
 
@@ -12,6 +14,14 @@
 
 	.macro	.psect name,a,b,c,d,e,f,g,h
 	.area	name (rel,con)
+	.endm
+
+	; the .segment macro redefines the .psect macro to insert a prefix
+	.macro	.segment n
+	.mdelete .psect
+	.macro	.psect name,a,b,c,d,e,f,g,h
+	.area	segment_'n'_'name (rel,con)
+	.endm
 	.endm
 
 	.macro	.limit

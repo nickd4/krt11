@@ -40,8 +40,8 @@
 	KRTINC	=	1		; for .include error checking
 
 	.page
-	.psect	_$code	,ro,i,lcl,rel,con ; psect ordering..
-	.psect	$pdata	,ro,d,lcl,rel,con
+	.area	_$code (rel,con) ;.psect	_$code	,ro,i,lcl,rel,con ; psect ordering..
+	.area	$pdata (rel,con) ;.psect	$pdata	,ro,d,lcl,rel,con
 
 ;	various ascii chars
 	SOH	=   1		; default packet start of header

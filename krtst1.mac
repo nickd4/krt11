@@ -1,5 +1,9 @@
 	.title	KRTST1	SET command overlay one
+	.include "macro-11.mac"
+	.segment 000012
 	.ident	"V03.63"
+	.include "sysmac.mac"
+	.include "krtnhd.mac"
 
 ; /63/	27-Sep-97  Billy Youdelman  V03.63
 ;
@@ -70,7 +74,7 @@
 	.page
 	.sbttl	Local data		; /63/ consolidate local data here..
 
-	.psect segment_000012_$pdata
+	.psect $pdata
 st1.01:	.asciz	"Blocks: "
 st1.02:	.asciz	"Mode: "
 st1.03:	.asciz	"Option: "
@@ -98,7 +102,7 @@ st1.24:	.asciz	"Remember to SET BLO 3 for long-packets"^/cr/^/lf/
 	.even
 
 	.page
-	.psect	segment_000012_$code
+	.psect	$code
 	.sbttl	SET SPEED
 
 set$sp::calls	l$val	,^/argbuf/	; get the speed into decimal
@@ -1003,7 +1007,7 @@ j10$:	wrtall	#clstxt			; clean up the screen
 	return
 
 	.save
-	.psect	segment_000012_$rwdata	,rw,d,lcl,rel,con
+	.psect	$rwdata	,rw,d,lcl,rel,con
 clstxt:	.ascii	^/esc/"<"	; ANSI mode from VT-52
 	.ascii	^/esc/"[?1l"	; reset cursor key application mode
 	.ascii	^/esc/"[?3l"	; reset to 80 cols
