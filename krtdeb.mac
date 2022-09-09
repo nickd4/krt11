@@ -83,7 +83,7 @@ virtad:
 symtyp:
 	.psect	$size	,ro,d,lcl,rel,con
 symsiz:
-	.psect	$code
+	.psect	$$code
 
 	entry	^/$image/, int, 1
 	entry	^/$limit/, int, 2

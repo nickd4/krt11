@@ -11,7 +11,7 @@
 ;	Copyright 1985,1986 Change Software, Inc.
 
 	.page
-	.psect	$code	,ro,i,lcl,rel,con	; /63/ added this to..
+	.psect	$$code	,ro,i,lcl,rel,con	; /63/ added this to..
 	.sbttl	Load this overlay and return its location
 
 loamdm::mov	#modinf	,r0		; /63/ return address of top of list

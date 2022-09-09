@@ -116,7 +116,7 @@ w$resume:.byte	4 ,161			; resume TSX window processing
 packet::.blkb	$allsiz			; the packet buffer
 
 	.page
-	.psect	$code			; /62/ missed this in the last edit..
+	.psect	$$code			; /62/ missed this in the last edit..
 	.sbttl	SET LINE		; /BBS/ moved this here
 
 set$line::tst	xl.lock			; can current device go away?

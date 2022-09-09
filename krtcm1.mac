@@ -112,7 +112,7 @@ typdef:	.asciz	".LST"			; default extent for type
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	The SET command		; /BBS/ just about all new..
 
 c$set::	upone	argbuf			; upper case just next arg

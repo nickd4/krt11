@@ -52,7 +52,7 @@ edi.03:	.asciz	"SL K"		; /63/ or do KED version if KED mode is on
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	SL editor main loop	; /BBS/ minor mods..
 
 ;	 (r5)	= the prompt string

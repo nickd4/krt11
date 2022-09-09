@@ -46,7 +46,7 @@ com.08:	.asciz	"Username Password: "
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Define the main_loop commands
 
 loacmd::mov	#cmdlst	,r0		; calling this also loads this overlay

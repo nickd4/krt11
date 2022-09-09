@@ -93,7 +93,7 @@ sta.7:	.asciz	" = STA."
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	The real work of MOUNT	; /BBS/ added
 
 ;	input:	argbuf	= entire argument string, unparsed

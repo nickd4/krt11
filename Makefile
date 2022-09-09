@@ -38,7 +38,7 @@ cvttim.rel \
 div60.rel \
 ispy.rel \
 syslbv.rel
-	aslink -p0 -il -m -u -w -q -z -o $@ $^
+	aslink -p0 -a '$$ohand=0o1000' -il -m -u -w -q -z -o $@ $^
 
 ohandl.rel: macro-11.mac sysmac.mac syslib/ohandl.mac
 	aspdp11 -i ".radix o" -g -l -w -q -z -o $@ $^

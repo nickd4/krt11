@@ -95,7 +95,7 @@ xmo.05:	.asciz	"File transfer completed"
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Send file(s)		; /BBS/ somewhat modified..
 					; /62/ moved here for smaller root
 c$send::clr	wasmore			; init multi-args display flag

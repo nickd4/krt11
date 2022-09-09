@@ -57,7 +57,7 @@ yr.x:	.word	0			; /BBS/ integer file create year
 yr.y:	.byte	0 ,0 ,0 ,0 ,0 ,0	; /BBS/ ascii file create year
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Send all attributes in a single packet	; /BBS/ modified to..
 
 ;	W $ A T T R

@@ -117,7 +117,7 @@ dpox:	.asciz	^/cr/^/esc/"[54C"		; /BBS/ col 54.
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Initialize ourselves	; /62/ rearranged for clarity..
 
 kerini::mov	#rwdata	,r0		; first of all, clear all read/write

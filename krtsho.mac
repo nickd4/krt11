@@ -267,7 +267,7 @@ ld$name:.asciz	"DU5:JAYSEN.DSK  R/O  [not available]" ; TO LEFT OF "[" CHAR!!
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	SHOW command processor
 
 c$show::tstb	@argbuf			; /BBS/ any arg there?

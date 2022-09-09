@@ -59,7 +59,7 @@ std.26:	.asciz	"Local or Remote? "
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Define the SET commands
 
 loaset::mov	#setcmd	,r0		; calling this also loads this overlay

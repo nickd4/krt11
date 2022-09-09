@@ -121,7 +121,7 @@ st0.45:	.asciz	" is not a control character"
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
 	;.enabl	lsb
 

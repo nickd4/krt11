@@ -98,7 +98,7 @@ st1.24:	.asciz	"Remember to SET BLO 3 for long-packets"^/cr/^/lf/
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	SET SPEED
 
 set$sp::calls	l$val	,^/argbuf/	; get the speed into decimal

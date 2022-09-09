@@ -6,7 +6,7 @@
 ;	moved this into a module of its own as KRTHLP was > 4096. words
 
 	.page
-	.psect	$code	,ro,i,lcl,rel,con
+	.psect	$$code	,ro,i,lcl,rel,con
 	.sbttl	Pass top of index back to caller
 
 loahlp::mov	#hlphead,r0		; calling this also loads this overlay

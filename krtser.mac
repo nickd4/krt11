@@ -142,7 +142,7 @@ rem.d0:	.blkb	4
 rem.d1:	.blkb	4
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Call the server
 
 c$serv::tstb	@argbuf			; if no arg, do normal server

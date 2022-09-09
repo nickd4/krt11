@@ -87,7 +87,7 @@ sen.09:	.asciz	" file "
 recpkt:	.blkb	maxpak+2		; /62/ added passed length to rpack
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	State controller for send file processing
 	;.enabl	lsb
 

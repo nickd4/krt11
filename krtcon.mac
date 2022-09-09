@@ -142,7 +142,7 @@ lis.ctrl:.asciz	"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Initialization
 
 doconn::call	opentt			; /63/ open the link device

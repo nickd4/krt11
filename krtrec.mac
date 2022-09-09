@@ -86,7 +86,7 @@ rec.16:	.asciz	" renamed to "
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Receive file(s)		; /62/ moved this here..
 
 c$rec::	call	opentt			; initialize the link device

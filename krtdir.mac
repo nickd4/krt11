@@ -120,7 +120,7 @@ vms:	.asciz	"DECVMSEX"		; /54/ from EXCHANGE under VMS4.x
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Wildcarded lookup
 
 ;	L O O K U P			; /62/ merged getnth into this..

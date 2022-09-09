@@ -213,7 +213,7 @@ mute:	.word	0			; /BBS/ use to mute output to TT
 retries:.word	0			; /BBS/ redial this many times..
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	SET MODEM-TYPE		; /BBS/ almost 100% new..
 
 set$modem::strcpy #spare1,#modem	; save copy of what's there now

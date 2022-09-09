@@ -240,7 +240,7 @@ osi.15:	.asciz	" free to load handlers"^/cr/^/lf/
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Init for RT-11/TSX-Plus
 
 xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover

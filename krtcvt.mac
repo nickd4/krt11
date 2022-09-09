@@ -174,7 +174,7 @@ paction:			; action routines for file name parsing
 	.word	fin		; done, append a dot if needed and exit
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Parse file specification to extract only filnam.typ
 
 ;	input:	 (r5)	address of source file_spec

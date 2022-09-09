@@ -35,7 +35,7 @@ short:	.word	0 ,1			; wait up to 1 tick for remote to echo
 twarea:	.word	0 ,0			; .twait work area
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	TRANSMIT		; /BBS/ heavily hacked..
 
 ;	input:	argbuf	= name of file to send

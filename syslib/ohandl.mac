@@ -17,4 +17,4 @@ o$done::.word	103405				; 000036
 $odf1::	.word	$ovdf1				; 000102
 $odf2::	.word	$ovdf2				; 000104
 	.area	$otabl (rel,con)
-$ovtab:
+$ovtab::.blkb	3060 ; just for the time being

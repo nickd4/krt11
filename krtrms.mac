@@ -304,7 +304,7 @@ kp.res:	.byte	33 ,'> ,0		; type this out to reset keypad
 	.even
 
 	.page
-	.psect	$code
+	.psect	$$code
 	.sbttl	Get KMON command line args and pass to Kermit  ; /BBS/ added
 
 ;	G E T M C R		(only used ONCE at start-up)
