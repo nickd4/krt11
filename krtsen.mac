@@ -50,15 +50,15 @@
 ;	change  without notice and should not be construed
 ;	as a commitment by the author.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.PURGE			; /62/ to hose dir search ch on err
 
-
+	.page
 	.sbttl	Local data
 
 	.psect	$pdata			; /62/ consolidated this stuff here..
@@ -86,7 +86,7 @@ sen.09:	.asciz	" file "
 	.psect	recpkt	,rw,d,lcl,rel,con
 recpkt:	.blkb	maxpak+2		; /62/ added passed length to rpack
 
-
+	.page
 	.psect	$code
 	.sbttl	State controller for send file processing
 	.enabl	lsb
@@ -112,7 +112,7 @@ sensw::	movb	@r5	,state		; state at which caller wants to begin
 	call	senlog			; /62/ update transfer stats display
 	cmp	incpar	,#1		; /62/ is it possible that parity
 	bne	40$			; /62/ is messed up?
-	calls	printm	,<#1,#sen.02>	; /62/ warn, but only once
+	calls	printm	,^/#1,#sen.02/	; /62/ warn, but only once
 	inc	incpar			; /62/ be sure it is only once!
 40$:	tst	remote			; /43/ if remote,
 	bne	50$			; /43/ ignore random noise
@@ -127,15 +127,15 @@ sensw::	movb	@r5	,state		; state at which caller wants to begin
 
 	movb	#defchk	,chktyp		; reset the checksum type
 	mov	#1	,chksiz		; size of the above checksum
-	save	<r0>			; save the exit status code
+	save	^/r0/			; save the exit status code
 	tst	inopn			; file open from a failure?
 	beq	60$			; no
-	calls	close	,<#lun.in>	; ya, ensure that it's closed
+	calls	close	,^/#lun.in/	; ya, ensure that it's closed
 	clr	inopn			; /BBS/ say so..
 60$:
 	.purge	#lun.sr			; /62/ close dir search channel
 	call	incsta			; /43/ increment timer stats
-	unsave	<r0>			; pop exit status code please
+	unsave	^/r0/			; pop exit status code please
 	return
 
 	.save
@@ -151,7 +151,7 @@ sensw::	movb	@r5	,state		; state at which caller wants to begin
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	State routines for SENSW
 	.enabl	lsb			; /62/
 
@@ -171,7 +171,7 @@ send.c:	clr	r0			; complete
 
 	.dsabl	lsb			; /62/
 
-
+	.page
 	.sbttl	Received bad ACK/NAK and error handling
 	.enabl	lsb			; /62/ all new..
 
@@ -181,7 +181,7 @@ sndx.$:	cmp	numtry	,maxtry		; bad data, been here too often?
 	blo	bad$pak			; compare as if already bumped..
 s$retry:call	m$retry			; too many retries error
 	br	sabort
-sndx.e:	calls	prerrp	,<#recpkt>	; print out received error packet
+sndx.e:	calls	prerrp	,^/#recpkt/	; print out received error packet
 	br	sabort
 s$sync:	call	m$sync			; can't resync packets error
 sabort:	movb	#sta.abo,r1		; exit please
@@ -199,18 +199,18 @@ bad$ack:mov	#-1	,datauk		; listen again, but just once
 	clr	r2			; kill leading zero and spaces
 	call	$cddmg			; convert 32-bit # to ascii
 	clrb	@r0			; make it .asciz
-	calls	printm	,<#4,#badpre,r3,#badtag,#spare1> ; say what's up
+	calls	printm	,^/#4,#badpre,r3,#badtag,#spare1/ ; say what's up
 	return
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Send debugging and logging	; /62/ major revision..
 
 sendeb:	mov	trace	,r0		; copy of debug status word
-	bic	#^c<log$pa!log$de>,r0	; need to do this?
+	bic	#^c^/log$pa!log$de/,r0	; need to do this?
 	beq	30$			; nope
-	save	<r1,r2>
+	save	^/r1,r2/
 	sub	#100.	,sp		; allocate a small buffer
 	mov	sp	,r1		; point to it
 	mov	#sen.01	,r2		; /62/ pointer to "SEN.SW"
@@ -219,7 +219,7 @@ sendeb:	mov	trace	,r0		; copy of debug status word
 	mov	sp	,r2		; and point back to the record
 	bit	#log$pa	,trace		; debugging for SEND.SW
 	beq	10$			; if trace is on then
-	calls	putrec	,<r2,r1,#lun.lo> ; dump it
+	calls	putrec	,^/r2,r1,#lun.lo/ ; dump it
 	tst	r0			; did it work?
 	beq	10$			; ya
 	call	logerr			; no, handle the error
@@ -230,10 +230,10 @@ sendeb:	mov	trace	,r0		; copy of debug status word
 	wrtall	r2			; ya, print it
 	.newline
 20$:	add	#100.	,sp		; deallocate the buffer
-	unsave	<r2,r1>
+	unsave	^/r2,r1/
 30$:	return
 
-
+	.page
 	.sbttl	Send attribute data for the current file
 	.enabl	lsb
 
@@ -249,7 +249,7 @@ sattr:	clr	datauk			; /62/ init re-read only flag
 
 10$:	tst	doattr			; really do this?
 	beq	30$			; no
-	calls	w$attr	,<#lun.in,#packet> ; build the attributes packet
+	calls	w$attr	,^/#lun.in,#packet/ ; build the attributes packet
 	tst	r0			; any errors along the way?
 	bne	30$			; yes
 	tst	r1			; anything to send over?
@@ -264,7 +264,7 @@ sattr:	clr	datauk			; /62/ init re-read only flag
 	bne	20$			; /62/ ya
 	br	40$			; /62/ no
 
-30$:	calls	buffil	,<#0,#packet>	; /63/ get the first buffer of data
+30$:	calls	buffil	,^/#0,#packet/	; /63/ get the first buffer of data
 	mov	r1	,size		; and save it
 	movb	#sta.dat,r1		; switch to data state
 40$:	clc				; /62/ keep sensw running
@@ -281,7 +281,7 @@ sattr:	clr	datauk			; /62/ init re-read only flag
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Process response to SATTR
 	.enabl	lsb			; /62/
 
@@ -309,14 +309,14 @@ satr.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
 40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; retrycount := 0
 	incm64	paknum			; paknum := (paknum+1) mod 64
-50$:	calls	buffil	,<#0,#packet>	; /63/ get the first buffer of data
+50$:	calls	buffil	,^/#0,#packet/	; /63/ get the first buffer of data
 	mov	r1	,size		; /BBS/ and save it
 	movb	#sta.dat,r1		; /BBS/ switch to data state
 	return
 
 	.dsabl	lsb			; /62/
 
-
+	.page
 	.sbttl	Send a break packet
 	.enabl	lsb
 
@@ -346,7 +346,7 @@ sbreak:	clr	datauk			; /62/ init re-read only flag
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Process response to SBREAK
 	.enabl	lsb			; /62/
 
@@ -379,7 +379,7 @@ sbrk.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
 
 	.dsabl	lsb			; /62/
 
-
+	.page
 	.sbttl	Send file init
 	.enabl	lsb
 
@@ -398,7 +398,7 @@ sinit:	movb	#msg$snd,-(sp)		; normal sinit operation
 	mov	chksiz	,-(sp)		; and size (also not needed)
 	movb	#defchk	,chktyp		; force type one please
 	mov	#1	,chksiz		; length of it
-	calls	spar	,<#packet>	; get our send parameters
+	calls	spar	,^/#packet/	; get our send parameters
 	call	cantyp			; flush pending input please
 	movb	6(sp)	,r5		; packet type to do today
 	spack	r5,paknum,sparsz,#packet ; send our init info now
@@ -424,14 +424,14 @@ sinit:	movb	#msg$snd,-(sp)		; normal sinit operation
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Process response to SINIT
 	.enabl	lsb			; /62/
 
 sini.$:	jmp	sndx.$			; /62/ common
 sini$$:	jmp	sndx$$			; /62/ code
 
-sini.e:	calls	prerrp	,<#recpkt>	; /62/ print error message
+sini.e:	calls	prerrp	,^/#recpkt/	; /62/ print error message
 	cmpb	r5	,#msg$ser	; if called from sinfo..
 	beq	40$			; /62/ ..ignore errors
 	jmp	sabort			; /62/ return(abort)
@@ -454,7 +454,7 @@ sini.y:	cmp	r3	,paknum		; got an ACK for sinit
 	blt	sini$$			; /62/ ya, re-send packet
 	jmp	bad$ack			; /62/ listen again, but just once
 
-30$:	calls	rpar	,<#recpkt,r2>	; load the other's parameters now
+30$:	calls	rpar	,^/#recpkt,r2/	; load the other's parameters now
 40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; number_of_tries := 0
 	incm64	paknum			; pack_number := pack_number+1 mod 64
@@ -463,7 +463,7 @@ sini.y:	cmp	r3	,paknum		; got an ACK for sinit
 
 	.dsabl	lsb			; /62/
 
-
+	.page
 	.sbttl	Send a file
 	.enabl	lsb
 
@@ -485,7 +485,7 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 	mov	sp	,r4		; and point to it please
 	tst	inopn			; open files hanging around?
 	beq	20$			; no
-	calls	close	,<#lun.in>	; yes, clean up please
+	calls	close	,^/#lun.in/	; yes, clean up please
 	clr	inopn			; it's closed now
 20$:	tstb	filnam			; /38/ a REAL file today?
 	bne	30$			; /38/ ya..
@@ -494,22 +494,22 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 	beq	40$			; no, don't do it please
 	tst	image			; /56/
 	bne	40$			; /56/
-	calls	chkext	,<#filnam>	; should we force binary mode?
+	calls	chkext	,^/#filnam/	; should we force binary mode?
 	tst	r0			; if gt, then yes
 	ble	40$			; no
 	mov	#binary	,image		; yes, force binary file operations
-40$:	calls	open	,<#filnam,#lun.in,image> ; open the file for input
+40$:	calls	open	,^/#filnam,#lun.in,image/ ; open the file for input
 	tst	r0			; did it work?
 	beq	50$			; yes
-	calls	syserr	,<r0,#errtxt>	; no
-	calls	error	,<#3,#errtxt,#aspace,#filnam> ; /BBS/ add space here
+	calls	syserr	,^/r0,#errtxt/	; no
+	calls	error	,^/#3,#errtxt,#aspace,#filnam/ ; /BBS/ add space here
 	movb	#sta.abo,r1		; return(abort)
 	br	90$			; go dump local buffer and exit
 
 50$:	mov	sp	,inopn		; file is open
 	tst	xmode			; is this a server X-tended reply?
 	bne	70$			; yes, send a simple "X" packet
-	calls	namcvt	,<#filnam,r4>	; convert to simple name (strip dev:)
+	calls	namcvt	,^/#filnam,r4/	; convert to simple name (strip dev:)
 	tstb	asname			; /36/ check for alternate name?
 	beq	60$			; /36/ no
 	mov	#asname	,r4		; /36/ yes, point to that name
@@ -525,7 +525,7 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 	mov	image	,r1		; /63/ recover current file-type
 	asl	r1			; /63/ word indexing
 	mov	fillst(r1),r1		; /63/ point to its description
-	calls	printm	,<#7,#sen.07,#filnam,#errtxt,#sen.08,r1,#sen.09,r4>
+	calls	printm	,^/#7,#sen.07,#filnam,#errtxt,#sen.08,r1,#sen.09,r4/
 	strlen	r4			; and get the file name length
 	spack	#msg$fil,paknum,r0,r4	; set the file name packet over
 	clrb	asname			; /36/ ensure one shot only
@@ -552,7 +552,7 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Process response to SFILE
 	.enabl	lsb			; /62/
 
@@ -579,22 +579,22 @@ sfil.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
 
 40$:	tstb	recpkt			; /63/ anything in received packet?
 	beq	50$			; /63/ no
-	calls	bufunp	,<#recpkt,#spare1> ; /63/ undo repeat encoding first
-	calls	printm	,<#2,#sen.03,#spare1> ; /63/ ya, print the packet
+	calls	bufunp	,^/#recpkt,#spare1/ ; /63/ undo repeat encoding first
+	calls	printm	,^/#2,#sen.03,#spare1/ ; /63/ ya, print the packet
 50$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; number_of_tries := 0
 	incm64	paknum			; packnumber := packnumber+1 mod 64
 	movb	#sta.atr,r1		; assume return(attribute)
 	tst	xmode			; /38/ is this an extended reply?
 	beq	60$			; /38/ no, attributes are next
-	calls	buffil	,<#0,#packet>	; /63/ ya, get first buffer of data
+	calls	buffil	,^/#0,#packet/	; /63/ ya, get first buffer of data
 	mov	r1	,size		; /38/ and save it
 	movb	#sta.dat,r1		; /38/ skip attributes, return(data)
 60$:	return
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Send file data
 	.enabl	lsb
 
@@ -624,7 +624,7 @@ sdata:	clr	datauk			; /62/ init re-read only flag
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Process response to SDATA
 
 sdat$$:	tst	dpnumber		; /43/ first data packet?
@@ -636,29 +636,29 @@ sdat$$:	tst	dpnumber		; /43/ first data packet?
 	mov	#spare1	,r1		; /BBS/ where to write ascii digits
 	call	L10012			; /BBS/ convert r0 to decimal number
 	clrb	@r1			; /BBS/ null terminate the string
-	calls	printm	,<#3,#adpmsg,#spare1,#adptag> ; /BBS/ inform the user
+	calls	printm	,^/#3,#adpmsg,#spare1,#adptag/ ; /BBS/ inform the user
 ;/E64/	This next, commented-out section closes and re-opens the
 ;	input file to reset our send pointer.  We are going to try
 ;	rewinding it, instead.
-;	calls	close	,<#lun.in>	; /E64/ clean up please
+;	calls	close	,^/#lun.in/	; /E64/ clean up please
 ;	clr	inopn			; /E64/ it's closed now
-;	calls	open	,<#filnam,#lun.in,image> ; /63/ back to top of file
+;	calls	open	,^/#filnam,#lun.in,image/ ; /63/ back to top of file
 ;	tst	r0			; /E64/ did it work?
 ;	beq	50$			; /E64/ yes
-;	calls	syserr	,<r0,#errtxt>	; /E64/ no
-;	calls	error	,<#3,#errtxt,#aspace,#filnam> ; /E64/ add space here
+;	calls	syserr	,^/r0,#errtxt/	; /E64/ no
+;	calls	error	,^/#3,#errtxt,#aspace,#filnam/ ; /E64/ add space here
 ;	jmp	sabort			; /E64/ whoops!!
 ;
 ;50$:	mov	sp	,inopn		; file is open
-	calls	rewind	,<#lun.in>	; /E64/ rewind please
+	calls	rewind	,^/#lun.in/	; /E64/ rewind please
 	clr	fileout+0		; /63/ no chars sent yet
 	clr	fileout+2		; /63/ this too just to be sure..
 	call	inirepeat		; /E64/ must reset repeat count ptrs
-	calls	buffil	,<#0,#packet>	; /63/ redo the re-sized packet
+	calls	buffil	,^/#0,#packet/	; /63/ redo the re-sized packet
 	mov	r1	,size		; /63/ and save it's new length here
 10$:	jmp	sndx$$			; /62/ keep current state, try again
 
-
+	.page
 	.enabl	lsb
 
 sdat.n:	cmp	r3	,paknum		; /62/ is NAK for this packet?
@@ -711,18 +711,18 @@ sdat.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
 
 90$:	cmpb	recpkt	,#abt$cur	; ACK contain a "X" for skipfile?
 	bne	100$			; /BBS/ no
-	calls	printm	,<#2,#sen.03,#sen.04> ; /63/ ya, say so if not remote
+	calls	printm	,^/#2,#sen.03,#sen.04/ ; /63/ ya, say so if not remote
 	br	110$			; /BBS/ then fake EOF
 100$:	cmpb	recpkt	,#abt$all	; ACK contain a "Z" for skip all?
 	bne	120$			; no
-	calls	printm	,<#2,#sen.03,#sen.05> ; /63/ ya, say so if not remote
+	calls	printm	,^/#2,#sen.03,#sen.05/ ; /63/ ya, say so if not remote
 	 mov	#-1	,index		; flag a fake no more files and
 110$:	 movb	#sta.eof,r1		; fake EOF for either "X" or "Z" ACK
 	 return
 
 120$:	add	size	,charout+2	; /43/ keep track of counts
 	adc	charout+0		; /43/ 32. bits please
-	calls	buffil	,<#0,#packet>	; /63/ get next buffer of data to send
+	calls	buffil	,^/#0,#packet/	; /63/ get next buffer of data to send
 	mov	r1	,size		; and save the size please
 	bne	130$			; something was there
 	 movb	#sta.eof,r1		; set state to EOF
@@ -732,7 +732,7 @@ sdat.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Send end of file packet
 	.enabl	lsb
 
@@ -767,7 +767,7 @@ seof:	clr	datauk			; /62/ init re-read only flag
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Process response to SEOF
 	.enabl	lsb			; /62/
 
@@ -795,7 +795,7 @@ seof.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
 40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; clear the retry count
 	incm64	paknum			; paknum := (paknum+1) mod 64
-	calls	close	,<#lun.in>	; close the input file
+	calls	close	,^/#lun.in/	; close the input file
 	clr	inopn			; input file is now closed
 	cmp	index	,#-1		; force a break here from user
 	beq	50$			; yes

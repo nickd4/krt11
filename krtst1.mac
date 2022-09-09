@@ -59,15 +59,15 @@
 ;
 ;	31-Jan-84  15:13:45  Brian Nelson
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtcdf.mac"
-	.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
+	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
 
 	.mcall	.GVAL	,.SPFUN		; /62/
 
-
+	.page
 	.sbttl	Local data		; /63/ consolidate local data here..
 
 	.psect $pdata
@@ -85,26 +85,26 @@ st1.11:	.asciz	"Your max authorized priority is "
 st1.12:	.asciz	"DK  --> "		 ; /63/
 st1.13:	.asciz	"Explicit or Implicit? " ; /63/
 st1.14:	.asciz	"You may need to SET BLO "
-st1.15:	.asciz	" on the other Kermit"<cr><lf>
-st1.16:	.asciz	"ASCII text mode set"<cr><lf>
-st1.17:	.asciz	"Binary mode set"<cr><lf>
-st1.18:	.asciz	"DEC-Multinational mode set"<cr><lf>
-st1.19:	.asciz	"Auto ASCII/Binary mode set"<cr><lf>
-st1.20:	.asciz	"Caution: Binary files will require 8-bit prefixing"<cr><lf>
-st1.21:	.asciz	" appended to BINARY-TYPE list"<cr><lf>
+st1.15:	.asciz	" on the other Kermit"^/cr/^/lf/
+st1.16:	.asciz	"ASCII text mode set"^/cr/^/lf/
+st1.17:	.asciz	"Binary mode set"^/cr/^/lf/
+st1.18:	.asciz	"DEC-Multinational mode set"^/cr/^/lf/
+st1.19:	.asciz	"Auto ASCII/Binary mode set"^/cr/^/lf/
+st1.20:	.asciz	"Caution: Binary files will require 8-bit prefixing"^/cr/^/lf/
+st1.21:	.asciz	" appended to BINARY-TYPE list"^/cr/^/lf/
 st1.22:	.asciz	"Packet length truncated to buffer maximum of "
-st1.23:	.asciz	". bytes"<cr><lf>
-st1.24:	.asciz	"Remember to SET BLO 3 for long-packets"<cr><lf>
+st1.23:	.asciz	". bytes"^/cr/^/lf/
+st1.24:	.asciz	"Remember to SET BLO 3 for long-packets"^/cr/^/lf/
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	SET SPEED
 
-set$sp::calls	l$val	,<argbuf>	; get the speed into decimal
+set$sp::calls	l$val	,^/argbuf/	; get the speed into decimal
 	tst	r0			; ok?
 	bne	20$			; /BBS/ nope
-	calls	setspd	,<r1>		; set the speed
+	calls	setspd	,^/r1/		; set the speed
 	tst	r0			; did it work?
 	bne	30$			; /BBS/ no
 	clr	b4speed			; /BBS/ ya, also clear fallback speed
@@ -122,7 +122,7 @@ set$sp::calls	l$val	,<argbuf>	; get the speed into decimal
 20$:	mov	#er$spe	,r0		; /BBS/ unknown speed
 30$:	return
 
-
+	.page
 	.sbttl	SET CL
 	.enabl	lsb			; /63/
 
@@ -139,7 +139,7 @@ set$cl::tst	tsxsav			; /62/ running under TSX?
 	add	argbuf	,r0		; /62/ found one, get pointer
 	movb	#space	,-(r0)		; /62/ and swap in a space for it
 	br	20$			; /62/ check for another "="
-30$:	calls	getcm0	,<argbuf,#cllst> ; find out which option was given
+30$:	calls	getcm0	,^/argbuf,#cllst/ ; find out which option was given
 	tst	r0			; did we find one
 	bmi	120$			; no
 	tst	wasnul			; were commands listed via "?"
@@ -171,7 +171,7 @@ scl$$:	mov	cmdbuf	,r0		; recover original command string
 	mov	#cmd$bad,r0		; and force it to fall thru to the
 	return				; SET CLn LINE x stuff in KRTCM1
 
-scl$3:	calls	l$val	,<argpnt>	; convert ascii to integer
+scl$3:	calls	l$val	,^/argpnt/	; convert ascii to integer
 	tst	r0			; well?
 	bne	80$			; bad value
 	cmp	r1	,#1.		; a reasonable minimum?
@@ -199,7 +199,7 @@ scl$2:	copyz	argpnt	,#units	,#16.	; up to 8 single digit CL unit numbers
 
 	.dsabl	lsb			; /63/
 
-
+	.page
 	.sbttl	SET FLOW-CONTROL	; /62/ new, KM handler only
 	.enabl	lsb
 
@@ -211,7 +211,7 @@ set$km::
 	mov	#er$km	,r0		; no, can't do this
 	br	30$			; /63/
 10$:	upcase	argbuf			; upper case the argument
-	calls	getcm0	,<argbuf,#kmlst> ; which option was given?
+	calls	getcm0	,^/argbuf,#kmlst/ ; which option was given?
 	tst	r0			; find one?
 	bmi	30$			; /63/ no
 	tst	wasnul			; were commands listed via "?"
@@ -222,7 +222,7 @@ set$km::
 	command	kmlst	,XOFF	,1	,km$xof
 	command	kmlst
 
-km$rts:	mov	sp	,r1		; make word count <>
+km$rts:	mov	sp	,r1		; make word count ^//
 	br	20$
 
 km$xof:	mov	#ctlflgs,r1		; /63/ pointer to control flags data
@@ -237,12 +237,12 @@ km$xof:	mov	#ctlflgs,r1		; /63/ pointer to control flags data
 30$:	return
 
 	.dsabl	lsb
-
+	.page
 	.sbttl	SET BLOCK-CHECK-TYPE
 	.enabl	lsb
 
 set$bl::upcase	argbuf			; /BBS/ upper case all args
-	calls	getcm0	,<argbuf,#blklst> ; find out which option was given
+	calls	getcm0	,^/argbuf,#blklst/ ; find out which option was given
 	tst	r0			; did we find one
 	bmi	30$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
@@ -275,17 +275,17 @@ sbl$3:	movb	#'3	,r1
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SET FILE
 	.enabl	lsb
 
 set$fi::upcase	argbuf			; /BBS/ upper case the arguments
-	calls	getcm0	,<argbuf,#setfil> ; parse the command
+	calls	getcm0	,^/argbuf,#setfil/ ; parse the command
 	tst	r0			; did it work?
 	bmi	20$			; /63/ nope
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	20$			; /63/ ya
-	calls	getcm1	,<argbuf,#setfil,r0> ; /63/ check for possible arg
+	calls	getcm1	,^/argbuf,#setfil,r0/ ; /63/ check for possible arg
 	tst	r0			; /63/ well?
 	bmi	20$			; /63/ bad arg..
 	jmp	@r1			; /63/ dispatch
@@ -310,12 +310,12 @@ set$fi::upcase	argbuf			; /BBS/ upper case the arguments
 	command	setfil	,WILDCARDS	,1	,sf$wil	,st1.13	; /63/
 	command	setfil
 
-sf$typ:	calls	getcm0	,<argbuf,#setfil> ; /63/ recheck the table for type
+sf$typ:	calls	getcm0	,^/argbuf,#setfil/ ; /63/ recheck the table for type
 	tst	r0			; did it work?
 	bmi	20$			; /63/ no
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	20$			; /63/ ya
-	calls	getcm1	,<argbuf,#setfil,r0> ; /63/ check for possible arg
+	calls	getcm1	,^/argbuf,#setfil,r0/ ; /63/ check for possible arg
 	tst	r0			; /63/ well?
 	bmi	20$			; /63/ bad arg..
 	jmp	@r1			; /63/ dispatch
@@ -363,7 +363,7 @@ xbin:	tst	parity			; /BBS/ set to none?
 	wrtall	#st1.20			; /63/ "Binary files will be prefixed"
 	br	10$			; /63/
 
-srt$cr:	calls	l$val	,<argbuf>	; /63/ yes, see if a good number
+srt$cr:	calls	l$val	,^/argbuf/	; /63/ yes, see if a good number
 	tst	r0			; well?
 	bne	20$			; /63/ ok
 	mov	r1	,en$siz		; yes, save it please  note r0=0 here
@@ -375,7 +375,7 @@ srt$vo:	mov	sp	,rtvol		; check for valid volume id
 srt$nv:	clr	rtvol			; ignore volume id
 	br	10$			; /63/
 
-sf$nam:	calls	getcm0	,<argbuf,#sfname> ; /63/ check the table for naming
+sf$nam:	calls	getcm0	,^/argbuf,#sfname/ ; /63/ check the table for naming
 	tst	r0			; /54/ did it work?
 	bmi	20$			; /63/ no
 	tst	wasnul			; /BBS/ were commands listed via "?"
@@ -400,7 +400,7 @@ sfn$uc:	clr	locase			; /BBS/ the default, upper case only
 sfn$lc:	mov	sp	,locase		; /BBS/ leave names to remote as typed
 	br	10$			; /63/ no error
 
-srt$cs:	calls	getcm0	,<argbuf,#cstype> ; /63/ check the table for modes
+srt$cs:	calls	getcm0	,^/argbuf,#cstype/ ; /63/ check the table for modes
 	tst	r0			; did it work?
 	bmi	20$			; /63/ no
 	tst	wasnul			; were commands listed via "?"
@@ -418,7 +418,7 @@ scs$em:	mov	sp	,csi.fake	; fake csispc comma delimit processing
 	br	10$			; /63/ no error
 
 sf$wil:	upcase	argbuf			; /63/ all new.. upper case the arg
-	calls	getcm0	,<argbuf,#wldlst> ; which option was given?
+	calls	getcm0	,^/argbuf,#wldlst/ ; which option was given?
 	tst	r0			; find one?
 	bmi	20$			; no
 	tst	wasnul			; were commands listed via "?"
@@ -437,10 +437,10 @@ wld$im:	mov	sp	,dowild		; SET WILD IMPLICIT
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SET BINARY-TYPE
 
-set$bi::save	<r1,r2,r3>
+set$bi::save	^/r1,r2,r3/
 	strlen	bintyp			; /BBS/ any room left in list?
 	cmp	r0	,#120.		; /BBS/ max of 31. entries possible
 	ble	10$			; /BBS/ if <= 30. then it's modifiable
@@ -475,10 +475,10 @@ set$bi::save	<r1,r2,r3>
 	wrtall	#spare1			; /63/ say what was
 	wrtall	#st1.21			; /63/ " appended to BINARY-TYPE list"
 60$:	clr	r0			; success
-70$:	unsave	<r3,r2,r1>
+70$:	unsave	^/r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	ASSIGN, CWD, HOME	; /62/ moved this here..
 	.enabl	lsb			; /BBS/ all new
 
@@ -524,7 +524,7 @@ c$cwd::	strlen	argbuf			; get length of argument
 	clrb	(r0)			; /62/ re-terminate..
 
 50$:	upcase	argbuf			; ensure device name is upper case
-	calls	fparse,<argbuf,#spare1>	; check dev using handy buff
+	calls	fparse,^/argbuf,#spare1/	; check dev using handy buff
 	tst	r0			; ok?
 	beq	70$			; ya
 60$:	direrr	r0			; say what went wrong
@@ -539,7 +539,7 @@ c$cwd::	strlen	argbuf			; get length of argument
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SET HOME		; /BBS/ enhanced..
 
 set$ho::upcase	argbuf			; upper case the arg
@@ -559,7 +559,7 @@ set$ho::upcase	argbuf			; upper case the arg
 	clr	r0			; no error
 	return
 
-
+	.page
 	.sbttl	SET SEND, RECEIVE
 	.enabl	lsb
 
@@ -567,12 +567,12 @@ set$rc::mov	#reclst	,r3		; point to the RECEIVE command table
 	br	10$
 set$sn::mov	#senlst	,r3		; point to the SEND command table
 10$:	upcase	argbuf			; /BBS/ upper case the arguments
-	calls	getcm0	,<argbuf,r3>	; find out which option was given
+	calls	getcm0	,^/argbuf,r3/	; find out which option was given
 	tst	r0			; did we find the option?
 	bmi	30$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	30$			; /BBS/ ya
-	calls	getcm1	,<argbuf,r3,r0>	; yes, look for value clause now
+	calls	getcm1	,^/argbuf,r3,r0/	; yes, look for value clause now
 	tst	r0			; find it (or read it)?
 	bmi	30$			; no
 	jmp	@r1			; /63/ ya, dispatch
@@ -610,7 +610,7 @@ set$so::call	setsop			; check for valid value
 	mov	r1	,recsop		; ditto for REC
 	return
 
-setsop:	calls	octval	,<argbuf>	; get the octal value
+setsop:	calls	octval	,^/argbuf/	; get the octal value
 	tst	r0			; check for errors
 	bne	20$			; exit if so
 	tst	r1			; greater than zero?
@@ -632,7 +632,7 @@ sts$ti:	call	settim			; /62/ get and check value
 	mov	r1	,sentim		; /62/ ya, save it
 	return				; /62/
 
-settim:	calls	l$val	,<argbuf>	; convert ascii digits to an integer
+settim:	calls	l$val	,^/argbuf/	; convert ascii digits to an integer
 	tst	r0			; well?
 	bne	40$			; no, bad value
 	cmp	r1	,#maxpak	; /62/ largest possible value..
@@ -647,7 +647,7 @@ sts$nx:	clr	prexon			; /53/ don't prefix with XON
 50$:	clr	r0			; /63/ no error possible
 	return
 
-sts$pl:	calls	l$val	,<argbuf>	; get the argument now
+sts$pl:	calls	l$val	,^/argbuf/	; get the argument now
 	tst	r0			; did it work?
 	bne	90$			; /62/ no
 	cmp	r1	,#20.		; minimum of twenty
@@ -658,7 +658,7 @@ sts$pl:	calls	l$val	,<argbuf>	; get the argument now
 60$:	mov	r1	,senlen		; /62/ do the SET
 	br	50$			; /62/ that's it..
 
-str$pl:	calls	l$val	,<argbuf>	; /43/ get the user's size
+str$pl:	calls	l$val	,^/argbuf/	; /43/ get the user's size
 	tst	r0			; /43/ successful?
 	bne	90$			; /63/ no
 	cmp	r1	,#maxpak	; /43/ huge packets? /BBS/ wuz 96.
@@ -699,7 +699,7 @@ st$.pl:	cmp	r1	,#maxlng	; /43/ will this fit within the
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SET END-OF-LINE
 
 set$eo::call	setsop			; /BBS/ octal value must be 1..36
@@ -708,40 +708,40 @@ set$eo::call	setsop			; /BBS/ octal value must be 1..36
 	movb	r1	,senpar+p.eol	; /62/ yes, stuff it in there please
 10$:	return
 
-
+	.page
 	.sbttl	SET PAUSE
 
-set$ps::calls	l$val	,<argbuf>	; get the value
+set$ps::calls	l$val	,^/argbuf/	; get the value
 	tst	r0			; well?
 	bne	10$			; /63/ it's no good
 	mov	r1	,pauset		; ok value, save it
 10$:	return
 
-
+	.page
 	.sbttl	SET DELAY
 
-set$dl::calls	l$val	,<argbuf>	; get the value
+set$dl::calls	l$val	,^/argbuf/	; get the value
 	tst	r0			; well?
 	bne	10$			; /63/ it's no good
 	mov	r1	,sendly		; ok value, save it
 10$:	return
 
-
+	.page
 	.sbttl	SET SEND PADDING, PADCHARACTER	; /57/ Brian Nelson 17-Jul-87
 
-sts$pd:	calls	octval	,<argbuf>	; get the octal value now
+sts$pd:	calls	octval	,^/argbuf/	; get the octal value now
 	tst	r0			; did it work?
 	bne	10$			; /63/ no
 	movb	r1	,senpar+p.padc	; /62/ yes, SET it
 10$:	return
 
-sts$pn:	calls	l$val	,<argbuf>	; get the value
+sts$pn:	calls	l$val	,^/argbuf/	; get the value
 	tst	r0			; well?
 	bne	10$			; /63/ it's no good
 	mov	r1	,senpar+p.npad	; /62/ ok, stuff number of chars here
 10$:	return
 
-
+	.page
 	.sbttl	SET ESCAPE
 
 set$es::call	setsop			; /BBS/ get the octal value now
@@ -750,17 +750,17 @@ set$es::call	setsop			; /BBS/ get the octal value now
 	mov	r1	,conesc		; ya, store it
 10$:	return
 
-
+	.page
 	.sbttl	SET ATTRIBUTES		; /63/ add individual attributes..
 	.enabl	lsb			; /63/
 
 set$at::upcase	argbuf			; ensure arg(s) are upper case
-	calls	getcm0	,<argbuf,#attr>	; find out which option was given
+	calls	getcm0	,^/argbuf,#attr/	; find out which option was given
 	tst	r0			; did it work?
 	bmi	s.enx			; /63/ nope
 	tst	wasnul			; were commands listed via "?"
 	bne	s.enx			; /63/ ya, so don't set to last shown
-	calls	getcm1	,<argbuf,#attr,r0> ; check for possible arg to command
+	calls	getcm1	,^/argbuf,#attr,r0/ ; check for possible arg to command
 	tst	r0			; well?
 	bmi	s.enx			; /63/ bad arg..
 	jmp	@r1			; dispatch
@@ -807,7 +807,7 @@ sat$in:	mov	#at.inf	,r2		; DEC-specific file type
 sat$ty:	mov	#at.typ	,r2		; file type
 	.br	s.ofon			; /63/ fall through to s.ofon
 
-s.ofon:	calls	getcm0	,<argbuf,#offon> ; yes, check what to do now..
+s.ofon:	calls	getcm0	,^/argbuf,#offon/ ; yes, check what to do now..
 	tst	r0			; did it work?
 	bmi	s.enx			; no, return with error in r0
 	tst	wasnul			; were commands listed via "?"
@@ -828,11 +828,11 @@ st$nat::bic	#at.on	,doattr		; don't do attributes
 s.end:	clr	r0			; no error
 s.enx:	return
 
-
+	.page
 	.sbttl	SET LONG-PACKETS
 
 set$lp::upcase	argbuf			; /BBS/ ensure args are upper case
-	calls	getcm0	,<argbuf,#onoff> ; /42/ find out which option given
+	calls	getcm0	,^/argbuf,#onoff/ ; /42/ find out which option given
 	tst	r0			; /42/ did we find one
 	bmi	st$ox			; /63/ no
 	tst	wasnul			; /BBS/ were commands listed via "?"
@@ -863,7 +863,7 @@ st$nlp::clr	dolong			; don't do long packets
 st$of:	clr	r0			; /62/ no error
 st$ox:	return
 
-
+	.page
 	.sbttl	SET PROMPT
 
 set$pr::call	skipit			; /BBS/ ignore comma in argument
@@ -882,18 +882,18 @@ set$pr::call	skipit			; /BBS/ ignore comma in argument
 	clr	r0			; no error possible
 	return
 
-
+	.page
 	.sbttl	SET SEED, RANDOM
 	.enabl	lsb			; /63/
 
-set$se::calls	l$val	,<argbuf>	; convert ascii arg to integer
+set$se::calls	l$val	,^/argbuf/	; convert ascii arg to integer
 	tst	r0			; well?
 	bne	10$			; /63/ no, bad value
 	mov	r1	,seed		; save it as the random number seed
 10$:	return
 
 set$ra::upcase	argbuf			; /BBS/ upper case the argument
-	calls	getcm0	,<argbuf,#ranlst> ; find out which option was given
+	calls	getcm0	,^/argbuf,#ranlst/ ; find out which option was given
 	tst	r0			; did we find one?
 	bmi	30$			; /63/ no
 	tst	wasnul			; /BBS/ were commands listed via "?"
@@ -913,12 +913,12 @@ sra$on:	mov	sp	,ranerr		; /62/ turn it on
 
 	.dsabl	lsb			; /63/
 
-
+	.page
 	.sbttl	SET REPEAT
 	.enabl	lsb			; /63/
 
 set$rp::upcase	argbuf			; /BBS/ upper case the argument
-	calls	getcm0	,<argbuf,#relst> ; which option was given?
+	calls	getcm0	,^/argbuf,#relst/ ; which option was given?
 	tst	r0			; find one?
 	bmi	20$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
@@ -938,12 +938,12 @@ rep$on:	mov	sp	,setrpt		; /62/ turn it on
 
 	.dsabl	lsb			; /63/
 
-
+	.page
 	.sbttl	SET TERMINAL
 	.enabl	lsb			; /63/
 
 set$tt::upcase	argbuf			; /BBS/ upper case the args
-	calls	getcm0	,<argbuf,#ttlst> ; which option was given?
+	calls	getcm0	,^/argbuf,#ttlst/ ; which option was given?
 	tst	r0			; find one?
 	bmi	30$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
@@ -991,7 +991,7 @@ svt$nq:	mov	sp	,qu.ini		; /BBS/ copy for after init/^c abort
 
 	.dsabl	lsb			; /63/
 
-
+	.page
 	.sbttl	Clear a VT-100's screen	; /62/ moved this here..
 	.enabl	lsb
 
@@ -1004,40 +1004,40 @@ c$clx::	movb	#'h!40	,nrm.rev	; set for reverse video
 
 	.save
 	.psect	$rwdata	,rw,d,lcl,rel,con
-clstxt:	.ascii	<esc>"<"	; ANSI mode from VT-52
-	.ascii	<esc>"[?1l"	; reset cursor key application mode
-	.ascii	<esc>"[?3l"	; reset to 80 cols
-	.ascii	<esc>"[?4l"	; reset to jump scroll
-	.ascii	<esc>"[?5"	; prefix for normal/reverse video
+clstxt:	.ascii	^/esc/"<"	; ANSI mode from VT-52
+	.ascii	^/esc/"[?1l"	; reset cursor key application mode
+	.ascii	^/esc/"[?3l"	; reset to 80 cols
+	.ascii	^/esc/"[?4l"	; reset to jump scroll
+	.ascii	^/esc/"[?5"	; prefix for normal/reverse video
 nrm.rev:.byte	0		; set to normal/reverse screen as desired
-	.ascii	<esc>"[?6l"	; reset to cursor origin mode
-	.ascii	<esc>"[?7h"	; set auto wraparound mode
-	.ascii	<esc>"[?8h"	; set auto repeat mode
-	.ascii	<esc>"(B"	; designate ASCII character set as G0
-	.ascii	<ctrl$o>	; reset to normal text from graphics..
-	.ascii	<esc>"[1;24r"	; reset scrolling region to entire screen
-	.ascii	<esc>"[J"	; erase from cursor to end (here, everything)
-	.ascii	<esc>"[m"	; reset all attributes to normal
-	.ascii	<esc>"[q"	; turn off all leds
-	.ascii	<esc>"[v"	; make cursor visible
-	.ascii	<esc>">"	; restore keypad numeric mode
+	.ascii	^/esc/"[?6l"	; reset to cursor origin mode
+	.ascii	^/esc/"[?7h"	; set auto wraparound mode
+	.ascii	^/esc/"[?8h"	; set auto repeat mode
+	.ascii	^/esc/"(B"	; designate ASCII character set as G0
+	.ascii	^/ctrl$o/	; reset to normal text from graphics..
+	.ascii	^/esc/"[1;24r"	; reset scrolling region to entire screen
+	.ascii	^/esc/"[J"	; erase from cursor to end (here, everything)
+	.ascii	^/esc/"[m"	; reset all attributes to normal
+	.ascii	^/esc/"[q"	; turn off all leds
+	.ascii	^/esc/"[v"	; make cursor visible
+	.ascii	^/esc/">"	; restore keypad numeric mode
 	.byte	0		; terminator
 	.even
 	.restore
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SET CONSOLE
 	.enabl	lsb			; /62/
 
 set$co::upcase	argbuf			; /BBS/ upper case the args
-	calls	getcm0	,<argbuf,#colst>  ; which option was given?
+	calls	getcm0	,^/argbuf,#colst/  ; which option was given?
 	tst	r0			; find one?
 	bmi	20$			; /63/ no
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	20$			; /63/ ya
-	calls	getcm1	,<argbuf,#colst,r0> ; /63/ check for possible arg
+	calls	getcm1	,^/argbuf,#colst,r0/ ; /63/ check for possible arg
 	tst	r0			; /63/ well?
 	bmi	20$			; /63/ bad arg..
 	jmp	@r1			; /63/ dispatch
@@ -1063,7 +1063,7 @@ sco$mi:	mov	sp	,milnet		; /BBS/ send a couple ^Qs on CONNECT
 10$:	clr	r0			; no error
 20$:	return
 
-sco$br:	calls	getcm0	,<argbuf,#brklst> ; /63/ check the table for length
+sco$br:	calls	getcm0	,^/argbuf,#brklst/ ; /63/ check the table for length
 	tst	r0			; /62/ did it work?
 	bmi	20$			; /63/ no
 	tst	wasnul			; /62/ were commands listed via "?"
@@ -1094,7 +1094,7 @@ sco$pr:	tst	tsxsav			; /62/ running under TSX?
 
 	.dsabl	lsb			; /62/
 
-
+	.page
 	.sbttl	SET LD			; /BBS/ added entire routine
 
 set$ld::tst	tsxsav			; running under TSX?
@@ -1107,7 +1107,7 @@ set$ld::tst	tsxsav			; running under TSX?
 20$:	return				; /63/
 
 30$:	upcase	argbuf			; /BBS/ upper case command args
-	calls	getcm0	,<argbuf,#ldlst> ; which option was given?
+	calls	getcm0	,^/argbuf,#ldlst/ ; which option was given?
 	tst	r0			; find one?
 	bmi	20$			; no
 	tst	wasnul			; were commands listed via "?"
@@ -1129,7 +1129,7 @@ sld$1:	clr	-(sp)			; /62/ .word 0
 50$:	cmp	(sp)+	,(sp)+		; pop work area
 	return
 
-
+	.page
 	.sbttl	SET VLSWCH		; /BBS/ all new..
 	.enabl	lsb			; /63/
 
@@ -1138,7 +1138,7 @@ set$vl::tst	tsxsav			; running under TSX?
 	mov	#er$tsx	,r0		; no, works under TSX only
 	br	30$
 10$:	upcase	argbuf			; upper case command arguments
-	calls	getcm0	,<argbuf,#vlopts> ; which option was given?
+	calls	getcm0	,^/argbuf,#vlopts/ ; which option was given?
 	tst	r0			; find one?
 	bmi	30$			; no
 	tst	wasnul			; were commands listed via "?"

@@ -1,2 +1,8 @@
+*.hlr
+*.ihx
+*.lst
+*.rel
+*.rst
+/krt.map
 /krt11.tap
 __temp__

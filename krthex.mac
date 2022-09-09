@@ -77,14 +77,14 @@
 ; You now have a runnable Kermit which may be used to get the rest of its
 ; own distribution.
 
-
+	.page
 	.sbttl	Macros and misc constants
 
 	.macro	mapch	reg		; ascii to integer for HEX chars only
 	movb	map(reg),reg
 	.endm	mapch
 
-	.macro	sob	reg	,dst	; subtract one and branch if <>
+	.macro	sob	reg	,dst	; subtract one and branch if ^//
 	dec	reg
 	bne	dst
 	.endm	sob
@@ -96,7 +96,7 @@
 	STATWD	= 366			; indirect file status word
 		IFACTV	= 400		; indirect file active bit
 
-
+	.page
 	.sbttl	Data
 	.psect	$pdata	,ro,d,lcl,rel,con
 
@@ -104,7 +104,7 @@ map:	.rept	48.			; table returns integer value of ascii
 	.byte	377			; HEX digit or -1 for any non-HEX char
 	.endr
 	.byte	0   ,1   ,2   ,3   ,4   ,5   ,6   ,7   ,8.  ,9.
-	.byte	377 ,377 ,377 ,377 ,377 ,377 ,377 ; skip past :;<=>?@
+	.byte	377 ,377 ,377 ,377 ,377 ,377 ,377 ; skip past :;^/=/?@
 	.byte	10. ,11. ,12. ,13. ,14. ,15. ; mapping "A" to "F" here..
 	.rept	256.-70.
 	.byte	377
@@ -112,11 +112,11 @@ map:	.rept	48.			; table returns integer value of ascii
 	.byte	0			; .even
 
 csierr:	.word	csier0	,csier1	,csier2	,csier3	,csier4
-.fatal:	.ascii	"?KRTHEX-F-"<200>
+.fatal:	.ascii	"?KRTHEX-F-"^/200/
 alldone:.asciz	"%KRTHEX-I-Conversion completed"
 badch:	.asciz	"Non HEX data in input file"
 badchk:	.asciz	"Input file checksum error"
-csibad:	.ascii	"?CSIGEN-F-"<200>
+csibad:	.ascii	"?CSIGEN-F-"^/200/
 csier0:	.asciz	"Command line is invalid"
 csier1:	.asciz	"Device not found"
 csier2:	.asciz	"Protected file already exists"
@@ -134,13 +134,13 @@ handld:	.blkw	1000			; handler loading done here
 inblk:	.word	0			; input file current block number
 inbuff:	.blkw	400			; the input file buffer
 inpnt:	.word	0			; and pointer into it
-jobtyp:	.word	0			; if <> params passed when pgm was run
+jobtyp:	.word	0			; if ^// params passed when pgm was run
 outblk:	.word	0			; output file current block number
 outbuf:	.blkw	400			; and same for the output file
 outpnt:	.word	0			; and its pointer
 rtwork:	.blkw	10			; read/write work area
 
-
+	.page
 	.sbttl	Main program loop
 	.psect	$code	,ro,i,lcl,rel,con
 
@@ -231,7 +231,7 @@ convert:.csigen	#handld	,#defext ,#0 ,#cmdbuf ; get and process a command
 130$:	clr	r0			; ensure any leftovers are cleaned up
 	.exit
 
-
+	.page
 	.sbttl	Read the checksum
 
 getchk:	clr	r3			; init an accumulator
@@ -254,7 +254,7 @@ getchk:	clr	r3			; init an accumulator
 20$:	mov	r3	,r0		; return result
 	return
 
-
+	.page
 	.sbttl	Get the next character
 
 getc:	cmp	inpnt	,#1000		; used up all previously read chars?
@@ -266,12 +266,12 @@ getc:	cmp	inpnt	,#1000		; used up all previously read chars?
 10$:	mov	inpnt	,r0		; get the current buffer offset
 	inc	inpnt			; +1 for the char about to be returned
 	movb	inbuff(r0) ,r0		; and return the character
-	bic	#^c<177>,r0		; ensure it's 7-bit data
+	bic	#^c^/177/,r0		; ensure it's 7-bit data
 	cmpb	r0	,#15		; a CR or less?  if not carry cleared
 	blos	getc			; yes, skip it, go get the next char
 20$:	return				; exit with error status in carry bit
 
-
+	.page
 	.sbttl	Put the next character
 
 putc:	cmp	outpnt	,#1000		; is the output buffer full yet?

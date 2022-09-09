@@ -55,15 +55,15 @@
 ;
 ;	Remove SHOW code from KRTCMD.MAC for placement into an overlay.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtcdf.mac"
-	.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
+	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
 
 	.mcall	.PURGE			; /62/
 
-
+	.page
 	.sbttl	Local data		; /63/ consolidated all data here..
 
 	.psect	$pdata
@@ -112,7 +112,7 @@ sh.001:	.asciz	"Block-check-type: "
 sh.002:	.asciz	"Incomplete-file-disposition: "
 sh.003:	.asciz	"RANDOM error generation:"
 sh.004:	.asciz	"  SEED = "
-sh.005:	.asciz	"."<cr><lf>
+sh.005:	.asciz	"."^/cr/^/lf/
 sh.006:	.ascii	" "
 sh.007:	.asciz	"ENABLED"
 sh.008:	.asciz	" disabled"
@@ -166,9 +166,9 @@ sh.055:	.asciz	"initial-connect limit"
 sh.056:	.asciz	"max for other packets"
 sh.057:	.ascii	" "
 sh.058:	.asciz	" ^"
-sh.059:	.ascii	" ----------------- Packet Stats -----------------"<cr><lf>
-	.asciz	"Type  Last Sent   Last Rec    Prev Sent   Prev Rec"<cr><lf>
-sh.060:	.asciz	" --- Last Transaction ---"<cr><lf>
+sh.059:	.ascii	" ----------------- Packet Stats -----------------"^/cr/^/lf/
+	.asciz	"Type  Last Sent   Last Rec    Prev Sent   Prev Rec"^/cr/^/lf/
+sh.060:	.asciz	" --- Last Transaction ---"^/cr/^/lf/
 sh.061:	.asciz	"ALL"
 sh.062:	.asciz	"Bytes "
 sh.063:	.asciz	"sent:    "
@@ -176,7 +176,7 @@ sh.064:	.asciz	"received:"
 sh.065:	.asciz	"For data bytes:"
 sh.066:	.asciz	"Time to transfer: "
 sh.067:	.asciz	"Physical data rate: "
-sh.068:	.asciz	" chars/second"<cr><lf>
+sh.068:	.asciz	" chars/second"^/cr/^/lf/
 sh.069:	.asciz	"File transfer rate: "
 sh.070:	.asciz	"Chars per read:     "
 sh.071:	.asciz	"DELAY"
@@ -213,7 +213,7 @@ sh.101:	.asciz	"  "
 sh.102:	.asciz	"BINARY-TYPE file extents: "
 sh.103:	.asciz	" *"
 sh.104:	.asciz	"Accessable devices:"
-sh.105:	.asciz	"No phone numbers defined"<cr><lf>	; /63/ for SHOW ALL
+sh.105:	.asciz	"No phone numbers defined"^/cr/^/lf/	; /63/ for SHOW ALL
 sh.106:	.asciz	"Last number dialed:  "
 sh.107:	.asciz	"Not available under RT-11"
 sh.108:	.asciz	"VLSWCH (^W,^B) during CONNECT"
@@ -234,7 +234,7 @@ sh.122:	.asciz	"Repeated character quoting: "
 sh.123:	.asciz	" seconds"
 sh.124:	.asciz	"control quote = "
 sh.125:	.asciz	" ("
-sh.126:	.asciz	"), applied to (0 = unprefixed, 1 = prefixed):"<cr><lf>
+sh.126:	.asciz	"), applied to (0 = unprefixed, 1 = prefixed):"^/cr/^/lf/
 sh.127:	.asciz	": "
 sh.128:	.asciz	"         "	; 9 spaces
 sh.129:	.asciz	" renamed to "
@@ -242,13 +242,13 @@ sh.130:	.asciz	" deleted"
 sh.131:	.asciz	" block"
 sh.132:	.asciz	" copied to "
 sh.133:	.asciz	"_To: "
-sh.134:	.asciz	"No logical disks are mounted"<cr><lf>
+sh.134:	.asciz	"No logical disks are mounted"^/cr/^/lf/
 dkslug:	.asciz	"DK  --> "
 hoslug:	.asciz	"HOME--> "
 lis.ct:	.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 pridev:	.asciz	"LP:"
 raslug:	.asciz	"  ("
-ratag:	.asciz	"Hz)"<cr><lf>
+ratag:	.asciz	"Hz)"^/cr/^/lf/
 typdef:	.asciz	".LST"
 	.even
 
@@ -257,23 +257,23 @@ ld$stat:.byte	4 ,135			; get status of
 ld$num:	.byte	0 ,0			; this LD unit
 	.word	ld$buf			; and put it here
 ld$buf:	.word	0 ,0 ,0 ,0 ,0		; ld$num emt writes data here
-txflag:	.word	0			; /BBS/ if <>, sending
+txflag:	.word	0			; /BBS/ if ^//, sending
 C2:	.word	0			; hours
 C3:	.word	0			; mins
 C4:	.word	0			; secs
-conn:	.asciz	"     :00"<cr><lf>	; write converted time here
+conn:	.asciz	"     :00"^/cr/^/lf/	; write converted time here
 ld$data:.ascii	"LD0 --> "		; WARNING: DON'T MODIFY LD$NAME STRING
 ld$name:.asciz	"DU5:JAYSEN.DSK  R/O  [not available]" ; TO LEFT OF "[" CHAR!!
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	SHOW command processor
 
 c$show::tstb	@argbuf			; /BBS/ any arg there?
 	beq	20$			; /BBS/ no, do devs ala RT-11
 	upcase	argbuf			; /BBS/ upper case the args
-	calls	getcm0	,<argbuf,#sholst> ; look for a valid command
+	calls	getcm0	,^/argbuf,#sholst/ ; look for a valid command
 	tst	r0			; find one?
 	bmi	30$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
@@ -293,7 +293,7 @@ c$show::tstb	@argbuf			; /BBS/ any arg there?
 50$:	direrr	r0			; /62/
 	return
 
-
+	.page
 	.sbttl Command dispatch data table
 
 command	sholst	,ALL		,2	,sho$al
@@ -354,7 +354,7 @@ command	sholst	,VERSION	,2	,sho$ve
 command	sholst	,VLSWCH		,2	,sho$vl
 command	sholst
 
-
+	.page
 	.sbttl	SHOW ALL		; /63/ split to insert SHO MODEM
 
 sho$a0::call	sho$ve			; version
@@ -408,13 +408,13 @@ sho$a1::tst	tsxsav			; /63/ running under TSX?
 	.newline			; /63/
 	return
 
-
+	.page
 	.sbttl	SHOW DIAL
 
 sho$dp:	tst	(sp)+			; dump the return address then call
 	jmp	xxsdia			; this to load an adjacent overlay..
 
-
+	.page
 	.sbttl	SHOW DEBUG		; /62/ major revision
 
 sho$de:	clr	r0			; index := 0
@@ -439,7 +439,7 @@ sho$de:	clr	r0			; index := 0
 60$:	wrtall	#sh.004			; "  SEED = "
 	mov	seed	,r0		; get a copy of the seed
 	call	L10266			; display it
-	wrtall	#sh.005			; "."<cr><lf>
+	wrtall	#sh.005			; "."^/cr/^/lf/
 	bit	#log$op	,trace		; is a file open?
 	beq	70$			; no
 	wrtall	#sh.009			; "Logfile is "
@@ -457,7 +457,7 @@ sho$de:	clr	r0			; index := 0
 80$:	.newline
 	return
 
-
+	.page
 	.sbttl	SHOW DATE, DAYTIME, DEFAULT, HOME, TIME
 	.enabl	lsb			; /62/
 
@@ -465,18 +465,18 @@ sho$da::call	sho.da			; /63/
 	.newline
 	br	20$			; /62/
 
-sho.da:	calls	ascdat	,<#errtxt,#-1>	; /62/ get date into a buffer
+sho.da:	calls	ascdat	,^/#errtxt,#-1/	; /62/ get date into a buffer
 	wrtall	#errtxt			; display it
 	return
 
 sho$dy::call	sho.da			; /63/ both date and time..
 	wrtall	#sh.101			; /63/ "  "
-sho$ti::calls	asctim	,<#errtxt,#0>	; get time of day into a buffer
+sho$ti::calls	asctim	,^/#errtxt,#0/	; get time of day into a buffer
 	wrtall	#errtxt			; display it
 	wrtall	#raslug			; /62/ "  ("
 	mov	clkflg	,r0		; /62/ pass line time clock rate
 	call	L10266			; /62/ dump it to terminal
-	wrtall	#ratag			; /62/ "Hz)"<cr><lf>
+	wrtall	#ratag			; /62/ "Hz)"^/cr/^/lf/
 	br	20$			; /62/
 
 c$pwd::	tst	tsxsav			; /63/ running under TSX?
@@ -502,7 +502,7 @@ sho$yy::wrtall	#dkslug			; /BBS/ print prefix
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SHOW SUBMOUNTS		; /BBS/ all new routine..
 
 	F.NAM1	=  2		; offset to first word of file name
@@ -531,22 +531,22 @@ sho$su:	tst	tsxsav			; running under TSX?
 	beq	90$			; next
 	mov	r4	,r0		; copy unit number to
 	add	#'0	,r0		; convert to ascii character
-	movb	r0	,<ld$data+2>	; stick into display buffer
+	movb	r0	,^/ld$data+2/	; stick into display buffer
 
 ;	input:	r2	= buffer for the result
 ;		r3	= current directory entry pointer
 
 	mov	#ld$name,r2		; pointer to output buffer
 	mov	#ld$buf	,r3		; point to .rad50 LD file name
-	calls	rdtoa	,<r2,(r3)>	; convert the device name please
+	calls	rdtoa	,^/r2,(r3)/	; convert the device name please
 	add	#3	,r2		; skip past it
 	movb	#':	,(r2)+		; and insert a colon
-	calls	rdtoa	,<r2,f.nam1(r3)> ; convert first 3 file name to ascii
+	calls	rdtoa	,^/r2,f.nam1(r3)/ ; convert first 3 file name to ascii
 	add	#3	,r2		; and skip over those three characters
-	calls	rdtoa	,<r2,f.nam2(r3)> ; now get the rest of the file name
+	calls	rdtoa	,^/r2,f.nam2(r3)/ ; now get the rest of the file name
 	add	#3	,r2		; point to place a dot into the name
 	movb	#'.	,(r2)+		; a dot
-	calls	rdtoa	,<r2,f.type(r3)> ; get the file type at last
+	calls	rdtoa	,^/r2,f.type(r3)/ ; get the file type at last
 	add	#7	,r2		; bump to the "O" or "W" byte
 	bit	#readonly,f.flag(r3)	; read only?
 	bne	50$			; ya..
@@ -569,7 +569,7 @@ sho$su:	tst	tsxsav			; running under TSX?
 	wrtall	#sh.134			; /63/ "No logical disks are mounted"
 100$:	return
 
-
+	.page
 	.sbttl	SHOW FILE-TYPE
 
 sho$fi:	wrtall	#sh.014			; "FILE-TYPE set to"
@@ -638,7 +638,7 @@ sho$fi:	wrtall	#sh.014			; "FILE-TYPE set to"
 	.newline			; /62/
 	return
 
-
+	.page
 	.sbttl	 SHOW BLOCK, EOF, INCOMPLETE-FILE-DISPOSITION	; /63/
 	.enabl	lsb						; /63/
 
@@ -667,7 +667,7 @@ sho$in:	wrtall	#sh.002			; /63/ "Incomplete-file-disposition: "
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SHOW ESCAPE		; /BBS/ modified..
 
 sho$es:	wrtall	#sh.013			; /63/ "ESCAPE connect command prefix"
@@ -679,7 +679,7 @@ sho$es:	wrtall	#sh.013			; /63/ "ESCAPE connect command prefix"
 	tst	(sp)+			; pop the tiny buffer
 	return
 
-
+	.page
 	.sbttl	SHOW PARAMETERS
 
 sho$pa:	call	sho$pk			; packets
@@ -688,7 +688,7 @@ sho$pa:	call	sho$pk			; packets
 	call	sho$to			; time-out
 	jmp	sho$rt			; /62/ retries
 
-
+	.page
 	.sbttl	SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
 	.enabl	lsb				; /63/
 
@@ -773,7 +773,7 @@ tag.it:	wrtall	#sh.057			; /63/ "  ^"  /BBS/ added..
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	STATUS
 
 c$stat::sub	#120	,sp		; /43/ allocate a buffer please
@@ -958,7 +958,7 @@ brate:	mov	charout+2,r1		; /43/ compute effective baud rate
 	.newline			; /56/
 180$:	return
 
-
+	.page
 	.sbttl	SHOW DELAY, HANDSHAKE, PAUSE, PARITY
 	.enabl	lsb			; /63/
 
@@ -995,7 +995,7 @@ sho$ps:	wrtall	#sh.072			; /63/ "PAUSE secs before send-"
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SHOW TERMINAL, CONSOLE
 
 sho$tt:	mov	vttype	,r0		; recover terminal type
@@ -1042,7 +1042,7 @@ sho$co:	wrtall	#sh.083			; /63/ "Console"
 	call	sho$vl			; /63/ show vlswch
 100$:	jmp	sho$es			; /63/ show escape
 
-
+	.page
 	.sbttl	SHOW ATTRIBUTES		; /63/ individual attrs ala C-Kermit
 
 sho$at:	wrtall	#sh.093			; "Attributes"
@@ -1066,7 +1066,7 @@ sho$at:	wrtall	#sh.093			; "Attributes"
 	br	20$			; go do it
 50$:	return
 
-
+	.page
 	.sbttl	SHOW CL:		; /62/ all new
 
 sho$cl:	tst	tsxsav			; running under TSX?
@@ -1096,13 +1096,13 @@ sho$cl:	tst	tsxsav			; running under TSX?
 	.newline			; /63/
 70$:	return
 
-
+	.page
 	.sbttl	SHOW START-OF-PACKET
 
 sho$so:	wrtall	#sh.037			; /63/ "RECEIVE "
 	wrtall	#sh.100			; /63/ "start of packet SOH  "
 	mov	recsop	,-(sp)		; recover SOH char to a tiny buffer
-	bic	#^c<177>,@sp		; hose parity
+	bic	#^c^/177/,@sp		; hose parity
 	mov	sp	,r0		; point to where it is on stack
 	call	unfmts			; convert to "\000" format
 	wrtall	r0			; display that
@@ -1111,7 +1111,7 @@ sho$so:	wrtall	#sh.037			; /63/ "RECEIVE "
 	wrtall	#sh.101			; /63/ "  "
 	wrtall	#sh.100			; /63/ "start of packet SOH  "
 	mov	sensop	,@sp		; recover SOH char
-	bic	#^c<177>,@sp		; hose parity
+	bic	#^c^/177/,@sp		; hose parity
 	mov	sp	,r0		; point to where it is on stack
 	call	unfmts			; convert to "\000" format
 	wrtall	r0			; display that
@@ -1119,7 +1119,7 @@ sho$so:	wrtall	#sh.037			; /63/ "RECEIVE "
 	tst	(sp)+			; pop tiny buffer
 	return
 
-
+	.page
 	.sbttl	SHOW BINARY-TYPE
 
 	BINWIDE	=	10.		; /63/ how many per line to list..
@@ -1142,7 +1142,7 @@ sho$bt:	wrtall	#sh.102			; /63/ "BINARY-TYPE file extents: "
 	.newline
 50$:	return
 
-
+	.page
 ;	.sbttl	SHOW DEVICES, supported through CHKDEV which also be used
 
 ;	DEVWIDE	=	15.		; /63/ how many per line to list..
@@ -1168,7 +1168,7 @@ sho$bt:	wrtall	#sh.102			; /63/ "BINARY-TYPE file extents: "
 ;	.newline
 ;60$:	jmp	sho$su			; /62/ then show submounts
 
-
+	.page
 	.sbttl	SHOW PHONE		; /BBS/ modified..
 
 sho$ph:	mov	#pnhead	,r2		; pointer to list of numbers
@@ -1212,7 +1212,7 @@ sho$ph:	mov	#pnhead	,r2		; pointer to list of numbers
 	.newline
 80$:	return
 
-
+	.page
 	.sbttl	SHOW VLSWCH
 
 sho$vl:	tst	tsxsav			; running under TSX?
@@ -1224,13 +1224,13 @@ sho$vl:	tst	tsxsav			; running under TSX?
 	wrtall	#sh.079			; /63/ " is set "
 	tstb	vlflag			; the answer is..
 	beq	20$			; 		  0 is local
-	wrtall	#sh.109			; /63/ "REMOTE"	 <> means remote
+	wrtall	#sh.109			; /63/ "REMOTE"	 ^// means remote
 	br	30$
 20$:	wrtall	#sh.110			; /63/ "LOCAL"
 30$:	.newline
 	return
 
-
+	.page
 	.sbttl	SHOW SL			; /BBS/ added..
 
 sho$sl:	wrtall	#sh.111			; /63/ "SL status: "
@@ -1248,7 +1248,7 @@ sho$sl:	wrtall	#sh.111			; /63/ "SL status: "
 	.newline
 	return
 
-
+	.page
 	.sbttl	SHOW MEMORY	; /BBS/ all new
 
 sho$me:	tst	tsxsav			; running under TSX?
@@ -1277,7 +1277,7 @@ sho$me:	tst	tsxsav			; running under TSX?
 50$:	.newline			; /62/
 	return
 
-
+	.page
 	.sbttl	SHOW REPEAT-QUOTING, SERVER, UPDATE	; /BBS/ added
 	.enabl	lsb
 
@@ -1303,7 +1303,7 @@ sho$rp:	wrtall	#sh.122			; /63/ "Repeated character quoting: "
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	SHOW CONTROL-CHARACTER	; /63/ all new..
 
 sho$ct:	wrtall	#sh.124			; print first part of header
@@ -1357,7 +1357,7 @@ ct.num:	deccvt	r1 ,#spare1 ,#5		; convert integer to decimal number
 	call	writ1char		; dump it to tt
 	return
 
-
+	.page
 	.sbttl	COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
 	.enabl	lsb
 
@@ -1369,7 +1369,7 @@ c$copy::upcase	argbuf			; upper case all args
 	br	c.print			; /63/
 
 c$del::	upcase	argbuf			; upper case the argument
-	calls	delete	,<argbuf>	; try to delete the file
+	calls	delete	,^/argbuf/	; try to delete the file
 	tst	r0			; did it work?
 	bne	40$			; /63/ no
 	tst	infomsg			; SET TT QUIET?
@@ -1383,7 +1383,7 @@ c$rena::upcase	argbuf			; upper case all args
 	tst	r0			; did it work out ok?
 	bne	30$			; /63/ no
 	upcase	argbuf			; /62/ in case from kybd "To:" prompt
-	calls	rename	,<cmdbuf,argbuf> ; do the rename now
+	calls	rename	,^/cmdbuf,argbuf/ ; do the rename now
 	tst	r0			; did it work?
 	bne	40$			; /63/ no
 	tst	infomsg			; SET TT QUIET?
@@ -1409,17 +1409,17 @@ c$prin::upcase	argbuf			; upper case all args
 c.print:mov	argbuf	,r2		; save a few bytes, use a reg
 	mov	rawfil	,-(sp)		; save current setting
 	clr	rawfil			; enable namcvt
-	calls	namcvt	,<r2,#spare1>	; extract "file.typ"
+	calls	namcvt	,^/r2,#spare1/	; extract "file.typ"
 	tstb	spare1			; anything left?
 	bne	60$			; ya, continue
-	calls	namcvt	,<cmdbuf,#spare1> ; no, get input "file.typ"
+	calls	namcvt	,^/cmdbuf,#spare1/ ; no, get input "file.typ"
 	strcat	r2	,#spare1	; concat input_file_name to output_dev
 60$:	mov	(sp)+	,rawfil		; back to where it wuz..
-	calls	fparse	,<cmdbuf,#srcnam> ; /62/ get attrs here as lookup is
+	calls	fparse	,^/cmdbuf,#srcnam/ ; /62/ get attrs here as lookup is
 	clr	index			; /62/ in another overlay  init index
-	calls   lookup  ,<#srcnam,#spare1> ; /62/ load input file attributes
+	calls   lookup  ,^/#srcnam,#spare1/ ; /62/ load input file attributes
 	.purge	#lun.sr			; /62/ dump lookup channel
-	calls	copy	,<cmdbuf,r2>	; do the copy now
+	calls	copy	,^/cmdbuf,r2/	; do the copy now
 	tst	r0			; did it work?
 	bne	40$			; no
 	tst	infomsg			; SET TT QUIET?
@@ -1435,18 +1435,18 @@ c.print:mov	argbuf	,r2		; save a few bytes, use a reg
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Get second argument for a command
 	.enabl	lsb
 
 ;	input:	argbuf	= command args
 ;	output:	cmdbuf	= first arg
 ;		argbuf	= second arg
-;		 r0	= if <>, error code
+;		 r0	= if ^//, error code
 
 	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.TSPA ; /62/ don't upper case
 
-gettwo::save	<r1,r2>
+gettwo::save	^/r1,r2/
 	mov	argbuf	,r2		; point to the argument buffer
 	tstb	@r2			; anything there (should be)?
 	beq	40$			; no
@@ -1463,16 +1463,16 @@ gettwo::save	<r1,r2>
 
 20$:	mov	argbuf	,r2		; where the "to:" arg will be read in
 	strcpy	cmdbuf	,r2		; /62/ save old arg as first part
-	calls	readcmd	,<r2,#sh.133>	; /63/ use SL editor..
+	calls	readcmd	,^/r2,#sh.133/	; /63/ use SL editor..
 	tst	r0			; did it work?
 	bne	40$			; /62/ no
-	calls	cvt$$	,<r2,r1,#cvtarg> ; /62/ don't upper case it yet!
+	calls	cvt$$	,^/r2,r1,#cvtarg/ ; /62/ don't upper case it yet!
 	tst	r0			; anything left?
 	beq	20$			; no
 	add	r2	,r0		; yes, point to end
 	clrb	@r0			; and make it .asciz
 30$:	clr	r0			; no errors please
-40$:	unsave	<r2,r1>
+40$:	unsave	^/r2,r1/
 	return
 
 	.dsabl	lsb

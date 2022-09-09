@@ -25,13 +25,13 @@
 ;	same thing is done for REMOTE commands by a
 ;	call to LOAREM.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtcdf.mac"
-	.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
+	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
 
-
+	.page
 	.sbttl	Local data		; /63/ consolidate data here..
 
 	.psect	$pdata
@@ -45,7 +45,7 @@ com.07:	.asciz	"What: "
 com.08:	.asciz	"Username Password: "
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Define the main_loop commands
 
@@ -100,7 +100,7 @@ loacmd::mov	#cmdlst	,r0		; calling this also loads this overlay
 	command	cmdlst	,XMODEM		,1	,c$xmodem,com.01
 	command	cmdlst
 
-
+	.page
 	.sbttl	Define the REMOTE commands
 
 loarem::mov	#remlst	,r0		; calling this also loads this overlay

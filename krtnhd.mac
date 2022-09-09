@@ -19,10 +19,10 @@
 	mov	src	,-(sp)		; pass multiplier to p$mul
 	mov	reg	,-(sp)		; pass multiplicand too
 	call	p$mul			; multiply, returns a 16-bit product
-	.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
-	.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
-	.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
-	.iif ne <<$$+1>&1> .error      <; bad dst reg for MUL macro>
+	.iif eq ^/$$-1/	mov	(sp)+	,r1	; ..if input register was r1
+	.iif eq ^/$$-3/	mov	(sp)+	,r3	; ditto if r3
+	.iif eq ^/$$-5/	mov	(sp)+	,r5	; ditto if r5
+	.iif ne ^?^/$$+1/&1? .error      ^/; bad dst reg for MUL macro/
 	.endm	mul
 
 	.macro	div	src,reg		; /BBS/ made this double precision
@@ -62,23 +62,23 @@
 
 	.macro	ash	amount,reg	; arithmetic shift
 	.ntype	$$$0	,amount
-	.iif ne <27-$$$0> .error       <; must be auto pc for ASH macro>
+	.iif ne ^/27-$$$0/ .error       ^/; must be auto pc for ASH macro/
 	$$type	= 1			; assume left shift
 	$$size	= 0			; how many ASLs or ASRs to generate
-	  .irpc	$a ,<amount>		; parse the first argument
+	  .irpc	$a ,^/amount/		; parse the first argument
 	  $c	= ''$a			; get the character as a literal
-	  .iif eq <$c - '-> $$type = -1	; if a minus sign then assume right
-	  .iif eq <$c - '.> .error     <; only use octal in ASH macro please>
-	  .iif eq <$c - '^> .error     <; only use octal in ASH macro please>
+	  .iif eq ^/$c - '-/ $$type = -1	; if a minus sign then assume right
+	  .iif eq ^/$c - './ .error     ^/; only use octal in ASH macro please/
+	  .iif eq ^/$c - '^/ .error     ^/; only use octal in ASH macro please/
 	  $c	= $c - '0		; check for a digit now
 	    .if ge $c			; perhaps a digit
 	      .if le $c-7		; got a digit
-	      $$size = <$$size*10>+$c	; add into accumulator
+	      $$size = ^/$$size*10/+$c	; add into accumulator
 	      .endc
 	    .endc
 	  .endr
 	.rept	$$size
-	.iif gt <$$type>  asl	reg
-	.iif lt <$$type>  asr	reg
+	.iif gt ^/$$type/  asl	reg
+	.iif lt ^/$$type/  asr	reg
 	.endr
 	.endm

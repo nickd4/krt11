@@ -44,7 +44,7 @@
 
 ;	Copyright 1984,1985 Change Software, Inc.
 
-
+	.page
 ;			      NOTICE: !!!!!!
 ;
 ;   To operate properly at high speeds (2400 and up) and with Kermits
@@ -75,9 +75,9 @@
 ;	.INSTALL XL				! install it and
 ;	.LOAD XL				! load into memory
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 
 ; /62/	.ABTIO bypassed for V4, also expanded to allow assembly under same
@@ -85,7 +85,7 @@
 	.mcall	.CLOSE	,.CSTAT	,.GVAL	,.LOOKUP,.MRKT
 	.mcall	.PURGE	,.SPFUN	,.TWAIT	,.WRITC
 
-
+	.page
 	.sbttl	Global and local data
 
 	.psect	xcdata	,rw,d,gbl,rel,con
@@ -93,7 +93,7 @@ alloc:	.byte	0 ,156			; /BBS/ allocate a device emt args
 	.word	dblk			; /BBS/ device name goes here
 xcsts::	.word	0			; /62/ saved from stsdrv
 xcwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; for async calls to the handler
-xcwrite:.word	0			; if <> write is in progress
+xcwrite:.word	0			; if ^// write is in progress
 
 	.psect	xcrw	,rw,d,lcl,rel,con
 getspd:	.word	0			; /62/ buffer speed until confirmed ok
@@ -105,12 +105,12 @@ setpri:	.byte	0 ,150			; /BBS/ TSX set priority emt
 third:	.word	0 ,20.			; wait 1/3 second
 wait:	.word	0 ,1			; wait one tick (1/60 second)
 r50tbl:	.asciz  " ABCDEFGHIJKLMNOPQRSTUVWXYZ   0123456789" ; /62/ device only
-xl.01:	.asciz	"%"<bell>"KRTXL-W-Carrier " ;^^a space'll never get this far..
+xl.01:	.asciz	"%"^/bell/"KRTXL-W-Carrier " ;^^a space'll never get this far..
 xl.02:	.asciz	"lost"
 xl.03:	.asciz	"detected"
 	.even
 
-
+	.page
 	.sbttl	List of supported comm handlers
 
 dev.ok:	.rad50	"CL "		; use rad50 space, not zero
@@ -126,14 +126,14 @@ dev.ok:	.rad50	"CL "		; use rad50 space, not zero
 	.rad50	"XL "
 	.word	0
 
-
+	.page
 	.sbttl	CL handler options	; /37/
 
-;	0    1	send \014 <FF>		10     400  send \015 <CR>
-;	1    2	send \011 <HT>		11    1000  send CTL chars
+;	0    1	send \014 ^/FF/		10     400  send \015 ^/CR/
+;	1    2	send \011 ^/HT/		11    1000  send CTL chars
 ;	2    4	send lower case		12    2000  raise DTR
-;	3   10	send \012 <LF>		13    4000  accept/send 8-bit chars
-;	4   20	accept \012 <LF>	14   10000  undefined
+;	3   10	send \012 ^/LF/		13    4000  accept/send 8-bit chars
+;	4   20	accept \012 ^/LF/	14   10000  undefined
 ;	5   40	FF on block 0 write	15   20000      "
 ;	6  100	send binary output	16   40000      "
 ;	7  200	accept binary input	17  100000      "
@@ -141,7 +141,7 @@ dev.ok:	.rad50	"CL "		; use rad50 space, not zero
 cl.set:	.word	1!2!4!10!20!400!1000!2000!4000	; /62/ spell out options
 cl.clr:	.word	40!100!200			; /62/ NOLFOUT dropped
 
-
+	.page
 	.sbttl	Map speed to set same (50 baud is unsupported here)
 
 splst:	.word	75.	,110.	,134.	,150.	,300.	,600.	; /44/
@@ -152,7 +152,7 @@ spmap:	.word	1	,2	,3	,4	,5	,6	; /44/
 	.word	7	,10	,11	,12	,13	,14	; /44/
 	.word	15	,16	,17	,20			; /62/
 
-
+	.page
 	.sbttl	SPFUN codes for the CL/KM/XC/XL drivers
 
 	CLCLR	=	257		; /37/ reset w/o dropping DTR
@@ -167,11 +167,11 @@ spmap:	.word	1	,2	,3	,4	,5	,6	; /44/
 
 	XC.CONTROL ==	14		; control channel for the driver
 
-
+	.page
 	.psect	$code
 	.sbttl	Assign a handler as the link ; /BBS/ substantially changed..
 
-x.assdev::save	<r2,r1>			; mods to stop ANY bad name
+x.assdev::save	^/r2,r1/			; mods to stop ANY bad name
 	mov	@r5	,r1		; address of the device name
 	strlen	r1			; how long is it?
 	cmp	r0	,#4		; 4 is max
@@ -227,16 +227,16 @@ x.assdev::save	<r2,r1>			; mods to stop ANY bad name
 	.purge	#lun.xk			; /62/ these lingering
 	mov	@r1	,r0		; /62/ restore pre-purge error
 
-90$:	unsave	<r1,r2>
+90$:	unsave	^/r1,r2/
 	return
 
-
+	.page
 	.sbttl	Init the handler	; /BBS/ enhanced..
 
 ;	T T Y I N I
 ;
 ;	input:	  (r5)	= TSX ^W/^B flag, only used by T.TTYINI
-;	output:	   r0	= is <>, error code
+;	output:	   r0	= is ^//, error code
 
 x.ttyini::tst	tsxsav			; running under TSX?
 	beq	10$			; /62/ no
@@ -251,10 +251,10 @@ x.ttyini::tst	tsxsav			; running under TSX?
 	clr	r0			; all is well today
 	return
 
-
+	.page
 	.sbttl	Check device by getting its physical name
 
-mapxl:	save	<r1,r2,r3>		; /BBS/ heavily hacked..
+mapxl:	save	^/r1,r2,r3/		; /BBS/ heavily hacked..
 	sub	#50	,sp		; /44/ allocate a buffer for new name
 	mov	sp	,r2		; /44/ and also a pointer to it
 10$:	cmpb	(r1)	,#':		; /44/ while (*devnam != ':')
@@ -277,7 +277,7 @@ mapxl:	save	<r1,r2,r3>		; /BBS/ heavily hacked..
 	add	r3	,r0		; r0 now has rad50 name
 30$:	mov	r0	,dblk		; save it here
 
-	calls	fetch	,<dblk>		; load handler
+	calls	fetch	,^/dblk/		; load handler
 	tst	r0			; did it work?
 	bne	120$			; no
 
@@ -317,7 +317,7 @@ mapxl:	save	<r1,r2,r3>		; /BBS/ heavily hacked..
 	clr	parity			; /62/ KM is an 8-bit device
 80$:	inc	xl.lock			; /62/ keep it, XC or XL open forever
 
-90$:	mov	r1	,r50dev		; if r50dev <> 0 then device is valid
+90$:	mov	r1	,r50dev		; if r50dev ^// 0 then device is valid
 	add	#50	,sp		; pop local buffer
 	clr	r0			; no error, also clears carry
 	br	130$
@@ -327,15 +327,15 @@ mapxl:	save	<r1,r2,r3>		; /BBS/ heavily hacked..
 110$:	mov	#er$dev	,r0		; device not responding
 120$:	add	#50	,sp		; pop local buffer
 	sec				; flag error
-130$:	save	<r0>			; save error
+130$:	save	^/r0/			; save error
 	rol	-(sp)			; save carry
 	.purge	#lun.sr			; dump channel open for .cstat
 	ror	(sp)+			; pop carry
-	unsave	<r0>			; pop error
-	unsave	<r3,r2,r1>
+	unsave	^/r0/			; pop error
+	unsave	^/r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	Rad50 to ascii (legal device name chars only)
 
 140$:	clr	r3			; the answer
@@ -347,7 +347,7 @@ mapxl:	save	<r1,r2,r3>		; /BBS/ heavily hacked..
 	sob	r3	,150$		; no, try next one
 160$:	return
 
-
+	.page
 	.sbttl	ALLOCATE a device
 
 170$:	tst	tsxsav			; this only works with TSX
@@ -375,7 +375,7 @@ mapxl:	save	<r1,r2,r3>		; /BBS/ heavily hacked..
 	mov	(r1)	,r0		; copy and exit
 220$:	return
 
-
+	.page
 	.sbttl	Close the link		; /BBS/ many changes..
 
 x.ttyfin::.twait #rtwork,#wait		; force at least 1 tick wait
@@ -396,14 +396,14 @@ x.ttyfin::.twait #rtwork,#wait		; force at least 1 tick wait
 30$:	clr	r0			; no error is possible
 	return
 
-
+	.page
 	.sbttl	Binary read
 
 ;	B I N R E A
 ;
 ;	input:	  (r5)	= time-out in secs, 0=max (65535 ticks), -1=one tick
 ;	output:    r1	= character just read
-;		   r0	= if <>, error code
+;		   r0	= if ^//, error code
 
 ; /BBS/ The -1 time-out option's now used to speed up eatjunk in
 ;	KRTDIA.MAC's dial/redial routines.   This routine _MUST_
@@ -420,7 +420,7 @@ x.xbin::mov	sp	,rdmode		; don't XON if no data present
 	br	rdcom
 x.binr::clr	rdmode			; try to reset XOFF if no data show up
 
-rdcom:	save	<r2,r3>
+rdcom:	save	^/r2,r3/
 	cmp	xkpoint	,#xkbuff+xksize	; ensure no buffer overflows
 	bhis	10$			; gone too far, driver is %$#@!
 	tstb	@xkpoint		; anything left in the read buffer?
@@ -432,7 +432,7 @@ rdcom:	save	<r2,r3>
 	bisb	@xkpoint,r1		; to accommodate 8-bit data
 	inc	xkpoint			; point to the next one in the buffer
 	clr	r0			; say it succeeded
-30$:	unsave	<r3,r2>
+30$:	unsave	^/r3,r2/
 	return
 
 xxread:	mov	(r5)	,r3		; time-out in seconds here
@@ -458,14 +458,14 @@ xxread:	mov	(r5)	,r3		; time-out in seconds here
 60$:	mov	#er$nin	,r0		; no data have come in yet
 70$:	return
 
-
+	.page
 	.sbttl	Binary write
 
 ;	B I N W R I
 ;
-;	output:	  r0	= if <>, error code
+;	output:	  r0	= if ^//, error code
 
-x.binwri::save	<r1,r2,r3,r4>
+x.binwri::save	^/r1,r2,r3,r4/
 	mov	2(r5)	,r4		; byte count for the write
 	beq	20$			; /BBS/ no I/O to do..
 	mov	(r5)	,r3		; copy the data to a local buffer
@@ -479,16 +479,16 @@ x.binwri::save	<r1,r2,r3,r4>
 	mov	sp	,xcwrite	; /BBS/ write is now pending
 	.writc	#xcwork,#lun.xk,xklgbuf,r1,#30$,#1 ; queue the write
 20$:	clr	r0			; success (this is never tested..)
-	unsave	<r4,r3,r2,r1>
+	unsave	^/r4,r3,r2,r1/
 	return
 
 30$:	clr	xcwrite			; /BBS/ .writc completion routine
 	return
 
-
+	.page
 	.sbttl	Dump all I/O (cancel type_ahead), if possible
 
-x.cantyp::save	<r1,r2>
+x.cantyp::save	^/r1,r2/
 	cmp	rt11ver	,#5		; /62/ is this RT-11 V5 or above?
 	blt	20$			; /62/ no, V4 can't abort I/O..
 	cmp	rt11upd	,#6		; /62/ neither can V5.6
@@ -500,24 +500,24 @@ x.cantyp::save	<r1,r2>
 10$:	tst	montyp			; /62/ if SJ monitor
 	blt	20$			; /62/ .abtio = .wait so skip it !!
 ; /62/	.abtio	#lun.xk			; reinit the driver
-	MOV	#lun.xk+<11.*^o400>,R0	; /62/ expanded for assy under V4
+	MOV	#lun.xk+^/11.*^o400/,R0	; /62/ expanded for assy under V4
 	EMT	^o374			; /62/ even though V4 can't run it
 20$:	call	x.ttxon			; /BBS/ make sure it's read-able
 	mov	#$allsiz,r2		; /BBS/ loop for max possible
-30$:	calls	binrea	,<#-1>		; try to get something
+30$:	calls	binrea	,^/#-1/		; try to get something
 	tst	r0			; did it work?
 	bne	40$			; no, exit
 	sob	r2	,30$		; yes, eat some more characters
 40$:	mov	#xkbuff	,xkpoint	; /BBS/ reset buffer read pointer
 	clrb	xkbuff			; init buffer
-	unsave	<r2,r1>
+	unsave	^/r2,r1/
 	clr	r0			; flag success
 	return
 
-
+	.page
 	.sbttl	Hose the handler	; /BBS/ routine added
 
-x.hose::save	<r1>			; /62/ add KM support
+x.hose::save	^/r1/			; /62/ add KM support
 	tst	km.lock			; /62/ KM?
 	bne	10$			; /62/ ya, it emulates spfun 257
 	tst	tsxcl			; TSX and CL?
@@ -529,21 +529,21 @@ x.hose::save	<r1>			; /62/ add KM support
 20$:	.spfun	#rtwork,#xc.control,r1,#0,#0,#1 ; /62/ hose CL handler
 30$:	call	x.cantyp		; /62/ hose XL or XC
 	.twait	#rtwork,#third		; let things settle
-	unsave	<r1>			; /62/
+	unsave	^/r1/			; /62/
 	clr	r0			; no error possible
 	return
 
-
+	.page
 	.sbttl XON the handler
 
 x.ttxon::.spfun	#rtwork,#xc.control,#clrdrv,#0,#0,#1 ; clear the driver
 	clr	r0			; flag success
 	return
 
-
+	.page
 	.sbttl	Drop DTR for 0.5 sec
 
-x.ttyhan::save	<r1>
+x.ttyhan::save	^/r1/
 	.spfun	#rtwork,#xc.control,#dtrdrv,#0,#0,#1 ;/62/ drop DTR
 	mov	clkflg	,r1		; /62/ number of ticks in one second
 	asr	r1			; /62/ wait 0.5sec here
@@ -552,10 +552,10 @@ x.ttyhan::save	<r1>
 	.spfun	#rtwork,#xc.control,#dtrdrv,#0,#1,#1 ;/62/ then bring DTR up
 	clr	r0			; /41/ assume it worked, and assume
 	clr	mready			; /BBS/ the DTR drop resets the modem
-	unsave	<r1>
+	unsave	^/r1/
 	return
 
-
+	.page
 	.sbttl	Check status of DTR or DCD  ; /BBS/ added this..
 	.enabl	lsb
 
@@ -566,7 +566,7 @@ x.ttyhan::save	<r1>
 ;			 0  DTR or DCD is not asserted
 ;			-1  status is not available
 
-x.inqcd::save	<r1>
+x.inqcd::save	^/r1/
 	tst	mready			; modem must be on-line
 	beq	30$			; no modem = can't do DCD..
 	mov	#stsdrv	,r1		; DCD arg
@@ -578,7 +578,7 @@ x.inqcd::save	<r1>
 	asr	r0			; KM or XL uses bit 3, make it 2 here
 	br	20$			; goto common code..
 
-x.inqdtr::save	<r1>
+x.inqdtr::save	^/r1/
 	tst	tsxcl			; is this TSX and CL handler?
 	bne	10$			; /62/ ya
 	tst	km.lock			; /62/ is it KM?
@@ -587,10 +587,10 @@ x.inqdtr::save	<r1>
 	call	50$			; common code
 	tst	r0			; did it work?
 	blt	40$			; no
-20$:	bic	#^c<4>	,r0		; ya, hose unneeded bits
+20$:	bic	#^c^/4/	,r0		; ya, hose unneeded bits
 	br	40$
 30$:	mov	#-1	,r0		; DTR status not available
-40$:	unsave	<r1>
+40$:	unsave	^/r1/
 	return
 
 50$:	.spfun	#rtwork,#xc.control,r1,#xcsts,#0,#1 ; /62/ get status
@@ -602,15 +602,15 @@ x.inqdtr::save	<r1>
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	DCD status tester	; /62/ new..
 
-x.dcdtst::save	<r1,r0>
+x.dcdtst::save	^/r1,r0/
 	mov	xcsts	,r1		; save prior status
 	tst	tsxcl			; which handler is it?
 	bne	10$			; CL uses bit 2
 	asr	r1			; KM, XC and XL use bit 3, make it 2
-10$:	bic	#^c<4>	,r1		; recover the carrier detect bit
+10$:	bic	#^c^/4/	,r1		; recover the carrier detect bit
 	call	x.inqcd			; now get current DCD status
 	tst	r0			; well?
 	blt	40$			; it's not available, bail out..
@@ -622,16 +622,16 @@ x.dcdtst::save	<r1,r0>
 	call	x.ttxon			; clear the driver just in case
 	br	30$
 20$:	mov	#xl.03	,r1		; load "detected" tag
-30$:	calls	printm	,<#2,#xl.01,r1>	; say what's up
-40$:	unsave	<r0,r1>
+30$:	calls	printm	,^/#2,#xl.01,r1/	; say what's up
+40$:	unsave	^/r0,r1/
 	return
 
-
+	.page
 	.sbttl	SET SPEED
 
 ;	input:  (r5)	= desired speed
 
-x.setspd::save	<r3>
+x.setspd::save	^/r3/
 	tst	tsxcl			; /44/ TSX+ and CL?
 	bne	10$			; /62/ ya
 	tst	km.lock			; /62/ KM uses the CL speed spfun..
@@ -655,11 +655,11 @@ x.setspd::save	<r3>
 50$:	mov	#er$spx	,r0		; /BBS/ speed not settable
 	br	70$
 60$:	mov	#er$wer	,r0		; /BBS/ device write error
-70$:	unsave	<r3>
+70$:	unsave	^/r3/
 	return
 
 
-
+	.page
 	.sbttl	Fake getting the speed
 
 x.ttsp::tst	tsxcl			; /54/ CL and TSX?

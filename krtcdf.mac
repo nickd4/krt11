@@ -15,7 +15,7 @@
 ;
 ;	dump unused argtyp
 
-
+	.page
 ;	usage example:
 ;
 ;	command	cmdlst	SEND ,3 ,c$send ,optional_prompt_addr
@@ -36,7 +36,7 @@
 	.list me
 	.save
 	.nlist me
-	.if b <name>			; command name supplied this time?
+	.if b ^/name/			; command name supplied this time?
 	.list me
 	.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of list
 	.nlist me
@@ -46,7 +46,7 @@
 	.even				; /63/ doing this at the end of a list
 	.nlist me			; /63/
 	$$trip	= 0			; /62/ reset trip counter for next cmd
-	.iff	; b <name>		; ya, process args into command data
+	.iff	; b ^/name/		; ya, process args into command data
 	.list me
 	.psect	cmdtxt	,ro,d,lcl,rel,con
 	.nlist me
@@ -61,12 +61,12 @@
 	.word	$$name			; store address of command name text
 	.word	min			; min number of chars to match
 	.word	address			; the command routine's address
-	  .if b <arg>			; /63/ optional_prompt address given?
+	  .if b ^/arg/			; /63/ optional_prompt address given?
 	  .word	0			; /63/ no, say so with a null here
 	  .iff
 	  .word	arg			; /63/ ya, stuff in its location
 	  .endc
-	.endc	; b <name>
+	.endc	; b ^/name/
 	.list me
 	.restore
 	.nlist me

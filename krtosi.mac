@@ -84,9 +84,9 @@
 ;	determine if the operating system is TSX+.  I have left that
 ;	in the init code as it works even in older versions of TSX+.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	.sbttl	Macro references, various handy constants defined
 
@@ -114,28 +114,28 @@
 	TS.VER	= -32.		; /BBS/ offset to TSX version number
 	VRUN$	= 20000		; /62/ VBGEXE bit in job state word
 
-
+	.page
 	.sbttl	APR7 buffer allocation	; /BBS/ moved here..
 
 ;	ALSIZE is the SET DIAL,PHONE buffer length, and lives in KRTMAC.MAC
 	BINLSIZ	= 40*4			; binary types list buffer size
 ;	$ALLSIZ is the packet buffer length, and lives in KRTMAC.MAC
 	MAXSIZ	==   1000		; individual file buffer size
-	$$BUFP	= <<MAXSIZ+2>*4>	; 4 file buffers: in, out, log, take
+	$$BUFP	= ^?^/MAXSIZ+2/*4?	; 4 file buffers: in, out, log, take
 	$.1	= 82.+200+60		; /62/ dirnam + dirbfr + phnum buffers
-	$.2	= <34*2*2>*2		; totp.r and totp.s stats buffers
-	$.3	= <LN$MAX+2>*2		; cmdbuf and argbuf allocations
-	$.4	= <<LN$MAX+2>*LN$CNT>	; SL editor command line buffers
+	$.2	= ^/34*2*2/*2		; totp.r and totp.s stats buffers
+	$.3	= ^/LN$MAX+2/*2		; cmdbuf and argbuf allocations
+	$.4	= ^?^/LN$MAX+2/*LN$CNT?	; SL editor command line buffers
 
-	TOTALL	== <ALSIZE+BINLSIZE+$ALLSIZ+$$BUFP+$.1+$.2+$.3+$.4>
+	TOTALL	== ^/ALSIZE+BINLSIZE+$ALLSIZ+$$BUFP+$.1+$.2+$.3+$.4/
 
-	.if eq TOTALL-<<TOTALL/100>*100> ; 32-word boundary
+	.if eq TOTALL-<^?TOTALL/100?*100> ; 32-word boundary
 	ALLOC	== TOTALL		; landed right on it
 	.iff
-	ALLOC	== <TOTALL&177700>+100	; force to next 32-word boundary
+	ALLOC	== ^/TOTALL&177700/+100	; force to next 32-word boundary
 	.endc
 
-
+	.page
 	.sbttl	Local data
 
 	.psect	mapwin	,rw,d,gbl,rel,con  ; ensure window data in ROOT
@@ -215,31 +215,31 @@ cl0text:.asciz	"CL0:"			; asciz names
 cl1text:.asciz	"CL1:"			; for TSX
 fatal:	.asciz	"?KRTOSI-F-"
 noxcmt:	.ascii	"This system lacks KM, XC and XL drivers.  "	; /62/
-	.ascii	"TT must be used for transfers."<cr><lf>
+	.ascii	"TT must be used for transfers."^/cr/^/lf/
 	.ascii	"Packet length has been set to 60. bytes "
-	.asciz	"to avoid overflowing the console port."<cr><lf>
-nolog:	.ascii	"Packet stats display disabled for FRUNed Kermit."<cr><lf>
-	.asciz	"Use SET UPDATE to enable stats during transfers."<cr><lf>
-osi.01:	.asciz	"RT-11SJ must be SYSGENNED with timer support"<cr><lf>
-osi.02:	.asciz	"Line Time Clock is not running"<cr><lf>
-osi.03:	.asciz	"CPU has no EIS support, rebuild KRT with KRTASM.NON"<cr><lf>
+	.asciz	"to avoid overflowing the console port."^/cr/^/lf/
+nolog:	.ascii	"Packet stats display disabled for FRUNed Kermit."^/cr/^/lf/
+	.asciz	"Use SET UPDATE to enable stats during transfers."^/cr/^/lf/
+osi.01:	.asciz	"RT-11SJ must be SYSGENNED with timer support"^/cr/^/lf/
+osi.02:	.asciz	"Line Time Clock is not running"^/cr/^/lf/
+osi.03:	.asciz	"CPU has no EIS support, rebuild KRT with KRTASM.NON"^/cr/^/lf/
 osi.04:	.asciz	"HIMEM in TSGEN.MAC must be at least "
-osi.05:	.asciz	". bytes"<cr><lf>
+osi.05:	.asciz	". bytes"^/cr/^/lf/
 osi.06:	.asciz	"CRRG/CRAW error #"
-osi.07:	.ascii	"Insufficient space available for buffer allocation"<cr><lf>
+osi.07:	.ascii	"Insufficient space available for buffer allocation"^/cr/^/lf/
 	.asciz	"TOTALL = "
 osi.08:	.asciz	",  MAXTOP-HILIMIT = "
-osi.09:	.ascii	"Program high limit exceeds top of memory"<cr><lf>
+osi.09:	.ascii	"Program high limit exceeds top of memory"^/cr/^/lf/
 	.asciz	"HILIMIT = "
 osi.10:	.asciz	",  MAXTOP = "
-osi.11:	.asciz	<cr><lf>"You are "
-osi.12:	.asciz	" from happiness.."<cr><lf>
+osi.11:	.asciz	^/cr/^/lf/"You are "
+osi.12:	.asciz	" from happiness.."^/cr/^/lf/
 osi.13:	.asciz	". word"
 osi.14: .asciz	"s"			; /63/ not 1, so make it plural
-osi.15:	.asciz	" free to load handlers"<cr><lf>
+osi.15:	.asciz	" free to load handlers"^/cr/^/lf/
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Init for RT-11/TSX-Plus
 
@@ -337,7 +337,7 @@ xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover
 	wrtall	#osi.04			; /63/ "HIMEM .. must be at least .."
 	mov	r2	,r0		; copy needed value for L10266
 	call	L10266			; /BBS/ what it needs..
-	wrtall	#osi.05			; /63/	". bytes"<cr><lf>
+	wrtall	#osi.05			; /63/	". bytes"^/cr/^/lf/
 	jmp	180$			; /BBS/ die
 
 120$:	mov	#freept	,r2		; setup pointer to start of free core
@@ -397,10 +397,10 @@ xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover
 	octout	r0			; r0 still contains maxtop here
 	sub	@r2	,r0		; get diff for reporting
 
-170$:	wrtall	#osi.11			; /63/ <cr><lf>"You are "
+170$:	wrtall	#osi.11			; /63/ ^/cr/^/lf/"You are "
 	neg	r0			; fix sign, args were flipped
 	call	plural			; display value and "word" or "words"
-	wrtall	#osi.12			; /63/ " from happiness.."<cr><lf>
+	wrtall	#osi.12			; /63/ " from happiness.."^/cr/^/lf/
 180$:	clr	r0			; do a hard exit (includes .hreset)
 	.exit
 
@@ -413,7 +413,7 @@ plural:	asr	r0			; /BBS/ display size in words
 	wrtall	#osi.14			; /63/ no, add an "s"
 190$:	return
 
-
+	.page
 	.sbttl	Allocate and init buffers
 
 ; /BBS/	 NOTE:	if you add or change any buffer here you must also
@@ -470,7 +470,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	mov	#xmftop	,fetptmax	; this is the top of XM .fetch space
 	.br	240$			; /63/
 
-
+	.page
 	.sbttl	Set/get terminal config..   ; /BBS/ moved here
 
 	TTMODE	= 20 ! 100 ! 10000 ! 40000  ; nosl ,nowait ,spec ,lc
@@ -486,7 +486,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	bcs	250$			; failed..
 	.cstat	#rtwork,#lun.sr,#cstat	; get device data
 	bcs	250$			; failed..
-	calls	rdtoa	,<#dkname,cstat+12> ; device name
+	calls	rdtoa	,^/#dkname,cstat+12/ ; device name
 	movb	cstat+10,r0		; get unit number
 	add	#'0	,r0		; convert to ascii
 	movb	r0	,dkname+2	; stuff unit number into name
@@ -565,7 +565,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	mov	#cl1asn	,r0		; CL0 is busy,
 	emt	375			; try CL1
 	bcs	340$			; CL0 and CL1 are busy (unlikely)
-330$:	calls	assdev	,<r1>		; /BBS/ assign the device
+330$:	calls	assdev	,^/r1/		; /BBS/ assign the device
 	tst	r0			; /BBS/ ok?
 	bne	340$			; /BBS/ no
 	clr	remote			; say we are a local Kermit
@@ -615,7 +615,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	sub	@fetpt	,@sp		; /BBS/ minus top of program + buffers
 	mov	(sp)+	,r0		; /BBS/ = what's left for handlers
 	call	plural			; /BBS/ display it
-	wrtall	#osi.15			; /63/ " free to load hand.."<cr><lf>
+	wrtall	#osi.15			; /63/ " free to load hand.."^/cr/^/lf/
 410$:	return
 
 	.end

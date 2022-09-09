@@ -89,7 +89,7 @@
 ;
 ;	or by using the CALLS macro (defined in KRTMAC.MAC)
 ;
-;	calls	ascdat	,<#datebf,#-1>
+;	calls	ascdat	,^/#datebf,#-1/
 ;
 ;	Disk I/O entry points:
 ;
@@ -136,11 +136,11 @@
 ;	TTYRST	(%loc terminal_name)
 ;	XINIT	()
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 ; /62/	.FPROT,.SFDAT bypassed for V4, also expanded to allow assy under same
 
@@ -149,7 +149,7 @@
 	.MCALL	.PURGE	,.RCTRLO,.READW	,.SCCA	,.SPCPS	,.TWAIT
 	.MCALL	.WRITW
 
-
+	.page
 	.sbttl	I/O database
 
 	LUN.KB	==      0	; the local terminal
@@ -181,7 +181,7 @@ bufp::	.word	0	,0	,0	,0	,0	; current byte pointer
 bufs::	.word	0	,0	,0	,0	,0	; size (end) of data
 date.a::.word	0	,0	,0	,0	,0	; /BBS/ date attribute
 filtyp::.word	terminal,text	,text	,text	,text	; term, text, bin, dec
-mode::	.word	1	,0	,0	,0	,0	; if <> writing to buf
+mode::	.word	1	,0	,0	,0	,0	; if ^// writing to buf
 prot.a::.word	0	,0	,0	,0	,0	; /BBS/ prot attribute
 sizof::	.word	0	,0	,0	,0	,0	; size of file, blocks
 time.a::.word	0	,0	,0	,0	,0	; /BBS/ time attribute
@@ -203,7 +203,7 @@ dblk::	.rad50	"   "			; ..getdk puts DK at start-up here
 defdir::.blkb	4+2			; /62/ the default directory
 defext:	.word	0 ,0 ,0 ,0		; default extents for .csispc
 dirbfr::.word	0			; /62/ ptr to DIR output to TT buffer
-dirflg::.word	0			; /62/ if <> keep blanks in file name
+dirflg::.word	0			; /62/ if ^// keep blanks in file name
 dirnam::.word	0			; /62/ ptr to DIR input name buffer
 dkblk::	.rad50	"DK "			; /62/ used to get DK's physical name
 	.word	0 ,0 ,0			; (unused) file name and extent
@@ -227,12 +227,12 @@ srcnam::.blkb	ln$max			; /62/ in file name as typed by user..
 
 ; operating system data
 jobsts::.word	0 ,0 ,0 ,0 ,0 ,0 ,0 ,0	; /51/ from .gtjb
-montyp::.word	0			; /51/ <0 -> SJ,  0 -> FB, >0 -> XM
+montyp::.word	0			; /51/ ^/0 -/ SJ,  0 -> FB, >0 -> XM
 rt11up::.word	0			; /62/ RT-11 monitor release level
 rt11ve::.word	0			; /62/ and monitor version number
 tsxsav::.word	0			; /BBS/ if TSX, this contains line #
 tsxver::.word	0			; /BBS/ and this the version number
-vbgexe::.word	0			; /62/ if <> running under VBGEXE
+vbgexe::.word	0			; /62/ if ^// running under VBGEXE
 
 ; memory allocation data
 fetpt::	.word	0			; /51/ pointer for the next .fetch
@@ -260,7 +260,7 @@ vl$chr::.byte	35 ,'D&137 ,27		; ^W  here to allow on/off select
 vlflag::.byte	0			; /BBS/ ^W local/remote flag..
 	.even
 
-
+	.page
 	.sbttl	Error mapping, codes are defined in KRTERR.MAC
 
 	.psect	$pdata
@@ -283,7 +283,7 @@ renerr::.word	er$lby	,er$fnf	,er$iop	,er$prv
 wrierr:	.word	er$wpe	,er$wer	,er$nop	,er$sys	; /63/
 xcierr::.word	er$lby	,er$xco	,er$sys		; /62/
 
-
+	.page
 ;	.sbttl	Allowable device assignments for the BBS
 ;
 ;devlst::.ascii	"DU2:"			; /BBS/ table of allowed devices
@@ -297,13 +297,13 @@ xcierr::.word	er$lby	,er$xco	,er$sys		; /62/
 ;	.ascii	"LD7:"
 ;	.byte	0			; /BBS/ end of it all
 
-
+	.page
 	.sbttl	Local data
 
 kp.res:	.byte	33 ,'> ,0		; type this out to reset keypad
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Get KMON command line args and pass to Kermit  ; /BBS/ added
 
@@ -312,7 +312,7 @@ kp.res:	.byte	33 ,'> ,0		; type this out to reset keypad
 ;	output:	 (r5)	= command line less the task name, .asciz
 ;		  r0	= length of whats left
 
-getmcr::save	<r1,r2,r3>
+getmcr::save	^/r1,r2,r3/
 	mov	sp	,mcrcmd	; flag to only come here and try this once
 	mov	#510	,r1	; get address of # of bytes in chain area
 	mov	@r1	,r2	; save a copy of number of bytes
@@ -331,16 +331,16 @@ getmcr::save	<r1,r2,r3>
 20$:	mov	@r5	,r0	; address of command string buffer
 	clrb	@r0		; clear it
 	clr	r0		; and return a length of zero
-30$:	unsave	<r3,r2,r1>
+30$:	unsave	^/r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	Load a handler if not already resident (BG only)
 
 ;	F E T C H
 ;
 ;	input:	 (r5)	= rad50 device name to fetch
-;		  r0	= if <>, the error code
+;		  r0	= if ^//, the error code
 
 fetch::	.dstat	#rtwork,r5		; get handler status
 	bcs	40$			; no such handler present
@@ -374,7 +374,7 @@ fetch::	.dstat	#rtwork,r5		; get handler status
 	mov	@r0	,r0		; get it and exit
 80$:	return
 
-
+	.page
 	.sbttl	Parse file name and fill in with defaults ; /BBS/ all new
 
 ;	F P A R S E
@@ -382,11 +382,11 @@ fetch::	.dstat	#rtwork,r5		; get handler status
 ;	input:	  (r5)	= input file name, .asciz
 ;		 defdir	= the default directory name string to use
 ;	output:	 2(r5)	= expanded file name, .asciz, max len is ln$max bytes
-;		   r0	= if <>, error code
+;		   r0	= if ^//, error code
 
 ; /BBS/	For the BBS, be sure there is an authorized device in the file spec
 
-fparse::save	<r3,r2,r1>
+fparse::save	^/r3,r2,r1/
 	mov	2(r5)	,r2		; output pointer
 	mov	@r5	,r1		; input pointer
 	mov	#er$fnm	,r0		; preset error reg in case
@@ -411,7 +411,7 @@ fparse::save	<r3,r2,r1>
 ;	tstb	(r2)+			; ..bump back past it, then..
 ;	movb	#':	,(r2)+		; ..replace just zapped colon
 30$:	clrb	@r2			; null terminate
-;x	calls	chkdev	,<2(r5)>	; check for a valid device
+;x	calls	chkdev	,^/2(r5)/	; check for a valid device
 ;x	tst	r0			; well?
 ;x	bne	80$			; nope..
 	br	70$			; take the whole input string
@@ -423,17 +423,17 @@ fparse::save	<r3,r2,r1>
 	dec	r2			; back up over null
 70$:	copyz	r1	,r2 ,#ln$max-4	; /62/ copy in file name, if any..
 	clr	r0			; success
-80$:	unsave	<r1,r2,r3>
+80$:	unsave	^/r1,r2,r3/
 	return
 
-
+	.page
 ;	.sbttl	Ensure the device called is authorized for access  ; /BBS/
 ;
 ; /BBS/ if you want access restrictions uncomment the code below,
 ;	along with filling in the device list as appropriate, then
 ;	uncomment the sho$dv routine in KRTSHO
 ;
-;chkdev::save	<r1,r2,r3,r4>
+;chkdev::save	^/r1,r2,r3,r4/
 ;	sub	#6	,sp		; allocate a temp buffer for the
 ;	mov	sp	,r1		; incoming device and point to it
 ;	copyz	@r5	,r1,#5		; dev name has four chars max + null
@@ -471,13 +471,13 @@ fparse::save	<r3,r2,r1>
 ;	br	70$			; and exit
 ;60$:	clr	r0			; no error
 ;70$:	add	#6	,sp		; pop local buffer
-;	unsave	<r4,r3,r2,r1>
+;	unsave	^/r4,r3,r2,r1/
 ;	return
 
-
+	.page
 	.sbttl	Is it wild?	; /BBS/ heavily hacked
 
-iswild::save	<r1>
+iswild::save	^/r1/
 	mov	@r5	,r1	; address of string to check
 	scan	#comma	,r1	; /62/ always call a comma delimiter wild
 	tst	r0		; /62/ find one?
@@ -510,10 +510,10 @@ iswild::save	<r1>
 	tstb	@r1		; a null?
 	bne	20$		; and bomb "DU5:" just a device, no file
 40$:	mov	#er$wld	,r0	; return wildcards not supported error
-50$:	unsave	<r1>
+50$:	unsave	^/r1/
 	return
 
-
+	.page
 	.sbttl	Open a file		; MTB$OP  20-Nov-86 14:56:59  BDN
 	.enabl	lsb
 
@@ -522,14 +522,14 @@ iswild::save	<r1>
 ;
 ;	input:	  (r5)	= address of .asciz file spec
 ;		 2(r5)	= logical unit number
-;		 4(r5)	= 0 to .lookup, <> to .enter
-;	output:	   r0	= if <>, error code
+;		 4(r5)	= 0 to .lookup, ^// to .enter
+;	output:	   r0	= if ^//, error code
 
 create::mov	#1	,r0		; say we want to create
 	br	10$			; and off to common code
 
 open::	clr	r0			; force .lookup for this ept
-10$:	save	<r1,r2,r3,r4,r5>	; /62/ condensed mtb$op into this..
+10$:	save	^/r1,r2,r3,r4,r5/	; /62/ condensed mtb$op into this..
 	mov	r0	,r2		; r2 saved, make it enter/lookup flag
 	mov	(r5)	,r1		; filespec address, .asciz
 	mov	2(r5)	,r4		; /62/ recover the lun to use
@@ -621,12 +621,12 @@ open::	clr	r0			; force .lookup for this ept
 	.purge	r4			; ensure the channel is released
 	mov	(r1)	,r0		; copy and exit
 130$:	add	#ln$max+2,sp		; /63/ pop stack
-140$:	unsave	<r5,r4,r3,r2,r1>	; /62/
+140$:	unsave	^/r5,r4,r3,r2,r1/	; /62/
 	return
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Clear attributes
 
 ;	input:	  r4	= lun*2 (word indexing)
@@ -636,7 +636,7 @@ clr.at:	clr	date.a(r4)		; /BBS/ creation date
 	clr	prot.a(r4)		; /BBS/ protected file
 	return
 
-
+	.page
 	.sbttl	Preset a file I/O channel to desired block and offset ; /BBS/
 
 ;	P R E W I N D
@@ -645,7 +645,7 @@ clr.at:	clr	date.a(r4)		; /BBS/ creation date
 ;		 2(r5)	= block number
 ;		 4(r5)	= byte offset in above block
 
-prewind::save	<r2,r3>
+prewind::save	^/r2,r3/
 	mov	@r5	,r2		; channel number please
 	asl	r2			; word indexing
 	mov	2(r5)	,blknum(r2)	; req'd block of the disk file
@@ -659,10 +659,10 @@ prewind::save	<r2,r3>
 	asl	r0			; convert words read to bytes
 	sub	r3	,r0		; don't count unused bytes..
 	mov	r0	,bufs(r2)	; save the record size
-10$:	unsave	<r3,r2>
+10$:	unsave	^/r3,r2/
 	return
 
-
+	.page
 	.sbttl	Reset a file I/O channel to the top	; /63/
 
 ;	R E W I N D
@@ -678,15 +678,15 @@ rewind::mov	@r5	,r0		; get the channel number (LUN)
 10$:	clr	r0			; no errors are possible
 	return				; bye
 
-
+	.page
 	.sbttl	Close a file		; /BBS/	merged flush(lun) into this
 
 ;	C L O S E
 ;
 ;	input:	 (r5)	= channel number to close
-;	output:	  r0	= if <>, mapped error code
+;	output:	  r0	= if ^//, mapped error code
 
-close::	save	<r4,r2>			; use r4, for calling clr.at
+close::	save	^/r4,r2/			; use r4, for calling clr.at
 	cmp	@r5	,#lun.ou	; is it the output file?
 	bne	10$			; nope
 	tst	skipfile		; ya, skipping this one?
@@ -716,9 +716,9 @@ close::	save	<r4,r2>			; use r4, for calling clr.at
 	movb	@#errbyt,r0		; it failed, get the error code
 	asl	r0			; word indexing
 	mov	wrierr(r0),r0		; map it into a global error code
-	save	<r0>			; save error
+	save	^/r0/			; save error
 	.close	@r5			; save what there is of it
-	unsave	<r0>			; restore error
+	unsave	^/r0/			; restore error
 	br	70$			; and go map it
 
 30$:	mov	@r5	,r4		; channel number
@@ -740,7 +740,7 @@ close::	save	<r4,r2>			; use r4, for calling clr.at
 	beq	50$			; no date was passed
 ; /62/	.sfdat	#rtwork	,#lun.at,#r50out,date.a(r4) ; set the date
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#lun.at+<34.*^o400>,@R0	; /62/ even though V4 can't run it
+	MOV	#lun.at+^/34.*^o400/,@R0	; /62/ even though V4 can't run it
 	MOV	#r50out	,2.(R0)		; /62/
 	MOV	date.a(r4),4.(R0)	; /62/
 	EMT	^o375			; /62/
@@ -753,7 +753,7 @@ close::	save	<r4,r2>			; use r4, for calling clr.at
 	beq	60$			; nope..
 ; /62/	.fprot	#rtwork	,#lun.at,#r50out,#1 ; ya, set the protection
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#lun.at+<35.*^o400>,@R0	; /62/ even though V4 can't run it
+	MOV	#lun.at+^/35.*^o400/,@R0	; /62/ even though V4 can't run it
 	MOV	#r50out	,2.(R0)		; /62/
 	MOVB	#1	,4.(R0)		; /62/
 	EMT	^o375			; /62/
@@ -764,13 +764,13 @@ close::	save	<r4,r2>			; use r4, for calling clr.at
 	clr	bufp(r4)		; buffer_pointer[lun] := 0
 	clr	sizof(r4)		; no size please
 	call	clr.at			; clean out just used attributes
-	save	<r0>			; /62/ save error
+	save	^/r0/			; /62/ save error
 	.rctrlo				; make sure TT output is on
-	unsave	<r0>			; /62/ restore error
-	unsave	<r2,r4>			; and exit with error in r0
+	unsave	^/r0/			; /62/ restore error
+	unsave	^/r2,r4/			; and exit with error in r0
 	return
 
-
+	.page
 	.sbttl	Get next file to send	; /63/ moved here from KRTPAK
 
 ;	G E T N X T
@@ -778,10 +778,10 @@ close::	save	<r4,r2>			; use r4, for calling clr.at
 ;	input:	srcnam	= possibly wildcarded file name
 ;		index	= 0 if this is the first time through
 ;	output:	filnam	= next file to do
-;		 r0	= if <>, error code
+;		 r0	= if ^//, error code
 
-getnxt::save	<r1>
-	calls	lookup	,<#srcnam,#filnam> ; /62/
+getnxt::save	^/r1/
+	calls	lookup	,^/#srcnam,#filnam/ ; /62/
 	tst	r0			; did it work?
 	beq	30$			; yes
 	cmp	r0	,#er$nmf	; no more files matching name?
@@ -792,14 +792,14 @@ getnxt::save	<r1>
 	bne	30$			; yes, that's ok then
 	mov	#er$fnf	,r0		; no, convert er$nmf to er$fnf
 20$:	mov	r0	,-(sp)		; save lookup error
-	calls	syserr	,<r0,#errtxt>	; get the error text
-	calls	error	,<#3,#errtxt,#aspace,#filnam> ; /62/ include file name
+	calls	syserr	,^/r0,#errtxt/	; get the error text
+	calls	error	,^/#3,#errtxt,#aspace,#filnam/ ; /62/ include file name
 	.purge	#lun.sr			; /62/ dump search channel
 	mov	(sp)+	,r0		; restore saved error code from lookup
-30$:	unsave	<r1>
+30$:	unsave	^/r1/
 	return
 
-
+	.page
 	.sbttl	Get one character from a file
 
 ;	G E T C
@@ -811,14 +811,14 @@ getnxt::save	<r1>
 getc::	mov	@r5	,r0		; channel to use
 	.br	getcr0			; /63/ dispatch to desired routine
 
-
+	.page
 	.sbttl	Decide where to get the next character	; /63/ was in KRTPAK
 
 ;	G E T C R 0			; /38/ 06-Nov-85 11:22:14 BDN
 ;	T G E T C R
 ;
 ;	Passed:	  r0	= lun
-;	Return:	  r0	= if <>, error code (generally er$eof)
+;	Return:	  r0	= if ^//, error code (generally er$eof)
 ;		  r1	= character just read
 ;
 ;	GETCR0  is  the lowest level entry point called in Kermit to
@@ -849,7 +849,7 @@ tgetcr::tst	tgetaddr		; /38/ have we ever been initted?
 	clr	getcroutine		; /62/ reset to file reading please
 20$:	return
 
-fgetcr0:save	<r3>
+fgetcr0:save	^/r3/
 10$:	mov	r0	,r3		; save the channel number please
 	call	.getc			; get the next char please
 	tst	r0			; did the read work?
@@ -862,10 +862,10 @@ fgetcr0:save	<r3>
 	asr	r3			; get original channel back
 	mov	r3	,r0		; setup the correct call format
 	br	10$
-20$:	unsave	<r3>
+20$:	unsave	^/r3/
 	return
 
-.getc:	save	<r2,r3>
+.getc:	save	^/r2,r3/
 	mov	r0	,r2		; channel number please
 	mov	r0	,r1		; for the .readw please
 	asl	r2			; word indexing
@@ -904,10 +904,10 @@ fgetcr0:save	<r3>
 50$:	movb	@#errbyt,r0		; get the error code
 	asl	r0			; word indexing
 	mov	reaerr(r0),r0		; map it
-60$:	unsave	<r3,r2>
+60$:	unsave	^/r3,r2/
 	return
 
-
+	.page
 	.sbttl	Read a record from a sequential file
 
 ;	G E T R E C
@@ -921,7 +921,7 @@ fgetcr0:save	<r3>
 ;	Read the next record from a disk file, up to 4(r5) bytes
 ;	in length.  GETREC assumes text (stream	ascii) file only.
 
-getrec::save	<r2,r3,r4>
+getrec::save	^/r2,r3,r4/
 	clr	r4			; recordsize := 0
 	mov	@r5	,r3		; the recordbuffer address
 	mov	4(r5)	,r2		; the recordbuffer size
@@ -951,10 +951,10 @@ getrec::save	<r2,r3,r4>
 	clr	r1			; say no data are there at all
 	br	40$
 30$:	mov	r4	,r1		; return the record length
-40$:	unsave	<r4,r3,r2>
+40$:	unsave	^/r4,r3,r2/
 	return
 
-
+	.page
 	.sbttl	Put a single character to a file
 
 ;	P U T C
@@ -965,15 +965,15 @@ getrec::save	<r2,r3,r4>
 ;	Buffer single character I/O to internal disk buffer or terminal.
 ;	Buffer is allocated by CREATE and dumped to disk when it becomes full.
 
-putc::	save	<r1>			; simply save r1 and call putcr0
+putc::	save	^/r1/			; simply save r1 and call putcr0
 	mov	2(r5)	,r1		; putcr0 will be somewhat faster
 	clr	r0			; to call directly due to the
 	bisb	@r5	,r0		; overhead involved in setting
 	call	putcr0			; up an argument list
-	unsave	<r1>
+	unsave	^/r1/
 	return
 
-putcr0::save	<r1,r2,r3,r4>		; r0 = input_char, r1 = lun
+putcr0::save	^/r1,r2,r3,r4/		; r0 = input_char, r1 = lun
 	mov	r1	,r2		; channel number
 	asl	r2			; word indexing
 	cmp	bufp(r2),bufsiz(r2)	; is the buffer full?
@@ -1009,10 +1009,10 @@ putcr0::save	<r1,r2,r3,r4>		; r0 = input_char, r1 = lun
 60$:	movb	@#errbyt,r0		; get the error code
 	asl	r0			; word indexing
 	mov	wrierr(r0),r0		; map it
-70$:	unsave	<r4,r3,r2,r1>
+70$:	unsave	^/r4,r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	Put a record to a sequential file
 
 ;	P U T R E C
@@ -1025,7 +1025,7 @@ putcr0::save	<r1,r2,r3,r4>		; r0 = input_char, r1 = lun
 ;	assumes:    the record written will have a CR/LF appended unless
 ;		    the file type is not text or if writing to a terminal
 
-putrec::save	<r1,r2,r3>
+putrec::save	^/r1,r2,r3/
 	mov	2(r5)	,r2		; the size of the I/O
 	mov	@r5	,r3		; the buffer address
 	mov	4(r5)	,r1		; the channel number please
@@ -1060,13 +1060,13 @@ putrec::save	<r1,r2,r3>
 	bne	40$			; /62/ yes, exit asap
 	mov	#lf	,r0		; and at last the line feed
 	call	putcr0			; /62/ error here falls thru anyway..
-40$:	unsave	<r3,r2,r1>
+40$:	unsave	^/r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	Suspend the mainline program	; /62/ cleaned up..
 
-suspen::save	<r2,r1>
+suspen::save	^/r2,r1/
 	clr	r0			; start with no error in case no wait
 	mov	@r5	,r1		; sleep time in seconds
 	beq	10$			; nothing, must be fractional
@@ -1084,16 +1084,16 @@ suspen::save	<r2,r1>
 	br	50$
 40$:	mov	#er$que	,r0		; only error possible
 50$:	cmp	(sp)+	,(sp)+		; pop twait time buffer
-60$:	unsave	<r1,r2>
+60$:	unsave	^/r1,r2/
 	return
 
-
+	.page
 	.sbttl	Reset the keypad	; /BBS/ added
 
 kp.clr::wrtall	#kp.res			; dump reset string to terminal
 	return
 
-
+	.page
 	.sbttl	Logout
 
 logout::tst	tsxsav			; /45/ does this make sense?
@@ -1108,7 +1108,7 @@ logout::tst	tsxsav			; /45/ does this make sense?
 	clr	r0			; /45/ must be zero
 	.exit				; /45/ try to logout on TSX+
 
-
+	.page
 	.sbttl	Exit to KMON
 
 exit::	tst	sl.on			; is SL on?
@@ -1122,7 +1122,7 @@ exit::	tst	sl.on			; is SL on?
 	clr	r0			; do a hard .exit
 	.exit				; bye..
 
-
+	.page
 	.sbttl	Control C AST
 
 	.save
@@ -1161,7 +1161,7 @@ ccast:	tst	ccflag			; /51/ was there a ^C typed?
 
 	.restore
 
-
+	.page
 	.sbttl	Main error handler	; /BBS/ somewhat modified
 
 ; /BBS/ moved this to the root, so it can be called from anywhere,
@@ -1170,7 +1170,7 @@ ccast:	tst	ccflag			; /51/ was there a ^C typed?
 direr$::mov	r0	,-(sp)		; don't destroy r0
 	mov	4(sp)	,r0		; recover error code
 	beq	30$			; error 0 is a nop
-	calls	syserr	,<r0,#errtxt>	; get appropriate error message
+	calls	syserr	,^/r0,#errtxt/	; get appropriate error message
 	tst	cmdlun			; indirect command file running?
 	beq	10$			; nope..
 	mov	r0	,tk.err		; ya, flag and save the error
@@ -1186,7 +1186,7 @@ direr$::mov	r0	,-(sp)		; don't destroy r0
 	tst	(sp)+			; words by not doing this in the macro
 	return
 
-
+	.page
 	.sbttl	Increment status	; /BBS/ added this
 
 ;	This kludge is provided because RT-11XM for some reason loses

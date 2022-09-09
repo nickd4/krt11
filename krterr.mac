@@ -19,9 +19,9 @@
 ;
 ;	Copyright 1984 Change Software, Inc.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 
 	.psect	$pdata
@@ -146,7 +146,7 @@
 
 	maxerr	=	 162		; must be abs(maxerr)
 
-
+	.page
 	.sbttl	Error messages mapped
 
 errmap:	.word	baderr		; come here when error doesn't map
@@ -283,7 +283,7 @@ errmap:	.word	baderr		; come here when error doesn't map
 baderr:	.asciz	"Unknown error  r0 = "
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Error message generator	; /BBS/ somewhat changed..
 
@@ -298,7 +298,7 @@ baderr:	.asciz	"Unknown error  r0 = "
 ;	.even
 ;	.restore
 
-syserr::save	<r0,r1,r2>
+syserr::save	^/r0,r1,r2/
 	mov	#baderr	,r1		; preset bad error text
 	mov	2(r5)	,r2		; pointer for err msg out buff
 
@@ -343,11 +343,11 @@ syserr::save	<r0,r1,r2>
 	cmp	(sp)+	,#baderr	; is it "unknown error call" ?
 	bne	90$			; no
 	movb	#'<	,-1(r2)		; yes, put "<" where null wuz
-	calls	l$otoa	,<r2,2(r5)>	; convert octal number to ascii
+	calls	l$otoa	,^/r2,2(r5)/	; convert octal number to ascii
 	add	#6	,r2		; skip past the converted number
 	movb	#'>	,(r2)+		; terminate the string
 	clrb	(r2)			; finally, .asciz please
-90$:	unsave	<r2,r1,r0>
+90$:	unsave	^/r2,r1,r0/
 	return
 
 	.end

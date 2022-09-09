@@ -1,6 +1,6 @@
 	.title	KRTCMD	Kermit-11 main loop, commands calling O:1 or APR4
 
-	.macro	krt.id	RLS=V03	,VER=63	,PAT=0	,LASTED=<27-Sep-97>
+	.macro	krt.id	RLS=V03	,VER=63	,PAT=0	,LASTED=^/27-Sep-97/
 	.ident	"'RLS'.'VER'"
 
 	.ASECT
@@ -12,13 +12,13 @@
 	.psect	$pdata
 sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 	.iif ne	'PAT'.	.ascii	"-'PAT'" ; /62/ from blowing up SHOW VERSION
-	.asciz	"  Last edit: 'LASTED'"<cr><lf>	; max string length = ln$max
+	.asciz	"  Last edit: 'LASTED'"^/cr/^/lf/	; max string length = ln$max
 	.even
 	.endm	krt.id
 
 	krt.id			; /62/ stuff the above in..
 
-
+	.page
 ;	Brian Nelson  01-Dec-83  13:19:14
 ;
 ;	Change Software, Toledo, Ohio
@@ -79,11 +79,11 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;
 ;  KRTKM  - add SPFUNs to support Xmodem compatibly with the TSX CL handler:
 ;
-;		CLSET	<250>	Set CL options (binin and binout only)
-;		CLRSET	<251>	Clear CL options (binin and binout only)
-;		CLIPND	<261>	Get number of input chars pending
-;		CLWBYT	<263>	Write with byte count
-;		CLCHAR	<266>	Get CL characteristics (options flags only)
+;		CLSET	^/250/	Set CL options (binin and binout only)
+;		CLRSET	^/251/	Clear CL options (binin and binout only)
+;		CLIPND	^/261/	Get number of input chars pending
+;		CLWBYT	^/263/	Write with byte count
+;		CLCHAR	^/266/	Get CL characteristics (options flags only)
 ;
 ;	    added .br macro for clarity.
 ;
@@ -158,7 +158,7 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;  typographical errors in the comments or such that their object code
 ;  remains essentially unchanged.
 
-
+	.page
 ; /62/	V03.62-8  27-Jul-1993  by Billy Youdelman
 ;
 ;  This edit is mostly bug fixes for V03.61, and some enhancements, as below:
@@ -326,7 +326,7 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;  typographical errors in the comments or such that their object code
 ;  remains essentially unchanged.
 
-
+	.page
 ;  /BBS/  V03.61  3-Dec-1991  by Billy Youdelman
 ;
 ;  The following work was done primarily to support the use of Kermit-11 on
@@ -404,7 +404,7 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;	    of dispatching I/O with "%." prefixing routine names..
 ;
 ;	    xmode flag used to clean up xreply display by suppressing packet
-;	    log display when either side's blo <>1 forces a send file init
+;	    log display when either side's blo ^//1 forces a send file init
 ;
 ;	    send file asfile error handling improved, get file asfile now
 ;	    shares some of the above code.  one may GET/SEND [DEV:]FILE DEV:
@@ -670,7 +670,7 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;	    fixed non-init'd repeat count reg bug in bufunpack
 ;
 ;  KRTREC - rfil.x: put "Remote server response:" here so it displays even
-;	    when blo <>1.  also set image=binary here so typing 8-bit
+;	    when blo ^//1.  also set image=binary here so typing 8-bit
 ;	    files doesn't die on checksum error when clrpar hoses hi bits
 ;
 ;	    rfil.f: check asname here (instead of rfil.d), also fixed so
@@ -884,7 +884,7 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;  KRTXMO - added xmodem..  this is currently send only from here via the
 ;	    connected terminal line (no handler support)
 
-
+	.page
 ; /BBS/	Non-relevant edits (other operating systems) have been pulled below..
 
 ; 60 21-Mar-89	00:00:00  K11DIA.MAC	Completed definition of DF224 modem
@@ -1381,15 +1381,15 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;					of zero for the timeout (CMS Kermit?)
 ;	01 08-Jan-84  K11CMD	BDN	fix SET PARITY
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.CMKT	,.PURGE	,.RCTRLO,.TWAIT	; /62/
 
-
+	.page
 	.sbttl	Local data		; /63/
 
 	.psect	$pdata
@@ -1397,7 +1397,7 @@ fifteen:.word	0 ,15			; /62/ 15 ticks for .twait
 ;nosub:	.byte	0 ,152			; /BBS/ disable subprocess access
 ;	.word	'H
 ;	.word	0
-caratc:	.asciz	"^C"<cr><lf>		; /62/ something to echo
+caratc:	.asciz	"^C"^/cr/^/lf/		; /62/ something to echo
 cmd.01:	.ascii	"Kermit-11 for "	; for SHOW VERSION
 	.if df	NONEIS			; include which
 	.ascii	"NON"			; instruction set
@@ -1407,14 +1407,14 @@ cmd.02:	.asciz	"XB,XM,ZB,ZM"
 cmd.03:	.asciz	"FB,SB,SJ"
 cmd.04:	.asciz	"/TSX-Plus  "
 cmd.05:	.asciz	" failed at line #"	; error message
-cmd.06:	.asciz	':'<cr><lf>'  "'	; line number tag & top of next line
-cmd.07:	.asciz	'"'<cr><lf>'  '		; end of line & top of following line
-cmd.08:	.asciz	" closed"<cr><lf>	; take file is closed
+cmd.06:	.asciz	':'^/cr/^/lf/'  "'	; line number tag & top of next line
+cmd.07:	.asciz	'"'^/cr/^/lf/'  '		; end of line & top of following line
+cmd.08:	.asciz	" closed"^/cr/^/lf/	; take file is closed
 cmdch:	.asciz	"_ABCDEFGHIJKLMNOPQRSTUVWXYZ-@0123456789." ; /63/ legal chars
 comment:.byte	scolon ,'! ,0		; /63/ comment delimiters list
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Init the program
 
@@ -1429,7 +1429,7 @@ kermit::mov	#stack	,sp		; initialize a large stack
 10$:	call	binini			; load binary-types list into buffer
 	br	NEW10$			; /BBS/ skip over ^C's newline
 
-
+	.page
 	.sbttl	CCAST returns here	; /62/ moved all this to mainline
 
 cmdloop::.cmkt	#rtwork	,#40		; in case not coming from ccast
@@ -1460,13 +1460,13 @@ cmdloop::.cmkt	#rtwork	,#40		; in case not coming from ccast
 	mov	bufsiz+0,r0		; and size
 40$:	clrb	(r4)+			; for i := 1 to bufsiz
 	sob	r0	,40$		;   do buffer[i] := chr(0)
-	calls	close	,<#lun.in>	; hose input channel
+	calls	close	,^/#lun.in/	; hose input channel
 	clr	inopn			; reset its flag
-	calls	close	,<#lun.ou>	; hose output channel
+	calls	close	,^/#lun.ou/	; hose output channel
 	.purge	#lun.ou			; /62/ in case close chokes..
 	clr	outopn			; reset its flag
 ; /BBS/	note the log file (lun.log) remains open..
-	calls	close	,<#lun.ta>	; hose command file channel
+	calls	close	,^/#lun.ta/	; hose command file channel
 	clr	cmdlun			; reset its flag
 	clr	tk.err			; done with this now
 	clr	sy.ini			; ditto
@@ -1475,7 +1475,7 @@ cmdloop::.cmkt	#rtwork	,#40		; in case not coming from ccast
 	clr	dirflg			; /62/ reset embedded blanks flag
 	.br	NEW10$			; /63/ fall through to NEW10$
 
-
+	.page
 	.sbttl	Kermit main_program_loop
 
 NEW10$:	clr	cccnt			; no ^Cs typed yet
@@ -1513,10 +1513,10 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 	bne	NEW10$			; /62/ no
 	jmp	cmdloop			; /62/ ya
 
-
+	.page
 	.sbttl	Parse errors or EOF come here
 
-40$:	save	<r0>			; /BBS/ save error from above
+40$:	save	^/r0/			; /BBS/ save error from above
 	cmp	r0	,#cmd$bad	; /BBS/ come here on ^C/^Z abort?
 	bhi	60$			; /62/ ya, don't run a take file!
 	mov	cmdbuf	,r4		; /BBS/ pointer to command buffer
@@ -1551,7 +1551,7 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 ;	movb	#':	,(r0)+		; /BBS/ tag it with a colon
 ;	clrb	@r0			; /BBS/ reterminate
 
-;80$:	calls	fparse	,<cmdbuf,#errtxt> ; /BBS/ this lets "LD" become "LD0"
+;80$:	calls	fparse	,^/cmdbuf,#errtxt/ ; /BBS/ this lets "LD" become "LD0"
 ;	tst	r0			; /BBS ..is it an authorized dev?
 ;	bne	90$			; /BBS/ nope..
 ;	tst	(sp)+			; /BBS/ dump now meaningless error reg
@@ -1559,7 +1559,7 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 ;	call	sho$yy			; /BBS/ and display the change
 ;	br	NEW10$			; /BBS/ back for more..
 
-90$:	unsave	<r0>			; /BBS/ pop err reg from getcmd, etc..
+90$:	unsave	^/r0/			; /BBS/ pop err reg from getcmd, etc..
 	cmp	r0	,#cmd$ex	; ^Z typed?
 	bne	100$			; no
 	jmp	c$exit			; yes, exit normally
@@ -1589,7 +1589,7 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 150$:	bisb	#fatal$	,@#userrb	; /62/ no, inform rest of the world
 	jmp	c$exit			; /62/ an error occured and exit..
 
-
+	.page
 	.sbttl	SHOW ALL		; /63/ here to call different overlays
 
 sho$all::.newline			; /63/ format display for readability
@@ -1601,12 +1601,12 @@ sho$all::.newline			; /63/ format display for readability
 10$:	call	sho$a1			; /63/ do remaining parameters
 	return
 
-
+	.page
 	.sbttl	Kludge to put new code in caller's overlay
 
 xxsdia::jmp	shodia			; /62/ SHOW DIAL
 
-
+	.page
 	.sbttl	The FINISH command
 
 c$fin::	call	ckremote
@@ -1618,19 +1618,19 @@ c$fin::	call	ckremote
 10$:	clr	r0			; /62/ error already handled
 	return
 
-
+	.page
 	.sbttl	The REMOTE command
 
 c$rem::	call	ckremote		; running as remote?
 	bcs	40$			; nope..
 	call	loarem			; get the remote command overlay in
-	calls	getcm0	,<argbuf,r0>	; and try it please
+	calls	getcm0	,^/argbuf,r0/	; and try it please
 	mov	r0	,r3		; /BBS/ save the index (can't use r1)
 	bmi	10$			; /BBS/ didn't find the remote command
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	40$			; /BBS/ ya
 	call	loarem			; get the overlay resident
-	calls	getcm1	,<argbuf,r0,r3>	; get any required args for command
+	calls	getcm1	,^/argbuf,r0,r3/	; get any required args for command
 	tst	r0			; now could we get command arguments?
 	bmi	10$			; /BBS/ no
 	call	lower			; /62/ SET FILE NAMING LOWER-CASE?
@@ -1647,7 +1647,7 @@ c$rem::	call	ckremote		; running as remote?
 30$:	direrr	r0			; /62/ report the error
 40$:	return
 
-
+	.page
 	.sbttl	REMOTE command sub-routines
 
 rmtcop::call	gettwo			; ensure both arguments are here
@@ -1675,7 +1675,7 @@ lower:	tst	locase			; /BBS/ SET FIL NAM LOWER-CASE?
 	upcase	argbuf			; /BBS/ no, make it upper case
 10$:	return
 
-
+	.page
 	.sbttl	Shared parse routine	; /BBS/ almost all new
 
 isitas::mov	csi.fake,nextone	; /62/ use fake csi comma parsing?
@@ -1691,7 +1691,7 @@ isitas::mov	csi.fake,nextone	; /62/ use fake csi comma parsing?
 	mov	#er$fnm	,r0		; no, emit an
 	br	50$			; error message
 10$:	mov	sp	,wasmore	; for display formatting
-20$:	calls	fixwild	,<r1>		; make "?" into "%"
+20$:	calls	fixwild	,^/r1/		; make "?" into "%"
 	mov	#srcnam	,r2		; destination address
 	clrb	asname			; not renaming yet..
 30$:	tstb	@r1			; end of the line today?
@@ -1704,7 +1704,7 @@ isitas::mov	csi.fake,nextone	; /62/ use fake csi comma parsing?
 	inc	r1			; found a space in the command line
 	tstb	@r1			; anything left?
 	beq	80$			; no
-	calls	iswild	,<#srcnam>	; check for wildcarding in name
+	calls	iswild	,^/#srcnam/	; check for wildcarding in name
 	tst	r0			; can't rename outfile if wildcarded
 	beq	60$			; no wildcard found
 50$:	direrr	r0			; display error..
@@ -1713,15 +1713,15 @@ isitas::mov	csi.fake,nextone	; /62/ use fake csi comma parsing?
 60$:	strcpy	#asname	,r1		; 1st arg not wildcard, copy 2nd arg
 	mov	rawfil	,-(sp)		; save current setting
 	clr	rawfil			; enable namcvt
-	calls	namcvt	,<r1,#spare1>	; dump everything but "file.typ"
+	calls	namcvt	,^/r1,#spare1/	; dump everything but "file.typ"
 	tstb	spare1			; anything left?
 	bne	70$			; ya, continue
-	calls	namcvt	,<#srcnam,#spare1> ; no, get inp "file.typ" only
-	calls	fixfil	,<#spare1,#errtxt> ; truncate rec'd names, send is ok
+	calls	namcvt	,^/#srcnam,#spare1/ ; no, get inp "file.typ" only
+	calls	fixfil	,^/#spare1,#errtxt/ ; truncate rec'd names, send is ok
 	strcat	#asname	,#errtxt	; concat in_file_name to out_dev
 
 70$:	mov	(sp)+	,rawfil		; back to where it wuz..
-	calls	iswild	,<#asname>	; ensure file name is ok
+	calls	iswild	,^/#asname/	; ensure file name is ok
 	tst	r0			; is it?
 	bne	50$			; no
 80$:	clrb	@r2			; ensure source name .asciz
@@ -1740,7 +1740,7 @@ chk.tt::strcpy	#errtxt	,(r5)		; /63/ make a temp copy of file name
 10$:	clr	r0			; /63/ not TT, thus no problem
 	return
 
-
+	.page
 	.sbttl	Get command from the attached terminal
 
 ;	G E T C M D
@@ -1762,17 +1762,17 @@ getcmd:	clrb	@argbuf			; ensure argument buffer is cleared
 10$:	clr	cmdnum			; init command index number
 	.rctrlo				; /BBS/ be sure one can see what's up
 	mov	cmdbuf	,r4		; point to the command buffer
-	calls	readcmd	,<r4,#prompt>	; get from current input stream
+	calls	readcmd	,^/r4,#prompt/	; get from current input stream
 	tst	r0			; and exit if it failed for whatever
 	bne	20$			; /BBS/ preserve r0, check for ^C, ^Z
-	calls	cvt$$	,<r4,r1,#cvtarg> ; remove junk
+	calls	cvt$$	,^/r4,r1,#cvtarg/ ; remove junk
 	tst	r0			; anything left?
 	beq	10$			; no, reprompt and try again
 	add	cmdbuf	,r0		; ya, point to the end of it all
 	clrb	@r0			; and make it .asciz
 	mov	sp	,pf2$ok		; /BBS/ so PF2 can't eat overlays
 	call	loacmd			; get the command list overlay
-	calls	getcm0	,<r4,r0>	; search for the command
+	calls	getcm0	,^/r4,r0/	; search for the command
 	mov	r1	,cmdadr		; store address of routine away
 	mov	r0	,cmdnum		; store index of command away
 	mov	r0	,r3		; did we actually find a command?
@@ -1780,13 +1780,13 @@ getcmd:	clrb	@argbuf			; ensure argument buffer is cleared
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	20$			; /BBS/ ya
 	call	loacmd			; get the command list overlay
-	calls	getcm1	,<r4,r0,r3>	; now get the rest of the command line
+	calls	getcm1	,^/r4,r0,r3/	; now get the rest of the command line
 	tst	r0			; or prompt for extra
 	bmi	20$			; it didn't work
 	mov	cmdnum	,r0		; return command number
 20$:	return
 
-
+	.page
 	.sbttl	Get the next command	; /BBS/ heavily modified..
 
 ;	R E A D C M D
@@ -1810,7 +1810,7 @@ readcmd::mov	r2	,-(sp)
 
 40$:	clr	r2			; /62/ init temp KRT.INI running flag
 	inc	exstal			; increment command file line number
-	calls	getrec	,<@r5,#lun.ta,#ln$max> ; /62/ read the record in
+	calls	getrec	,^/@r5,#lun.ta,#ln$max/ ; /62/ read the record in
 	tst	r0			; did it work?
 	bne	90$			; nope..
 	mov	r1	,r0		; copy of length
@@ -1846,9 +1846,9 @@ readcmd::mov	r2	,-(sp)
 	wrtall	#cmd.05			; /63/ " failed at line #"
 	mov	exstal	,r0		; load line number
 	call	L10266			; dump it to TT
-	wrtall	#cmd.06			; /63/ ':'<cr><lf>'  "'
+	wrtall	#cmd.06			; /63/ ':'^/cr/^/lf/'  "'
 	wrtall	@r5			; append the offending string
-	wrtall	#cmd.07			; /63/ '"'<cr><lf>'  '
+	wrtall	#cmd.07			; /63/ '"'^/cr/^/lf/'  '
 110$:	wrtall	#errtxt			; now dump the error message
 	call	incsts			; /62/ flag the error here too..
 	.newline
@@ -1860,8 +1860,8 @@ readcmd::mov	r2	,-(sp)
 130$:	tst	infomsg			; really print the message?
 	beq	140$			; no
 	wrtall	#indnam			; use file name
-	wrtall	#cmd.08			; /63/ " closed"<cr><lf>
-140$:	calls	close	,<#lun.ta>	; close the file on any errors
+	wrtall	#cmd.08			; /63/ " closed"^/cr/^/lf/
+140$:	calls	close	,^/#lun.ta/	; close the file on any errors
 	clr	tk.err			; /62/ reset the take file error flag
 	clr	cmdlun			; /62/ next command is comming from TT
 	tst	status			; /62/ did an error occur?
@@ -1882,7 +1882,7 @@ readcmd::mov	r2	,-(sp)
 
 170$:	tst	mcrcmd			; did we ever look for a MCR> command?
 	bne	180$			; ya, just do a terminal read
-	calls	getmcr	,<@r5>		; no MCR> command yet, check for it
+	calls	getmcr	,^/@r5/		; no MCR> command yet, check for it
 	mov	r0	,r1		; did we get any characters there?
 	beq	180$			; no
 	wrtall	2(r5)			; print the prompt
@@ -1891,11 +1891,11 @@ readcmd::mov	r2	,-(sp)
 	clr	r0			; no error
 	br	190$
 
-180$:	calls	kbredi	,<2(r5),@r5>	; read a record from the terminal
+180$:	calls	kbredi	,^/2(r5),@r5/	; read a record from the terminal
 190$:	mov	(sp)+	,r2
 	return
 
-
+	.page
 	.sbttl	Find the command in the table
 
 ;	G E T C M 0
@@ -1913,7 +1913,7 @@ readcmd::mov	r2	,-(sp)
 ;		.word	address of command subroutine itself
 ;		.word	address of optional argument prompt (null if unused)
 
-getcm0::save	<r2,r3,r4>
+getcm0::save	^/r2,r3,r4/
 	clr	wasnul			; /45/ not null (ie, ?) anymore
 	mov	#4	,-(sp)		; /BBS/ number of names per line
 	mov	@r5	,r1		; the passed command buffer
@@ -1981,7 +1981,7 @@ getcm0::save	<r2,r3,r4>
 130$:	tst	.name(r4)		; anything left in the command list?
 	beq	170$			; no
 	strlen	.name(r4)		; get the length of the command name
-	calls	instr, <.name(r4),r0,@r5,r2> ; the next command?
+	calls	instr, ^/.name(r4),r0,@r5,r2/ ; the next command?
 	cmp	r0	,#1		; /39/ find anything?
 	bne	140$			; /39/ no
 	mov	r0	,@sp		; /39/ save it
@@ -2002,10 +2002,10 @@ getcm0::save	<r2,r3,r4>
 	bne	180$			; /39/ no
 	mov	#cmd$un	,r0		; /39/ yes, say so
 180$:	tst	(sp)+
-	unsave	<r4,r3,r2>
+	unsave	^/r4,r3,r2/
 	return
 
-
+	.page
 	.sbttl	Check for additional input needed
 
 ;	G E T C M 1
@@ -2017,7 +2017,7 @@ getcm0::save	<r2,r3,r4>
 ;	output:	  r0	= index of current command or < 0 for error
 ;		argbuf	= any additional input or rest of the command line
 
-getcm1::save	<r1,r2,r3>
+getcm1::save	^/r1,r2,r3/
 	sub	#ln$max+2,sp		; /BBS/ allocate a small buffer for
 	mov	sp	,r2		; /55/ saving the command prompt
 	tst	wasnul			; /45/ was the command for ?
@@ -2040,10 +2040,10 @@ getcm1::save	<r1,r2,r3>
 	mov	.cmdar(r3),r3		; get the argument prompt now
 	beq	40$			; /63/ no arg prompt for this command
 	strcpy	r2	,r3		; /55/ copy the prompt over now
-30$:	calls	kbredi	,<r2,argbuf>	; /55/ read a command from keyboard
+30$:	calls	kbredi	,^/r2,argbuf/	; /55/ read a command from keyboard
 	tst	r0			; get anything?
 	bne	50$			; read failed or ^C or ^Z typed
-	calls	cvt$$,<argbuf,r1,#cvtarg> ; remove junk
+	calls	cvt$$,^/argbuf,r1,#cvtarg/ ; remove junk
 	tst	r0			; is there anything left?
 	beq	30$			; no, reprompt and try again
 	mov	r0	,r1		; something is left, point to the
@@ -2056,19 +2056,19 @@ getcm1::save	<r1,r2,r3>
 	bne	60$			; /62/ no
 	mov	#cmd$nx	,r0		; /62/ ya, don't exit pgm from here
 60$:	add	#ln$max+2,sp		; /BBS/ pop the temp buffer
-	unsave	<r3,r2,r1>
+	unsave	^/r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	Null command, do nothing..
 
 nulcmd:	clr	r0			; /45/ no errors
 	return
 
-
+	.page
 	.sbttl	SHOW VERSION		; /63/ here so server can also call it
 
-sho$ve::calls	get$ve	,<#spare1>	; separate this from the actual
+sho$ve::calls	get$ve	,^/#spare1/	; separate this from the actual
 	wrtall	#spare1			; version string build so the
 	return				; server can get the same string..
 

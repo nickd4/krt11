@@ -157,7 +157,7 @@
 ;	Culver City, California  90232-1207
 ;	USA
 
-
+	.page
 	.sbttl	User settable parameters
 
 FLINE	=	    6.		; first primary line number to check
@@ -167,7 +167,7 @@ TIMOUT	=	   20.		; time out value, must match TIMOUT in TSGEN
 
 	; end of user settable parameters
 
-
+	.page
 	.mcall	.EXIT	,.GVAL	,.SERR	,.TWAIT
 	.enabl	lc
 
@@ -180,13 +180,13 @@ TIMOUT	=	   20.		; time out value, must match TIMOUT in TSGEN
 
 	.ASECT
 	. = 56
-	.if le	<NLINES-34.>		; if watching 34. or less lines
+	.if le	^/NLINES-34./		; if watching 34. or less lines
 	.word	1			; setsiz notail.sav/t:1
 	.iff				; if more than 34. (ya never know..)
 	.word	2			; setsiz notail.sav/t:2
 	.endc				; le NLINES-34.
 
-
+	.page
 	.psect
 	.sbttl	Initialization
 
@@ -217,7 +217,7 @@ notail:	.serr				; don't crash on an error
 	bcs	loop			; this doesn't work before V6.0
 	mov	r0	,tsxver		; save it
 
-
+	.page
 	.sbttl	Main loop		; search + destroy every 0.5 sec
 
 loop:	mov	#fline	,linno		; start at this line
@@ -232,7 +232,7 @@ loop:	mov	#fline	,linno		; start at this line
 	mov	r0	,addr		; save for peek
 	mov	#pkemt	,r0		; set up peek
 	emt	375			; get lcdtim register value
-	cmp	r0	,#timout	; if lcdtim<>timout DCD has gone away
+	cmp	r0	,#timout	; if lcdtim^//timout DCD has gone away
 	beq	40$			; if lcdtim=timout skip to next..
 
 	cmp	tsxver	,#630.		; will documented kill emt work?
@@ -258,7 +258,7 @@ loop:	mov	#fline	,linno		; start at this line
 	.twait	#area	,#time		; wait for lcdtim regs to be updated
 	br	loop
 
-
+	.page
 	.sbttl	Monitoring completion routine
 
 moncpl:	asl	r0			; word index and dump sys message bit
@@ -272,14 +272,14 @@ moncpl:	asl	r0			; word index and dump sys message bit
 	clr	flags(r0)		; clear flag for this line
 20$:	return				; that's it..
 
-
+	.page
 	.sbttl	Job monitor scheduling error
 
 errext:	movb	@#errbyt,r1		; get emt error code
 	add	#'0	,r1		; convert to ascii numeral
 	movb	r1	,errcod		; stuff into error message
 	mov	linno	,r1		; recover line number
-	mov	#<which+2>,r2		; get pointer to end of buffer
+	mov	#^/which+2/,r2		; get pointer to end of buffer
 	mov	#2	,r3		; setup for two loops
 10$:	clr	r0			; prepare for divide
 	div	#10.	,r0		; get value of digit
@@ -291,7 +291,7 @@ errext:	movb	@#errbyt,r1		; get emt error code
 	emt	375			; display error on system console
 	.exit				; then stop this program
 
-
+	.page
 	.sbttl	Data..
 
 area:	.blkw	2			; 2 word arg area for .twait
@@ -326,9 +326,9 @@ tsxver:	.word	0			; TSX version number
 yell:	.byte	1 ,127			; display text on
 	.word	1			; operator's console
 	.word	monerr			; what to send starts here
-monerr:	.ascii	<15><12><7>"?NOTAIL-F-Monitor EMT error #"
+monerr:	.ascii	^/15/^/12/^/7/"?NOTAIL-F-Monitor EMT error #"
 errcod:	.ascii	"0 for Line #"		; error # goes here
-which:	.asciz	"00"<15><12>		; line # goes here
+which:	.asciz	"00"^/15/^/12/		; line # goes here
 	.even
 
 	.end	notail

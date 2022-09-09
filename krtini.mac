@@ -46,9 +46,9 @@
 ;	are only called once per file transfer.  Placed into overlay
 ;	with KRTATR.  This was done to reduce the task size a bit.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	.mcall	.GTIM			; /62/
 
@@ -60,7 +60,7 @@
 a:	inc	reg			; next time, do next one
 	.endm	$chkb
 
-
+	.page
 	.sbttl	Misc defaults		; /63/ moved these here from KRTPAK
 
 	DEFDLY	=	  6.		; secs delay before SENDing a file
@@ -76,7 +76,7 @@ a:	inc	reg			; next time, do next one
 	MYRTMO	=	 10.		; /62/ RECEIVE default time-out
 	MYSTMO	=	 13.		; /62/ SEND default time-out
 
-
+	.page
 	.sbttl	Local data		; /63/ consolidated here..
 
 	.psect	$pdata
@@ -102,19 +102,19 @@ lmsg:	.asciz	"doesn't support or has disabled long packets"
 warn8m:	.asciz	"Eight-bit quoting forced on"
 
 $delim:	.asciz	"/"			; /63/ display format stuff
-$sendh:	.ascii	<cr><esc>"[2K"
+$sendh:	.ascii	^/cr/^/esc/"[2K"
 	.asciz	"Packets sent:            Naks:            Time-outs: "
-$rech:	.ascii	<cr><esc>"[2K"
+$rech:	.ascii	^/cr/^/esc/"[2K"
 	.asciz	"Packets received:            Naks:            Time-outs: "
-$pos0:	.asciz	<cr><esc>"[15C"		; /BBS/ cursor to column 15.
-$pos1:	.asciz	<cr><esc>"[19C"		; /BBS/ col 19.
-npos:	.asciz	<cr><esc>"[36C"		; /BBS/ col 36.
-npox:	.asciz	<cr><esc>"[32C"		; /BBS/ col 32.
-dpos:	.asciz	<cr><esc>"[58C"		; /BBS/ col 58.
-dpox:	.asciz	<cr><esc>"[54C"		; /BBS/ col 54.
+$pos0:	.asciz	^/cr/^/esc/"[15C"		; /BBS/ cursor to column 15.
+$pos1:	.asciz	^/cr/^/esc/"[19C"		; /BBS/ col 19.
+npos:	.asciz	^/cr/^/esc/"[36C"		; /BBS/ col 36.
+npox:	.asciz	^/cr/^/esc/"[32C"		; /BBS/ col 32.
+dpos:	.asciz	^/cr/^/esc/"[58C"		; /BBS/ col 58.
+dpox:	.asciz	^/cr/^/esc/"[54C"		; /BBS/ col 54.
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Initialize ourselves	; /62/ rearranged for clarity..
 
@@ -124,7 +124,7 @@ kerini::mov	#rwdata	,r0		; first of all, clear all read/write
 	sob	r1	,10$		;  do data[i] := 0
 
 	mov	sp	,doauto		; default to checking file attributes
-	mov	#<at.all!at.on>	,doattr	; /63/ and doing all file attributes
+	mov	#^/at.all!at.on/	,doattr	; /63/ and doing all file attributes
 	mov	sp	,setrpt		; assume we will do repeat counts
 	mov	sp	,dolong		; /62/ we want long packets if doable
 	mov	#myrtmo	,rectim		; /62/ default receive time-out
@@ -148,7 +148,7 @@ kerini::mov	#rwdata	,r0		; first of all, clear all read/write
 	mov	#defdly	,sendly		; init the delay for send command
 
 	mov	#ctlflgs,r0		; /63/ ctrl char processing list top
-	mov	#<1.+32.+1.+32.>,r1	; /63/ list is this many bytes long
+	mov	#^/1.+32.+1.+32./,r1	; /63/ list is this many bytes long
 20$:	incb	(r0)+			; /63/ init each one as must quote
 	sob	r1	,20$		; /63/
 
@@ -161,7 +161,7 @@ kerini::mov	#rwdata	,r0		; first of all, clear all read/write
 	mov	#ini.00	,r3		; try to open an init file somewhere
 30$:	tst	@r3			; any more to try?
 	beq	40$			; no
-	calls	open	,<(r3)+,#lun.ta,#text> ; ya, see if it's there
+	calls	open	,^/(r3)+,#lun.ta,#text/ ; ya, see if it's there
 	tst	r0			; did the open work?
 	bne	30$			; no, just ignore it
 	mov	#lun.ta	,cmdlun		; yes, setup for reading from init
@@ -175,7 +175,7 @@ kerini::mov	#rwdata	,r0		; first of all, clear all read/write
 	call	l$nolf			; /BBS/ just a CR unless TT is NOSCOPE
 40$:	return
 
-
+	.page
 	.sbttl	Setup defaults for our SINIT parameters
 
 ; NOTE:	the SENPAR and CONPAR buffers are zeroed at the top of KERINI thus
@@ -220,7 +220,7 @@ sparini:mov	#senpar	,r1		; where to put them
 	mov	#maxlng	,senlen		; /62/ make SET SEND PAC the max too..
 30$:	return
 
-
+	.page
 	.sbttl	Setup defaults for other Kermit's SINIT parameters
 
 rparini:mov	#conpar	,r1		; where to put them
@@ -235,14 +235,14 @@ rparini:mov	#conpar	,r1		; where to put them
 	movb	#space	,(r1)		; 10 assume no repeat count processing
 	return
 
-
+	.page
 	.sbttl	Read other Kermit's SINIT parameters
 
 ;	input:	 (r5)	= address of packet
 ;		2(r5)	= packet length
 ;	output:	CONPAR[0..20] list of parameters
 
-rpar::	save	<r0,r1,r2,r3,r4>
+rpar::	save	^/r0,r1,r2,r3,r4/
 	mov	#conpar	,r2		; /62/ pointer to conpar buffer
 	mov	#20	,r0		; /62/ its length
 10$:	clrb	(r2)+			; /62/ clear out any old data
@@ -346,7 +346,7 @@ rpar::	save	<r0,r1,r2,r3,r4>
 	beq	120$			; /BBS/ no
 	tst	msgtim			; /BBS/ ya, is this a new transaction?
 	bne	120$			; /62/ no, continue..
-	calls	printm	,<#2,#prefix,#cando> ; /BBS/ ya, say it is possible..
+	calls	printm	,^/#2,#prefix,#cando/ ; /BBS/ ya, say it is possible..
 	br	110$			; /62/ go set msg given flag, continue
 
 80$:	bitb	#capa.l	,p.capas(r1)	; /42/ can other end do long packets?
@@ -363,23 +363,23 @@ rpar::	save	<r0,r1,r2,r3,r4>
 	ble	120$			; /BBS/ no
 	tst	msgtim			; /43/ ya, say long-packets possible
 	bne	120$			; /43/ but please, NOT for every file
-	calls	printm	,<#2,#prefix,#lmsg> ; /BBS/ print a warning message
+	calls	printm	,^/#2,#prefix,#lmsg/ ; /BBS/ print a warning message
 110$:	mov	sp	,msgtim		; /43/ flag we printed a warning
-120$:	unsave	<r4,r3,r2,r1,r0>
+120$:	unsave	^/r4,r3,r2,r1,r0/
 	return
 
 warn8:	tst	warn8done		; /BBS/ done this yet?
 	bne	10$			; /BBS/ ya
-	calls	printm	,<#1,#warn8msg>	; /BBS/ warn 8-bit prefixing forced
+	calls	printm	,^/#1,#warn8msg/	; /BBS/ warn 8-bit prefixing forced
 	mov	sp	,warn8done	; /BBS/ flag warning has been given
 10$:	return
 
-
+	.page
 	.sbttl	Fill a buffer with my initialization parameters
 
 ;	input:	(r5)	= address of buffer to fill
 
-spar::	save	<r0,r1,r2>
+spar::	save	^/r0,r1,r2/
 	mov	@r5	,r2		; point to the destination
 	mov	#senpar	,r1		; and our local parameters
 
@@ -433,10 +433,10 @@ spar::	save	<r0,r1,r2>
 	tochar	(r1)+	,(r2)+		; /42/ senpar.capas+3 (maxlen2)
 
 60$:	clrb	(r2)			; /62/ end, null terminate
-	unsave	<r2,r1,r0>
+	unsave	^/r2,r1,r0/
 	return
 
-
+	.page
 	.sbttl	Restore set checksum type and init a few things
 
 fixchk::movb	setchkt	,senpar+p.chkt	; /62/ put SET BLO value back
@@ -447,7 +447,7 @@ fixchk::movb	setchkt	,senpar+p.chkt	; /62/ put SET BLO value back
 	clr	incpar			; /BBS/ reset parity warning counter
 	return
 
-
+	.page
 	.sbttl	Dump a debug packet to disk
 
 ;	D S K D M P
@@ -500,7 +500,7 @@ dskdmp::save				; /42/ save r0-r5
 	bit	#log$pa	,trace		; /BBS/ maybe only doing TT now?
 	beq	100$			; /BBS/ ya..
 	strlen	r1			; /BBS/ don't write extra blanks!
-	calls	putrec	,<r1,r0,#lun.lo> ; and put out to disk now
+	calls	putrec	,^/r1,r0,#lun.lo/ ; and put out to disk now
 	tst	r0			; /62/ did it work?
 	beq	50$			; /62/ ya
 	call	logerr			; /62/ no, handle the error
@@ -516,7 +516,7 @@ dskdmp::save				; /42/ save r0-r5
 	ble	80$			; /42/ yes
 	mov	#72.	,r0		; /42/ no
 80$:	call	170$			; /62/ indent 4 columns
-	calls	putrec	,<r3,r0,#lun.lo> ; /42/ dump a (partial) bufferful
+	calls	putrec	,^/r3,r0,#lun.lo/ ; /42/ dump a (partial) bufferful
 	tst	r0			; /62/ did it work?
 	beq	90$			; /62/ ya
 	call	logerr			; /62/ no, handle the error
@@ -545,7 +545,7 @@ dskdmp::save				; /42/ save r0-r5
 	inc	r1			; /BBS/ increment the byte counter
 	cmp	r1	,#72.		; /BBS/ done 72. chars yet?
 	ble	140$			; /BBS/ nope
-	.newline			; /BBS/ ya, do a <cr><lf>
+	.newline			; /BBS/ ya, do a ^/cr/^/lf/
 	clr	r1			; /BBS/ and reset the byte counter
 140$:	sob	r2	,110$		; /BBS/ continue
 	tst	r1			; /BBS/ need a newline?
@@ -561,16 +561,16 @@ dskdmp::save				; /42/ save r0-r5
 	movb	#space	,(r1)+		; /BBS/ stuff a space where null was
 	return
 
-170$:	save	<r2,r1,r0>		; /62/ added, dump 4 blanks to logfile
+170$:	save	^/r2,r1,r0/		; /62/ added, dump 4 blanks to logfile
 	mov	#4	,r2		; loop 4 times
 	mov	#lun.lo	,r1		; write to this channel
 180$:	mov	#space	,r0		; space is the char to write
 	call	putcr0			; do it
 	sob	r2	,180$		; until done
-	unsave	<r0,r1,r2>
+	unsave	^/r0,r1,r2/
 	return
 
-
+	.page
 	.sbttl	Init stats registers	; /62/ now includes clrsta
 
 inista::call	dcdtst			; /63/ check DCD, report any change
@@ -618,7 +618,7 @@ inista::call	dcdtst			; /63/ check DCD, report any change
 	clr	pcnt.t+0		; /44/ 32. bits here too
 	.br	incsta			; /63/
 
-
+	.page
 	.sbttl	Increment stats
 
 incsta::cmp	-(sp)	,-(sp)		; allocate two word buffer
@@ -655,10 +655,10 @@ incsta::cmp	-(sp)	,-(sp)		; allocate two word buffer
 	mov	r0	,times+0	; /43/ times+0 and times+2
 	return				; /43/
 
-
+	.page
 	.sbttl	Initialize repeat count for sending packets
 
-inirep::save	<r0>
+inirep::save	^/r0/
 	clr	dorpt			; assume not doing repeat things
 	tst	setrpt			; repeat count processing disabled?
 	beq	10$			; yes
@@ -675,10 +675,10 @@ inirep::save	<r0>
 	bne	10$			; no
 	movb	r0	,rptquo		; yes, save it and
 	mov	sp	,dorpt		; /62/ we are indeed doing this
-10$:	unsave	<r0>
+10$:	unsave	^/r0/
 	return
 
-
+	.page
 	.sbttl	Decide what to do about displaying packet counts
 
 dolog:	call	dcdtst			; /62/ check DCD, report any change
@@ -697,10 +697,10 @@ dolog:	call	dcdtst			; /62/ check DCD, report any change
 10$:	sec				; flag to skip stats display
 20$:	return				; /63/ or carry cleared by above tests
 
-
+	.page
 	.sbttl	Display received packets stats
 
-reclog::save	<r1>
+reclog::save	^/r1/
 	call	dolog			; decide what to do
 	bcs	10$			; do nothing
 	mov	pcnt.r+2,r1		; check for modulo on screen updates
@@ -711,7 +711,7 @@ reclog::save	<r1>
 	mov	vttype	,r0		; no, dispatch to the correct routine
 	asl	r0			; it's word indexing
 	jsr	pc	,@recdsp(r0)	; dispatch
-10$:	unsave	<r1>
+10$:	unsave	^/r1/
 	return
 
 	.save
@@ -722,7 +722,7 @@ recdsp:	.word	rectty	,rectty	,recvt1	,recvt1	,recvt1
 rectty:	mov	#pcnt.r	,r1		; /43/ pass address in r1
 	call	numout			; write the number to the terminal
 	wrtall	#$delim			; a "/" delimiter
-	mov	#pcnt.s+<4*<<'N&137>-100>>,r1 ; /43/ 32. bits this time
+	mov	#pcnt.s+<4*^?^/'N&137/-100?>,r1 ; /43/ 32. bits this time
 	cmp	2(r1)	,pcnt.n+2	; /43/ unlikely that the NAK
 	beq	10$			; /43/ count would ever be > 65535.
 	mov	2(r1)	,pcnt.n+2	; /43/ use low order 16 bits
@@ -744,14 +744,14 @@ recvt1:	tst	logini			; need the header?
 20$:	wrtall	#$pos1			; position the cursor
 	mov	#pcnt.r	,r1		; /43/ received packet count
 	call	numout			; dump it
-	mov	#pcnt.s+<4*<<'N&137>-100>>,r1 ; /43/ get the sent NAK count
+	mov	#pcnt.s+<4*^?^/'N&137/-100?>,r1 ; /43/ get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; /43/ really need to update NAKs?
 	beq	30$			; no
 	mov	2(r1)	,pcnt.n+2	; /43/ stuff low order 16 bits
 	wrtall	#npos			; /62/ put cursor where NAK count goes
 	call	numout			; print the NAK count
 30$:	; /BBS/ dotmo moved here
-	mov	#pcnt.r+<4*<<'T&137>-100>>,r1 ; /44/ get time-out count
+	mov	#pcnt.r+<4*^?^/'T&137/-100?>,r1 ; /44/ get time-out count
 	cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
 	beq	40$			; /44/ no, just exit
 	mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter
@@ -760,10 +760,10 @@ recvt1:	tst	logini			; need the header?
 40$:	call	l$nolf
 50$:	return
 
-
+	.page
 	.sbttl	Display sent packets stats
 
-senlog::save	<r1>
+senlog::save	^/r1/
 	call	dolog			; decide what to do
 	bcs	10$			; don't do anything
 	mov	pcnt.s+2,r1		; check for modulo on screen updates
@@ -774,7 +774,7 @@ senlog::save	<r1>
 	mov	vttype	,r0		; recover terminal type
 	asl	r0			; word indexing here
 	jsr	pc	,@sendsp(r0)	; dispatch based on terminal type
-10$:	unsave	<r1>
+10$:	unsave	^/r1/
 	return
 
 	.save
@@ -785,7 +785,7 @@ sendsp:	.word	sentty	,sentty	,senvt1	,senvt1	,senvt1
 sentty:	mov	#pcnt.s	,r1		; /43/ 32. bits now
 	call	numout			; write the number to the terminal
 	wrtall	#$delim			; a "/" delimiter
-	mov	#pcnt.r+<4*<<'N&137>-100>>,r1 ; get the sent NAK count
+	mov	#pcnt.r+<4*^?^/'N&137/-100?>,r1 ; get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; any change in count?
 	beq	10$			; no
 	mov	2(r1)	,pcnt.n+2	; ya, update it
@@ -807,14 +807,14 @@ senvt1:	tst	logini			; need the header?
 20$:	wrtall	#$pos0			; /BBS/ position the cursor
 	mov	#pcnt.s	,r1		; /43/ 32. bits now
 	call	numout			; write number on terminal
-	mov	#pcnt.r+<4*<<'N&137>-100>>,r1 ; get the sent NAK count
+	mov	#pcnt.r+<4*^?^/'N&137/-100?>,r1 ; get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; any change in count?
 	beq	30$			; no
 	mov	2(r1)	,pcnt.n+2	; ya, update it
 	wrtall	#npox			; /62/ for shortened send logging
 	call	numout			; write number on terminal
 30$:	; /BBS/ dotmo moved here
-	mov	#pcnt.r+<4*<<'T&137>-100>>,r1 ; /44/ get time-out count
+	mov	#pcnt.r+<4*^?^/'T&137/-100?>,r1 ; /44/ get time-out count
 	cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
 	beq	40$			; /44/ no, just exit
 	mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter
@@ -823,7 +823,7 @@ senvt1:	tst	logini			; need the header?
 40$:	call	l$nolf			; just a CR, unless TT is NOSCOPE
 50$:	return
 
-
+	.page
 	.sbttl	Display packet stats via ^A	; 9-Dec-86 07:46:02
 
 ; /56/	This is similar to the VMS Kermit's ^A status line, which is just like
@@ -858,10 +858,10 @@ cs.com:	call	l$nolf			; /62/ ensure stats are in the clear
 	clr	logini			; retype the display header
 	return
 
-
+	.page
 	.sbttl	Display a 32-bit number	; /43/
 
-numout:	save	<r0,r1,r2>
+numout:	save	^/r0,r1,r2/
 	sub	#20	,sp		; allocate a buffer please
 	mov	sp	,r0		; point to buffer for $cddmg
 	clr	r2			; kill leading zero and spaces
@@ -870,7 +870,7 @@ numout:	save	<r0,r1,r2>
 	mov	sp	,r0		; reset pointer
 	wrtall	r0			; dump the string
 	add	#20	,sp
-	unsave	<r2,r1,r0>
+	unsave	^/r2,r1,r0/
 	return
 
 	.end

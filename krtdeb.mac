@@ -18,9 +18,9 @@
 ;
 ;	21-May-84  22:07:50  Brian Nelson
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 
 	CHR	=	1		; string (byte) data
@@ -28,7 +28,7 @@
 
 	.macro	entry	name ,type ,size
 	.save
-	.if  b	<name>
+	.if  b	^/name/
 	.psect	$addr
 	.word	0
 	.iff
@@ -49,15 +49,15 @@
 	.restore
 	.endm	entry
 
-
+	.page
 	.sbttl	Local data			; /63/ consolidated here..
 
 	.psect	$pdata
 deb.01:	.word	pbyte ,pint
 deb.02:	.word	deb.03 ,deb.04
-deb.03:	.asciz	<tab>"Byte data, size"	; /BBS/ added tabs
-deb.04:	.asciz	<tab>"Word data, size"
-deb.05:	.asciz	<tab>"  Starting address: "
+deb.03:	.asciz	^/tab/"Byte data, size"	; /BBS/ added tabs
+deb.04:	.asciz	^/tab/"Word data, size"
+deb.05:	.asciz	^/tab/"  Starting address: "
 deb.06:	.asciz	"?KRTDEB-E-"			; /62/
 deb.07:	.asciz	"Symbol not in internal STB"	; /62/
 deb.08:	.asciz	"Bad octal value"		; /62/
@@ -71,7 +71,7 @@ togo:	.word	0			; /BBS/ number of bytes
 ascbuf:	.blkb	24			; /BBS/ ascii buffer for byte dump
 	.even
 
-
+	.page
 	.sbttl	Symbol name data table
 
 	.psect	$addr	,ro,d,lcl,rel,con
@@ -84,121 +84,121 @@ symtyp:
 symsiz:
 	.psect	$code
 
-	entry	<$image>, int, 1
-	entry	<$limit>, int, 2
-	entry	<albuff>, int, 1
-	entry	<argbuf>, int, 1
-	entry	<argpnt>, int, 1
-	entry	<asname>, chr, ln$max
-	entry	<at$len>, int, 1
-	entry	<at$sys>, chr, 2
-	entry	<b4speed>,int, 1
-	entry	<blknum>, int, 5
-	entry	<buflst>, int, 5
-	entry	<bufp>,   int, 5
-	entry	<bufs>,   int, 5
-	entry	<cc$max>, int, 1
-	entry	<chksiz>, int, 1
-	entry	<chktyp>, chr, 1
-	entry	<cl$line>,int, 1
-	entry	<cl.line>,int, 1
-	entry	<cl.pri>, int, 1
-	entry	<cl.r50>, int, 4
-	entry	<cl.unit>,int, 1
-	entry	<clkflg>, int, 1
-	entry	<cmdbuf>, int, 1
-	entry	<conpar>, chr, 20
-	entry	<context>,int, 1
-	entry	<date.a>, int, 5
-	entry	<do8bit>, int, 1
-	entry	<doattr>, int, 1
-	entry	<dorpt> , int, 1
-;	entry	<doslid>, int, 1
-	entry	<edists>, int, 1
-	entry	<ebquot>, chr, 1
-	entry	<errtxt>, chr, erbfsiz
-	entry	<fetpt>,  int, 1
-	entry	<fetptm>, int, 1
-	entry	<filnam>, chr, ln$max
-	entry	<filtyp>, int, 5
-	entry	<freept>, int, 1
-	entry	<hilimit>,int, 1
-	entry	<image>,  int, 1
-	entry	<imgtyp>, int, 1
-	entry	<index>,  int, 1
-	entry	<indnam>, chr, 16+2	; /63/
-	entry	<ininam>, chr, 16+2	; /63/
-	entry	<jobsts>, int, 10
-	entry	<jobtyp>, int, 1
-	entry	<km.lock>,int, 1
-	entry	<limits>, chr, 34.
-	entry	<linksts>,int, 1
-	entry	<logfil>, chr, 26+2	; /63/
-	entry	<lokdate>,int, 1
-	entry	<loklen>, int, 1
-	entry	<lokstat>,int, 1
-	entry	<loktime>,int, 1
-	entry	<maxtop>, int, 1
-	entry	<mcrcmd>, int, 1
-	entry	<mode>,   int, 5
-	entry	<modtype>,int, 1
-	entry	<montyp>, int, 1
-	entry	<mready>, int, 1
-	entry	<numtry>, int, 1
-	entry	<outlun>, int, 1
-	entry	<outopn>, int, 1
-	entry	<packet>, chr, $allsiz	; /BBS/
-	entry	<paknum>, int, 1
-	entry	<pcnt.r>, int, 2*34
-	entry	<pcnt.s>, int, 2*34
-	entry	<pnhead>, int, 1
-	entry	<prexon>, int, 1
-	entry	<prot.a>, int, 5
-	entry	<qedtst>, int, 1	; /63/
-	entry	<qu.ini>, int, 1
-	entry	<r50dev>, int, 4
-	entry	<r50out>, int, 4	; /63/
-	entry	<remote>, int, 1
-	entry	<restof>, int, 1
-	entry	<rptlast>,chr, 2	; /63/
-	entry	<rptquo>, chr, 2	; /63/
-	entry	<rptsave>,chr, 2	; /63/
-	entry	<rt11upd>,int, 1
-	entry	<rt11ver>,int, 1
-	entry	<rtwork>, int, 10
-	entry	<senwin>, int, 1
-	entry	<senpar>, chr, 20
-	entry	<size>,   int, 1
-	entry	<sizof>,  int, 5
-	entry	<snd8bit>,int, 1
-	entry	<spare1>, chr, 256.
-	entry	<sparsz>, int, 1
-	entry	<srcnam>, chr, ln$max
-	entry	<stklim>, chr, stksiz	; /62/ dump the stack, backwards!
-	entry	<time.a>, int, 5
-	entry	<times>,  int, 10	; /BBS/ wuz 4
-	entry	<totp.r>, int, 1	; pointer
-	entry	<totp.s>, int, 1	; pointer
-	entry	<tsxcl>,  int, 1
-	entry	<tsxsav>, int, 1
-	entry	<tsxver>, int, 1
-	entry	<tt$io>,  int, 1
-	entry	<ttbuf>,  int, ttbsiz+2
-	entry	<ttparm>, int, 1
-	entry	<ttpar2>, int, 1
-	entry	<undchr>, chr, 2
-	entry	<undlin>, chr, ln$max+2
-	entry	<vbgexe>, int, 1
-	entry	<xcdone>, int, 1
-	entry	<xkbuff>, chr, <xksize+2>
-	entry	<xklgbu>, int, 1
-	entry	<xkpoint>,int, 1
-	entry	<xl.lock>,int, 1
-	entry	<xmfetp>, int, 1
-	entry	<z.atch>, int, 1
+	entry	^/$image/, int, 1
+	entry	^/$limit/, int, 2
+	entry	^/albuff/, int, 1
+	entry	^/argbuf/, int, 1
+	entry	^/argpnt/, int, 1
+	entry	^/asname/, chr, ln$max
+	entry	^/at$len/, int, 1
+	entry	^/at$sys/, chr, 2
+	entry	^/b4speed/,int, 1
+	entry	^/blknum/, int, 5
+	entry	^/buflst/, int, 5
+	entry	^/bufp/,   int, 5
+	entry	^/bufs/,   int, 5
+	entry	^/cc$max/, int, 1
+	entry	^/chksiz/, int, 1
+	entry	^/chktyp/, chr, 1
+	entry	^/cl$line/,int, 1
+	entry	^/cl.line/,int, 1
+	entry	^/cl.pri/, int, 1
+	entry	^/cl.r50/, int, 4
+	entry	^/cl.unit/,int, 1
+	entry	^/clkflg/, int, 1
+	entry	^/cmdbuf/, int, 1
+	entry	^/conpar/, chr, 20
+	entry	^/context/,int, 1
+	entry	^/date.a/, int, 5
+	entry	^/do8bit/, int, 1
+	entry	^/doattr/, int, 1
+	entry	^/dorpt/ , int, 1
+;	entry	^/doslid/, int, 1
+	entry	^/edists/, int, 1
+	entry	^/ebquot/, chr, 1
+	entry	^/errtxt/, chr, erbfsiz
+	entry	^/fetpt/,  int, 1
+	entry	^/fetptm/, int, 1
+	entry	^/filnam/, chr, ln$max
+	entry	^/filtyp/, int, 5
+	entry	^/freept/, int, 1
+	entry	^/hilimit/,int, 1
+	entry	^/image/,  int, 1
+	entry	^/imgtyp/, int, 1
+	entry	^/index/,  int, 1
+	entry	^/indnam/, chr, 16+2	; /63/
+	entry	^/ininam/, chr, 16+2	; /63/
+	entry	^/jobsts/, int, 10
+	entry	^/jobtyp/, int, 1
+	entry	^/km.lock/,int, 1
+	entry	^/limits/, chr, 34.
+	entry	^/linksts/,int, 1
+	entry	^/logfil/, chr, 26+2	; /63/
+	entry	^/lokdate/,int, 1
+	entry	^/loklen/, int, 1
+	entry	^/lokstat/,int, 1
+	entry	^/loktime/,int, 1
+	entry	^/maxtop/, int, 1
+	entry	^/mcrcmd/, int, 1
+	entry	^/mode/,   int, 5
+	entry	^/modtype/,int, 1
+	entry	^/montyp/, int, 1
+	entry	^/mready/, int, 1
+	entry	^/numtry/, int, 1
+	entry	^/outlun/, int, 1
+	entry	^/outopn/, int, 1
+	entry	^/packet/, chr, $allsiz	; /BBS/
+	entry	^/paknum/, int, 1
+	entry	^/pcnt.r/, int, 2*34
+	entry	^/pcnt.s/, int, 2*34
+	entry	^/pnhead/, int, 1
+	entry	^/prexon/, int, 1
+	entry	^/prot.a/, int, 5
+	entry	^/qedtst/, int, 1	; /63/
+	entry	^/qu.ini/, int, 1
+	entry	^/r50dev/, int, 4
+	entry	^/r50out/, int, 4	; /63/
+	entry	^/remote/, int, 1
+	entry	^/restof/, int, 1
+	entry	^/rptlast/,chr, 2	; /63/
+	entry	^/rptquo/, chr, 2	; /63/
+	entry	^/rptsave/,chr, 2	; /63/
+	entry	^/rt11upd/,int, 1
+	entry	^/rt11ver/,int, 1
+	entry	^/rtwork/, int, 10
+	entry	^/senwin/, int, 1
+	entry	^/senpar/, chr, 20
+	entry	^/size/,   int, 1
+	entry	^/sizof/,  int, 5
+	entry	^/snd8bit/,int, 1
+	entry	^/spare1/, chr, 256.
+	entry	^/sparsz/, int, 1
+	entry	^/srcnam/, chr, ln$max
+	entry	^/stklim/, chr, stksiz	; /62/ dump the stack, backwards!
+	entry	^/time.a/, int, 5
+	entry	^/times/,  int, 10	; /BBS/ wuz 4
+	entry	^/totp.r/, int, 1	; pointer
+	entry	^/totp.s/, int, 1	; pointer
+	entry	^/tsxcl/,  int, 1
+	entry	^/tsxsav/, int, 1
+	entry	^/tsxver/, int, 1
+	entry	^/tt$io/,  int, 1
+	entry	^/ttbuf/,  int, ttbsiz+2
+	entry	^/ttparm/, int, 1
+	entry	^/ttpar2/, int, 1
+	entry	^/undchr/, chr, 2
+	entry	^/undlin/, chr, ln$max+2
+	entry	^/vbgexe/, int, 1
+	entry	^/xcdone/, int, 1
+	entry	^/xkbuff/, chr, ^/xksize+2/
+	entry	^/xklgbu/, int, 1
+	entry	^/xkpoint/,int, 1
+	entry	^/xl.lock/,int, 1
+	entry	^/xmfetp/, int, 1
+	entry	^/z.atch/, int, 1
 	entry
 
-
+	.page
 	.sbttl	EXAMINE data in memory
 
 c$exam::upcase	argbuf			; /63/ more appropriate name..
@@ -206,7 +206,7 @@ c$exam::upcase	argbuf			; /63/ more appropriate name..
 	blo	10$			; /45/ no
 	cmpb	@r0	,#'9		; /62/ numeric?
 	bhi	10$			; /45/ no
-	calls	octval	,<r0>		; /45/ yes, get the address
+	calls	octval	,^/r0/		; /45/ yes, get the address
 	tst	r0			; /BBS/ ok?
 	bne	50$			; /BBS/ nope
 	bic	#1	,r1		; /62/ ensure it's word aligned
@@ -244,12 +244,12 @@ c$exam::upcase	argbuf			; /63/ more appropriate name..
 70$:	clr	r0			; /62/
 	return
 
-
+	.page
 	.sbttl	Print symbol
 
 ;	input:	r0	offset
 
-prtsym:	save	<r0>
+prtsym:	save	^/r0/
 	sub	#20	,sp		; allocate a small text buffer
 	mov	sp	,r3		; and a pointer
 	mov	r0	,r5		; ensure we don't zap offset
@@ -268,10 +268,10 @@ prtsym:	save	<r0>
 	.newline
 	jsr	pc	,@deb.01-2(r4)	; /63/ call appropriate format routine
 	add	#20	,sp
-	unsave	<r0>
+	unsave	^/r0/
 	return
 
-
+	.page
 	.sbttl	Format byte data
 
 pbyte:	sub	#20	,sp		; a buffer to use today
@@ -285,7 +285,7 @@ pbyte:	sub	#20	,sp		; a buffer to use today
 	bisb	(r5)+	,r4		; without sign extension
 	clrb	(r1)			; /BBS/ prep to ..
 	bisb	r4	,(r1)		; /BBS/ ..copy sans sign extension
-	bicb	#^c<177>,(r1)		; /BBS/ hose hi bit
+	bicb	#^c^/177/,(r1)		; /BBS/ hose hi bit
 	cmpb	(r1)	,#space		; /BBS/ printable?
 	blt	30$			; /BBS/ no
 	cmpb	(r1)	,#177		; /BBS printable?
@@ -295,16 +295,16 @@ pbyte:	sub	#20	,sp		; a buffer to use today
 40$:	tstb	(r1)+			; /BBS/ save char, bump to next byte
 50$:	mov	r4	,r0		; copy it
 	ash	#-6	,r0		; get the high two bits now
-	bic	#^c<3>	,r0		; mask the lower bits please
+	bic	#^c^/3/	,r0		; mask the lower bits please
 	add	#'0	,r0		; convert
 	movb	r0	,(r2)+		; and copy
 	mov	r4	,r0		; copy it
 	ash	#-3	,r0		; get the high two bits now
-	bic	#^c<7>	,r0		; mask the lower bits please
+	bic	#^c^/7/	,r0		; mask the lower bits please
 	add	#'0	,r0		; convert
 	movb	r0	,(r2)+		; and copy
 	mov	r4	,r0		; copy it
-	bic	#^c<7>	,r0		; mask the lower bits please
+	bic	#^c^/7/	,r0		; mask the lower bits please
 	add	#'0	,r0		; convert
 	movb	r0	,(r2)+		; and copy
 	movb	#space	,(r2)+		; /BBS/ a trailing space
@@ -330,7 +330,7 @@ pbyte:	sub	#20	,sp		; a buffer to use today
 	wrtall	#ascbuf			; /BBS/ dump it to screen
 	return
 
-
+	.page
 	.sbttl	Format integer data
 
 pint:	mov	symsiz(r5),r1		; get the number of data elements
@@ -350,7 +350,7 @@ pint:	mov	symsiz(r5),r1		; get the number of data elements
 30$:	.newline
 40$:	return
 
-
+	.page
 	.sbttl	Locate symbol offset in index
 
 findsy:	clr	r3			; init index

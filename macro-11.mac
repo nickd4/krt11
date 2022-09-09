@@ -1,0 +1,42 @@
+; macros for DEC MACRO-11 compatibility
+
+	.macro	.ident str
+	.endm
+
+	.macro	.mcall a,b,c,d,e,f,g,h
+	.endm
+
+	.macro	.asect
+	.area	asect (abs)
+	.endm
+
+	.macro	.psect name,a,b,c,d,e,f,g,h
+	.area	name (rel,con)
+	.endm
+
+	.macro	.limit
+	.endm
+
+	.macro	call name
+	jsr	pc,name
+	.endm
+
+	.macro	return
+	rts	pc
+	.endm
+
+	.macro	.ntype result,mode
+	; only check register or constant for now
+	result = 67 ; pc-relative
+	.irpc	ch,^/mode/
+	.iif idn ^/ch/,# result = 27
+	.endm
+	.iif idn ^/mode/,r0 result = 0
+	.iif idn ^/mode/,r1 result = 1
+	.iif idn ^/mode/,r2 result = 2
+	.iif idn ^/mode/,r3 result = 3
+	.iif idn ^/mode/,r4 result = 4
+	.iif idn ^/mode/,r5 result = 5
+	.iif idn ^/mode/,sp result = 6
+	.iif idn ^/mode/,pc result = 7
+	.endm

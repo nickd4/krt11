@@ -39,7 +39,7 @@
 
 	KRTINC	=	1		; for .include error checking
 
-
+	.page
 	.psect	$code	,ro,i,lcl,rel,con ; psect ordering..
 	.psect	$pdata	,ro,d,lcl,rel,con
 
@@ -154,22 +154,22 @@
 	LN$MAX	=    132.	; /63/ max command line length
 	MAXLNG	=   1920.	; /63/ use max long-packet buff size
 	.endc
-	$ALLSIZ	= <MAXLNG+14>&177776 ; /62/ make it this for safety
+	$ALLSIZ	= ^/MAXLNG+14/&177776 ; /62/ make it this for safety
 
-
+	.page
 	.sbttl	Utility macros
 
 	.macro	.br to		; /63/ added
 	.if df	to
 	.if ne	to-.
-	.error	<; not at location to;>
+	.error	^/; not at location to;/
 	.endc
 	.endc
 	.endm	.br
 
 	.macro	.chksp	arg
 	.ntype	$$5	,arg
-	.iif eq <<$$5&7>-6> .error arg <; Illegal use of SP (r6) in call>
+	.iif eq ^?^/$$5&7/-6? .error arg ^/; Illegal use of SP (r6) in call/
 	.endm	.chksp
 
 	.macro	calls	name	,arglst
@@ -178,12 +178,12 @@
 ;	order specified.  r5 points to the sp before the call and is saved
 ;	and restored.
 	$$ = 0				; init # of args count
-	  .irp x ,<arglst>		; count up # of args passed
+	  .irp x ,^/arglst/		; count up # of args passed
 	  $$ = $$+1			; one at a time
 	  .endr				; got it
 	.if eq $$			; no args present?
 	jsr	pc	,name		; if so, substitute a simple call
-	.iff				; at least one arg in <arglst>
+	.iff				; at least one arg in ^/arglst/
 	mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
 	  .if eq $$-1			; is it one or more than one arg?
 	  .chksp	arglst		; one arg, check for legal SP modes
@@ -196,7 +196,7 @@
 	  $$2 = $$			; extract the args in
 	    .rept	$$		; reverse order so that
 	    $$1 = 0			; we might save a little
-	      .irp x ,<arglst>		; core (four words)
+	      .irp x ,^/arglst/		; core (four words)
 	      $$1 = $$1+1		; scan the arg list until we come to
 	        .if eq $$2-$$1		; the last one before one we just did
 	        .chksp	x		; check for SP addressing mode
@@ -208,8 +208,8 @@
 	    .endr
 	  mov	sp	,r5		; set up the argument list pointer
 	  jsr	pc	,name		; and go to the routine
-	  .iif eq <$$-2>  cmp	(sp)+	,(sp)+	; two args
-	  .iif gt <$$-2>  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	  .iif eq ^/$$-2/  cmp	(sp)+	,(sp)+	; two args
+	  .iif gt ^/$$-2/  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
 	  mov	(sp)+	,r5		; /63/ restore r5
 	  .endc
 	.endc
@@ -223,7 +223,7 @@
 	.endm	ctl
 
 	.macro	copyz	from ,to ,maxlen
-	.if  b	<maxlen>
+	.if  b	^/maxlen/
 	clr	-(sp)
 	.iff
 	mov	maxlen	,-(sp)
@@ -235,7 +235,7 @@
 
 	.macro	deccvt	val ,buf ,width
 	mov	r5	,-(sp)
-	.if  b	<width>
+	.if  b	^/width/
 	clr	-(sp)
 	.iff
 	mov	width	,-(sp)
@@ -263,16 +263,16 @@
 
 	.macro	incm64	val
 	inc	val
-	bic	#^c<77>	,val		; /62/ faster
+	bic	#^c^/77/	,val		; /62/ faster
 	.endm	incm64
 
 	.macro	indexm	reg		; check for auto increment/decrement
 	.ntype	$$$0	,reg		; modes for macros that can't have..
 	.if  ne	$$$0-27			; always allow pc autoincrement
-	$$$0 =	<$$$0&177770>/10	; ..these modes in their arg list
+	$$$0 =	^/$$$0&177770//10	; ..these modes in their arg list
 	.ift				; get the mode into 0..7
 	  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
-	  .iif ge <5-$$$0> .error      <; Can't use auto inc/dec mode here>
+	  .iif ge ^/5-$$$0/ .error      ^?; Can't use auto inc/dec mode here?
 	  .endc
 	.endc
 	.endm	indexm
@@ -295,7 +295,7 @@
 	.endm	.newline
 
 	.macro	octout	val
-	calls	l$wroct	,<val>
+	calls	l$wroct	,^/val/
 	.endm	octout
 
 	.macro	prsbuf	dst
@@ -306,7 +306,7 @@
 	.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/
 	sub	#10	,sp
 	mov	sp	,r1
-	calls	rpack$	,<msg.a,r1,max.len>
+	calls	rpack$	,^/msg.a,r1,max.len/
 	mov	(r1)+	,len.a
 	mov	(r1)+	,pakn.a
 	mov	@r1	,r1
@@ -314,10 +314,10 @@
 	.endm	rpack
 
 	.macro	save	list
-	.if  b	<list>
-	 save	<r0,r1,r2,r3,r4,r5>
+	.if  b	^/list/
+	 save	^/r0,r1,r2,r3,r4,r5/
 	.iff
-	.irp	x ,<list>
+	.irp	x ,^/list/
 	 mov	x	,-(sp)
 	.endr
 	.endc
@@ -337,11 +337,11 @@
 	.endm	setpar
 
 	.macro	spack	type ,pnum ,len ,msg
-	.if  b	<len>
-	.iif nb	<msg>	.error	<; bad call to SPACK macro>
-	calls	spack$	,<type,pnum,#0,#null>
+	.if  b	^/len/
+	.iif nb	^/msg/	.error	^/; bad call to SPACK macro/
+	calls	spack$	,^/type,pnum,#0,#null/
 	.iff
-	calls	spack$	,<type,pnum,len,msg>
+	calls	spack$	,^/type,pnum,len,msg/
 	.endc
 	.endm	spack
 
@@ -363,7 +363,7 @@
 	.endm	strlen
 
 	.macro	textsrc	text
-	.if  b	<text>
+	.if  b	^/text/
 	clr	getcroutine		; /62/ reset to file I/O
 	clr	tgetaddr
 	.iff
@@ -387,10 +387,10 @@
 	.endm	unchar
 
 	.macro	unsave	list
-	.if b <list>
-	unsave	<r5,r4,r3,r2,r1,r0>
+	.if b ^/list/
+	unsave	^/r5,r4,r3,r2,r1,r0/
 	.iff
-	.irp	x ,<list>
+	.irp	x ,^/list/
 	 mov	(sp)+	,x
 	.endr
 	.endc

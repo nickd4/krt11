@@ -22,49 +22,49 @@
 
 ;	18-Jul-86  12:00:29  Brian Nelson
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	; bits used in edists (the editor status word)
-	IN$MODE	=	1	; if <> insert mode is on (default)
+	IN$MODE	=	1	; if ^// insert mode is on (default)
 	UP$MODE	=	2	; down arrow wuz last, going up the list
 	DN$MODE	=	4	; up arrow wuz last, going down the list
 	UP$END	=	10	; up arrow has just dumped edicmd #0
-	FW$MODE	=	20	; if <>, advance mode (default=backup=0)
+	FW$MODE	=	20	; if ^//, advance mode (default=backup=0)
 
-
+	.page
 	.sbttl	Local data
 
 	.psect	$pdata
-$ceol:	.asciz	<esc>"[K"	; clear from cursor to end of line
-$cz:	.asciz	"^Z"<cr><lf>	; to echo ^Z
-$left:	.asciz	<esc>"[D"	; move cursor left one column
-$resto:	.asciz	<esc>"8"	; restore cursor to previously saved position
-$right:	.asciz	<esc>"[C"	; move cursor right one column
+$ceol:	.asciz	^/esc/"[K"	; clear from cursor to end of line
+$cz:	.asciz	"^Z"^/cr/^/lf/	; to echo ^Z
+$left:	.asciz	^/esc/"[D"	; move cursor left one column
+$resto:	.asciz	^/esc/"8"	; restore cursor to previously saved position
+$right:	.asciz	^/esc/"[C"	; move cursor right one column
 $rubout:.byte	bs ,space ,bs ,0 ; echo this for a rubout
-$save:	.asciz	<esc>"7"	; save current cursor position
+$save:	.asciz	^/esc/"7"	; save current cursor position
 $setvt:	.byte	esc ,'= ,0	; enable VT-100 keypad
 delimit:.byte	40 ,54 ,56 ,57 ,72 ,75 ,133 ,0	; word delimiters (tab unused)
-edi.01:	.asciz	"?KRTEDI-W-Can't overlay HELP from here"<cr><lf> ; /63/
+edi.01:	.asciz	"?KRTEDI-W-Can't overlay HELP from here"^/cr/^/lf/ ; /63/
 edi.02:	.asciz	"SL F"		; /63/ display SL Function keys topic
 edi.03:	.asciz	"SL K"		; /63/ or do KED version if KED mode is on
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	SL editor main loop	; /BBS/ minor mods..
 
 ;	 (r5)	= the prompt string
 ;	2(r5)	= buffer in which to return input string
 ;	  r1	= length of string returned in 2(r5)
-;	  r0	= if <>, the error code
+;	  r0	= if ^//, the error code
 
-kbredi::save	<r2,r3,r4>
+kbredi::save	^/r2,r3,r4/
 	tst	sl.on			; is SL on?
 	bne	10$			; ya
 	wrtall	@r5			; no, prompt and
-	calls	kbread	,<2(r5)>	; do hardcopy ttin
+	calls	kbread	,^/2(r5)/	; do hardcopy ttin
 	br	70$			; done
 
 10$:	call	l$nolf			; just a return
@@ -94,7 +94,7 @@ kbredi::save	<r2,r3,r4>
 
 60$:	mov	#er$eof	,r0		; error, return end-of-file
 	clr	r1			; length=0
-70$:	unsave	<r4,r3,r2>
+70$:	unsave	^/r4,r3,r2/
 	return
 
 	.save
@@ -118,7 +118,7 @@ keddsp:	.word	insch
 	.word	ctrlu	,eof	,doesc	,dorub	,do220	,do220
 	.restore
 
-
+	.page
 	.sbttl	Process escape sequence	; /BBS/ minor mods..
 
 doesc:	call	read1ch			; get next char in escape sequence
@@ -156,7 +156,7 @@ k.dsp:	.word	beep
 	.word	pf$1	,pf$2
 	.restore
 
-
+	.page
 	.sbttl	Ring the bell		; /BBS/ replaces noop
 
 beep:	mov	#bell	,r0		; load a bell
@@ -164,7 +164,7 @@ beep:	mov	#bell	,r0		; load a bell
 	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	PF2, Help		; /BBS/ added..
 
 pf$2:	tst	pf2$ok			; could doing this destroy an overlay?
@@ -180,14 +180,14 @@ pf$2:	tst	pf2$ok			; could doing this destroy an overlay?
 	mov	#edi.03	,r0		; ya, use this help text
 20$:	strcpy	argbuf	,r0		; /62/ pass desired topic to HELP
 	.newline			; format display
-	save	<r5,r4>			; preserve pointers
+	save	^/r5,r4/			; preserve pointers
 	call	c$help			; dump the help text to the terminal
-	unsave	<r4,r5>			; recover pointers
+	unsave	^/r4,r5/			; recover pointers
 30$:	call	retype			; then re-display the command line
 	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Post-PF1 processor	; /BBS/ all new
 
 pf$1:	call	read1ch			; get next char
@@ -251,7 +251,7 @@ kx.dsp:	.word	beep
 	.word	.pf$4	,.kp$min,.kp$com,pf$1
 	.restore
 
-
+	.page
 	.sbttl	Two ways to undel a char  ; /BBS/ all new
 
 .kp$com:call	.dorub			; undelete the char
@@ -266,7 +266,7 @@ kx.dsp:	.word	beep
 	bne	insch			; /63/ there is a char
 	jmp	beep			; nothing has been saved
 
-
+	.page
 	.sbttl	Insert a char		; /BBS/ cleaned up
 
 insch:	cmpb	r3	,#space		; control characters that get
@@ -308,7 +308,7 @@ insch:	cmpb	r3	,#space		; control characters that get
 	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Move to start of line (Keypad 0)
 
 sol:	tst	edipos			; stop at position 0
@@ -318,7 +318,7 @@ sol:	tst	edipos			; stop at position 0
 10$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Move to end of line (Keypad 2)
 
 eol:	cmp	edipos	,edilen		; /BBS/ end yet?
@@ -328,7 +328,7 @@ eol:	cmp	edipos	,edilen		; /BBS/ end yet?
 10$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Move cursor one word	; /BBS/ all new
 
 kp$1:	mov	edists	,r2		; so kp$3 can flip direction at ends
@@ -352,14 +352,14 @@ loop:	mov	edipos	,r1		; copy of current cursor position
 30$:	sec				; ya, but not done yet
 	return
 
-
+	.page
 	.sbttl	Move cursor one char	; /BBS/ added
 
 kp$3:	bit	#fw$mode,edists		; check current direction
 	beq	left			; it's to the left
 	.br	right			; /63/ or to the right..
 
-
+	.page
 	.sbttl	Move right one char
 
 right:	cmp	edipos	,edilen		; EOL?
@@ -372,7 +372,7 @@ right:	cmp	edipos	,edilen		; EOL?
 10$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Move left one char
 
 left:	tst	edipos			; SOL?
@@ -384,21 +384,21 @@ left:	tst	edipos			; SOL?
 10$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Set advance mode	; /BBS/ added
 
 kp$4:	bis	#fw$mode,edists		; go forward
 	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Set backup mode		; /BBS/ added
 
 kp$5:	bic	#fw$mode,edists		; go backward
 	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Process ^C, ^Z		; /BBS/ fixed up..
 
 ctrlc:	call	sol			; move to start of line, clear edipos
@@ -415,11 +415,11 @@ ctrlc:	call	sol			; move to start of line, clear edipos
 eof:	call	eol			; do this first
 	wrtall	#$cz			; echo ^Z
 	mov	#cmd$ex	,r0		; flag ^Z exit
-cz.fin:	bic	#<up$mode!dn$mode!up$end!fw$mode>,edists  ; clear flags
+cz.fin:	bic	#^/up$mode!dn$mode!up$end!fw$mode/,edists  ; clear flags
 	clr	r1			; byte_count=0, also clears carry
 	return
 
-
+	.page
 	.sbttl	Process CR, store command line	; /BBS/ fixed up..
 
 done:	emt	340			; eat possible LF after CR
@@ -477,11 +477,11 @@ done:	emt	340			; eat possible LF after CR
 	mov	r2	,edicmd		; save it
 
 110$:	mov	edilen	,r1		; return line length
-	bic	#<up$mode!dn$mode!up$end!fw$mode>,edists  ; clear flags
+	bic	#^/up$mode!dn$mode!up$end!fw$mode/,edists  ; clear flags
 	clr	r0			; no error, also clears carry
 	return
 
-
+	.page
 	.sbttl	Recall a command	; /BBS/ some changes..
 
 next:	mov	#edicmd	,r2		; point to command number buffer
@@ -528,7 +528,7 @@ next:	mov	#edicmd	,r2		; point to command number buffer
 	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Up-arrow key		; /BBS/ some changes..
 
 prev:	bit	#up$end,edists		; already at the firewall?
@@ -567,7 +567,7 @@ prev:	bit	#up$end,edists		; already at the firewall?
 60$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Recover a command line	; /BBS/ made this a subroutine
 
 recover:call	l$nolf			; goto start of line
@@ -586,7 +586,7 @@ recover:call	l$nolf			; goto start of line
 	bic	#fw$mode,edists		; can only backup from here
 	return
 
-
+	.page
 	.sbttl	Process ^U		; /BBS/ all new
 
 ctrlu:	mov	edipos	,r1		; get the offset into line
@@ -607,7 +607,7 @@ ctrlu:	mov	edipos	,r1		; get the offset into line
 30$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Keypad minus		; /BBS/ all new..
 
 kp$min:	cmp	edipos	,edilen		; at end of the line?
@@ -629,7 +629,7 @@ kp$min:	cmp	edipos	,edilen		; at end of the line?
 10$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Line feed		; /BBS/ all new
 
 lfproc:	tst	edipos			; at top of the line?
@@ -649,7 +649,7 @@ lfproc:	tst	edipos			; at top of the line?
 10$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Write buffers		; /BBS/ for the above two routines
 
 undwrt:	mov	#undlin	,r2		; pointer to undelete line buffer
@@ -668,7 +668,7 @@ outwrt:	wrtall	r0			; restore undeleted part of line
 	bne	20$			; until hitting the null terminator
 	return
 
-
+	.page
 	.sbttl	Un-do PF4, keypad comma	; /BBS/ all new
 
 .kp$min:				; UNDEL WORD and LINE are same funct
@@ -681,7 +681,7 @@ outwrt:	wrtall	r0			; restore undeleted part of line
 20$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Un-do ^U, line feed	; /BBS/ all new
 
 .lfproc:				; UNDO LF and UNDO ^U are same funct
@@ -720,7 +720,7 @@ outwrt:	wrtall	r0			; restore undeleted part of line
 	sec				; but not done yet
 	return
 
-
+	.page
 	.sbttl	Process PF4		; /BBS/ all new
 
 pf$4:	mov	edilen	,r1		; length of the whole banana
@@ -739,7 +739,7 @@ pf$4:	mov	edilen	,r1		; length of the whole banana
 20$:	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Erase char under cursor	; /BBS/ all new
 
 kp$com:	cmp	edipos	,edilen		; at end of the line?
@@ -750,7 +750,7 @@ kp$com:	cmp	edipos	,edilen		; at end of the line?
 	beq	do.end			; it's at EOL, nothing to do
 	br	do.com			; fall thru to common code..
 
-
+	.page
 	.sbttl	Erase char to left of cursor  ; /BBS/ fixed up..
 
 dorub:	tst	edipos			; at SOL?
@@ -782,7 +782,7 @@ do.com:	movb	(r2)	,undchr		; /63/ stash copy for possible undel
 do.end:	sec				; /63/ not done yet
 	return
 
-
+	.page
 	.sbttl	Process ^R		; /BBS/ minor clean up
 
 retype:	call	l$nolf			; start of line
@@ -800,7 +800,7 @@ retype:	call	l$nolf			; start of line
 	sec				; not done yet
 	return
 
-
+	.page
 	.sbttl	Toggle insert/overstrike mode
 
 toggle:	mov	#in$mode,r0		; copy of insert mode bit
@@ -808,7 +808,7 @@ toggle:	mov	#in$mode,r0		; copy of insert mode bit
 	sec				; not done yet
 	return
 
-	.sbttl	Save cursor then clear to EOL	; /BBS/ added
+	.page	.sbttl	Save cursor then clear to EOL	; /BBS/ added
 
 savclr:	wrtall	#$save			; save cursor position
 	wrtall	#$ceol			; erase to EOL

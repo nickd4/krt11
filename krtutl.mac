@@ -21,16 +21,16 @@
 ;
 ;	18-Jul-84  16:14:46 Brian Nelson
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 
 	.mcall	.CSISPC	,.DELETE,.GTIM	,.RENAME
 
-
+	.page
 	.sbttl	Local data		; /63/ consolidated here..
 
 	.psect	$rwdata	,rw,d,lcl,rel,con
@@ -41,7 +41,7 @@ elfmo:	.word	0 ,0 ,0 ,0		; .rad50 file name lives here
 dfflag:	.word	0			; try default extents (.DSK,.DEV) flag
 dismnt:	.byte	3 ,135			; dump the LDn assign for..
 disunit:.byte	0 ,0			; ..this unit number
-dkflag:	.word	0			; assign this mount DK if <>
+dkflag:	.word	0			; assign this mount DK if ^//
 ;nocache:.byte	2 ,135			; dismount the world,
 ;	.word	0			; cache wise..
 newdk:	.asciz	"LDn:"			; defdir string is loaded from here
@@ -63,7 +63,7 @@ timemt:	.byte	5			; /62/ number of arguments
 	.word	ticks			; /62/ ticks
 
 	.psect	$pdata
-pepmsg:	.asciz	"Error message from remote:"<cr><lf>  ; /63/
+pepmsg:	.asciz	"Error message from remote:"^/cr/^/lf/  ; /63/
 sta.0:	.byte	STA.CCA	,STA.ABO,STA.BRK,STA.COM,STA.DAT,STA.FIL
 	.byte	STA.ATR	,STA.INI,STA.RIN,STA.SIN,STA.TYP,STA.EOF
 	.byte	0
@@ -87,17 +87,17 @@ sta.1:	.word	10$
 sta.2:	.asciz	"TOD "			; "Time Of Day" header for log entry
 sta.3:	.asciz	"  "
 sta.4:	.asciz	"Hz   Elapsed-Time: "
-sta.5:	.ascii	<cr><lf>		; two newlines from here
-sta.6:	.asciz	<cr><lf>
+sta.5:	.ascii	^/cr/^/lf/		; two newlines from here
+sta.6:	.asciz	^/cr/^/lf/
 sta.7:	.asciz	" = STA."
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	The real work of MOUNT	; /BBS/ added
 
 ;	input:	argbuf	= entire argument string, unparsed
-;		 r1	= if <> then dismount
+;		 r1	= if ^// then dismount
 
 mount::	upcase	argbuf			; upper case all args
 	mov	argbuf	,r2		; pointer to LDn:
@@ -165,7 +165,7 @@ mount::	upcase	argbuf			; upper case all args
 
 100$:	clr	dfflag			; init try default extents flag
 	mov	(sp)+	,r2		; recover pointer to csi input string
-	calls	fparse	,<r2,#srcnam>	; make "DK:name.dsk"="DEV:name.dsk"
+	calls	fparse	,^/r2,#srcnam/	; make "DK:name.dsk"="DEV:name.dsk"
 	mov	#srcnam	,r0		; pass pointer to docsi
 	call	docsi			; see if it'll fly
 	bcs	160$			; oops, err mapped by docsi
@@ -233,13 +233,13 @@ mount::	upcase	argbuf			; upper case all args
 	strcpy	#defdir	,#dkname	; /62/ dismounted DK, so goto HOME dir
 	br	150$			; done..
 
-
+	.page
 	.sbttl	The real work of RENAME
 
 ;	input:	 (r5)	= first file name, .asciz
 ;		2(r5)	= second file name, .asciz
 
-rename::save	<r2,r3>
+rename::save	^/r2,r3/
 	call	check2			; /BBS/ check file names
 	tst	r0			; /BBS/ ok?
 	bne	20$			; /BBS/ no
@@ -252,7 +252,7 @@ rename::save	<r2,r3>
 	call	docsi			; ok
 	bcs	20$			; /BBS/ oops
 	mov	renlst	,r0		; get the device name
-	calls	fetch	,<r0>		; /62/ try to fetch the handler
+	calls	fetch	,^/r0/		; /62/ try to fetch the handler
 	tst	r0			; /62/ did it work?
 	bne	20$			; /62/ no
 	.rename	#rtwork,#lun.in,#renlst	; do the rename please
@@ -263,15 +263,15 @@ rename::save	<r2,r3>
 	br	20$
 10$:	mov	#1	,r1		; /BBS/ only one file renamed here..
 	clr	r0			; no errors
-20$:	unsave	<r3,r2>
+20$:	unsave	^/r3,r2/
 	return
 
-
+	.page
 	.sbttl	The real work of DELETE
 
 ;	input:	 (r5)	= file name, .asciz
 
-delete::save	<r3>
+delete::save	^/r3/
 	call	check1			; /BBS/ check file name
 	tst	r0			; /BBS/ ok?
 	bne	20$			; /BBS/ no
@@ -280,7 +280,7 @@ delete::save	<r3>
 	call	docsi			; do the first one
 	bcs	20$			; /BBS/ oops
 	mov	renlst	,r0		; get the device name
-	calls	fetch	,<r0>		; /62/ try to fetch the handler
+	calls	fetch	,^/r0/		; /62/ try to fetch the handler
 	tst	r0			; /62/ did it work?
 	bne	20$			; /62/ no
 	.delete	#rtwork,#lun.ou,#renlst	; /BBS/ do the delete using lun.ou
@@ -290,10 +290,10 @@ delete::save	<r3>
 	mov	renerr(r0),r0		; rename errors are the same as delete
 	br	20$			; /BBS/ bail out..
 10$:	clr	r0			; no errors
-20$:	unsave	<r3>
+20$:	unsave	^/r3/
 	return
 
-
+	.page
 	.sbttl	The real work of COPY	; /BBS/ heavily modified..
 
 	PROT	= 100000		; /62/ protected file bit
@@ -301,12 +301,12 @@ delete::save	<r3>
 ;	input:	 (r5)	= input file name
 ;		2(r5)	= output file name
 
-copy::	save	<r2,r3,r4>
+copy::	save	^/r2,r3,r4/
 	clr	r2			; number of blocks = 0
 	call	check2			; check file names
 	tst	r0			; ok?
 	bne	done			; /63/ no
-	calls	open	,<#srcnam,#lun.in,#binary> ; get the input file
+	calls	open	,^/#srcnam,#lun.in,#binary/ ; get the input file
 	tst	r0			; did it work?
 	bne	done			; /63/ no
 	mov	#lun.out,r0		; /62/ output file channel
@@ -320,15 +320,15 @@ copy::	save	<r2,r3,r4>
 10$:	mov	#lun.in	,r1		; input file channel
 	asl	r1			; word indexing
 	mov	sizof(r1),at$len	; pass input file size to file opener
-	calls	create	,<#filnam,#lun.out,#binary> ; create destination file
+	calls	create	,^/#filnam,#lun.out,#binary/ ; create destination file
 	tst	r0			; did it work?
 	bne	purge			; no
 
 20$:	mov	#1000	,r3		; init 512. byte counter (1 block)
-30$:	calls	getc	,<#lun.in>	; get the next char from the file
+30$:	calls	getc	,^/#lun.in/	; get the next char from the file
 	tst	r0			; did it work?
 	bne	inerr			; no, check for EOF condition
-	calls	putc	,<r1,#lun.ou>	; yes, copy to output file
+	calls	putc	,^/r1,#lun.ou/	; yes, copy to output file
 	tst	r0			; did that work?
 	bne	outerr			; no
 	sob	r3	,30$		; next char please
@@ -337,31 +337,31 @@ copy::	save	<r2,r3,r4>
 
 inerr:	cmp	r0	,#er$eof	; normal exit should be EOF
 	bne	purge			; it's not
-	calls	close	,<#lun.ou>	; try to close output file
-	save	<r0>			; save error code
+	calls	close	,^/#lun.ou/	; try to close output file
+	save	^/r0/			; save error code
 	beq	p.clo			; no error, go close in file
 	br	p.del			; error, go dump bad file first
 
 outerr:	cmp	r0	,#er$eof	; out file full?
 	bne	purge			; no, it's something else
 	mov	#er$ful	,r0		; ya, say not enuff free space..
-purge:	save	<r0>			; save error
-	calls	close	,<#lun.ou>	; flush buffer, close out file
-p.del:	calls	delete	,<#filnam>	; then dump it, it's no good now
-p.clo:	calls	close	,<#lun.in>	; close input file
-	unsave	<r0>			; restore error code
+purge:	save	^/r0/			; save error
+	calls	close	,^/#lun.ou/	; flush buffer, close out file
+p.del:	calls	delete	,^/#filnam/	; then dump it, it's no good now
+p.clo:	calls	close	,^/#lun.in/	; close input file
+	unsave	^/r0/			; restore error code
 
 done:	mov	r2	,r1		; return number of blocks copied
-	unsave	<r4,r3,r2>
+	unsave	^/r4,r3,r2/
 	return
 
-
+	.page
 	.sbttl	Parse device and file name
 
 ;	input:	 r0	= address of file name
 ;		 r3	= pointer to result of parse
 
-docsi:	save	<r1>
+docsi:	save	^/r1/
 	sub	#ln$max+2,sp		; /63/ a local file name buffer
 	mov	sp	,r1		; and a pointer to it please
 
@@ -385,25 +385,25 @@ docsi:	save	<r1>
 	mov	csierr(r0),r0		; simple
 	add	#ln$max+2,sp		; /63/ restore the stack
 	sec				; flag the error and exit
-30$:	unsave	<r1>
+30$:	unsave	^/r1/
 	return
 
-
+	.page
 	.sbttl	Check file name(s)
 
-check2:	calls	fparse	,<2(r5),#filnam> ; /BBS/ added this..
+check2:	calls	fparse	,^/2(r5),#filnam/ ; /BBS/ added this..
 	tst	r0			; ok?
 	bne	ck.fin			; no
-	calls	iswild	,<#filnam>	; check second file name
+	calls	iswild	,^/#filnam/	; check second file name
 	tst	r0			; wild?
 	bne	ck.fin			; ya..
-check1:	calls	fparse	,<@r5,#srcnam>	; check first file name
+check1:	calls	fparse	,^/@r5,#srcnam/	; check first file name
 	tst	r0			; ok?
 	bne	ck.fin			; no
-	calls	iswild	,<#srcnam>	; return with
+	calls	iswild	,^/#srcnam/	; return with
 ck.fin:	return				; /63/ any error will be in r0
 
-
+	.page
 	.sbttl	Like bufemp, but return data to a buffer
 
 ;	input:	  (r5)	= source buffer, .asciz
@@ -421,13 +421,13 @@ ck.fin:	return				; /63/ any error will be in r0
 ;	CONTROL UNPREFIX ALL.  The NULL char is used as the record terminator
 ;	here and thus MUST be prefixed.  C-Kermit always prefixes nulls.
 
-bufunp::save	<r2,r3,r4,r5>
+bufunp::save	^/r2,r3,r4,r5/
 	mov	@r5	,r2		; input record address
 	clr	r3			; length := 0
 	mov	2(r5)	,r4		; resultant string
 
 10$:	movb	(r2)+	,r0		; /63/ get next ch in convenient place
-	bic	#^c<177>,r0		; /53/ always seven bit data
+	bic	#^c^/177/,r0		; /53/ always seven bit data
 	beq	50$			; /63/ all done
 	mov	#1	,r5		; /53/ assume character not repeated
 	tst	dorpt			; /53/ repeat processing off?
@@ -435,20 +435,20 @@ bufunp::save	<r2,r3,r4,r5>
 	cmpb	r0	,rptquo		; /53/ is this a repeated char?
 	bne	30$			; /53/ no, normal processing
 	movb	(r2)+	,r5		; /63/ yes, get the repeat count
-	bic	#^c<177>,r5		; /53/ always seven bit data
+	bic	#^c^/177/,r5		; /53/ always seven bit data
 	unchar	r5	,r5		; /53/ get the value
 	tst	r5			; /53/ good data
 	bgt	20$			; /53/ yes
 	mov	#1	,r5		; /53/ no, fix it
 20$:	movb	(r2)+	,r0		; /63/ now get the real data
-	bic	#^c<177>,r0		; /53/ always seven bit data
+	bic	#^c^/177/,r0		; /53/ always seven bit data
 30$:	cmpb	r0	,senpar+p.qctl	; is this a quoted character?
 	bne	40$			; no
 	clr	r0			; yes, get the next character
 	bisb	(r2)+	,r0		; must be one you know  avoid sxt here
 	mov	r0	,r1		; /63/ copy to compare
-	bic	#^c<177>,r1		; lower 7 bits against the quote char
-	cmpb	r1	,senpar+p.qctl	; if ch <> myquote
+	bic	#^c^/177/,r1		; lower 7 bits against the quote char
+	cmpb	r1	,senpar+p.qctl	; if ch ^// myquote
 	beq	40$			;  then
 	ctl	r0	,r0		;   ch := ctl(ch)
 40$:	movb	r0	,(r4)+		; copy the byte over now
@@ -459,10 +459,10 @@ bufunp::save	<r2,r3,r4,r5>
 50$:	clrb	@r4			; make the string .asciz
 	mov	r3	,r1		; return the length
 	clr	r0			; fake no errors please
-	unsave	<r5,r4,r3,r2>
+	unsave	^/r5,r4,r3,r2/
 	return
 
-
+	.page
 	.sbttl	Calculate time used to send last packet	; /62/ all new..
 
 paksta::mov	r2	,-(sp)		; save ptr to "REC.SW" or "SEN.SW"
@@ -476,7 +476,7 @@ paksta::mov	r2	,-(sp)		; save ptr to "REC.SW" or "SEN.SW"
 	br	30$			; ..by jumping in here
 10$:	mov	#sta.2	,r2		; point to "TOD "
 	call	sta.cp			; copy into output string
-	calls	asctim	,<r1,#pkrate>	; make it ascii, insert in buff
+	calls	asctim	,^/r1,#pkrate/	; make it ascii, insert in buff
 	add	#11.	,r1		; bump past time just written
 	mov	#sta.3	,r2		; point to "  "
 	call	sta.cp			; copy into output string
@@ -494,10 +494,10 @@ paksta::mov	r2	,-(sp)		; save ptr to "REC.SW" or "SEN.SW"
 	adc	(sp)			; add carry to 32-bit hi word
 	add	#79.	,(sp)		; hi word of # ticks in 24 hours
 20$:	mov	sp	,r2		; pointer to time data on stack
-	calls	asctim	,<r1,r2>	; make it ascii, insert in buff
+	calls	asctim	,^/r1,r2/	; make it ascii, insert in buff
 	cmp	(sp)+	,(sp)+		; pop duration buffer
 	add	#11.	,r1		; bump past time just written
-	mov	#sta.5	,r2		; point to <cr><lf><cr><lf>
+	mov	#sta.5	,r2		; point to ^/cr/^/lf/^/cr/^/lf/
 30$:	call	sta.cp			; copy into output string
 	mov	(sp)+	,r2		; get ptr to "REC.SW" or "SEN.SW"
 	call	sta.cp			; copy into output string
@@ -513,7 +513,7 @@ sta.cp:	movb	(r2)+	,(r1)+		; /63/ copy some text..
 	dec	r1			; backup over it
 	return
 
-
+	.page
 	.sbttl	Print received error packet on terminal
 
 ;	P R E R R P
@@ -533,13 +533,13 @@ prerrp::tst	remote			; /BBS/ if running as remote..
 	clr	logini			; ensure logging header is retyped
 20$:	return
 
-
+	.page
 	.sbttl	Get time of day		; /62/ use cvttim to include ticks
 
 ;	input:	 (r5)	= buffer address for .asciz string
-;		2(r5)	= if <>, location of time value to process	; /62/
+;		2(r5)	= if ^//, location of time value to process	; /62/
 
-asctim::save	<r0,r1,r2,r3>
+asctim::save	^/r0,r1,r2,r3/
 	mov	2(r5)	,r3		; /62/ was a pointer passed?
 	bne	10$			; /62/ ya, do it instead of curr. time
 	cmp	-(sp)	,-(sp)		; allocate two word buffer
@@ -548,10 +548,10 @@ asctim::save	<r0,r1,r2,r3>
 	cmp	(sp)+	,(sp)+		; /62/ pop here, save a couple words..
 10$:	mov	(r3)+	,hitime		; /62/ hi word for divide
 	mov	(r3)	,lotime		; /62/ and lo word
-	save	<r5>			; /63/ save this pointer
+	save	^/r5/			; /63/ save this pointer
 	mov	#timemt,r5		; /62/ give cvttim its arguments
 	call	cvttim			; /62/ convert to hrs/mins/secs/ticks
-	unsave	<r5>			; /63/ restore pointer
+	unsave	^/r5/			; /63/ restore pointer
 	mov	@r5	,r1		; buffer address please
 	mov	hours	,r3		; convert hours to ascii
 	call	i2toa			; simple
@@ -565,7 +565,7 @@ asctim::save	<r0,r1,r2,r3>
 	mov	ticks	,r3		; /62/ pass ticks to i2toa
 	call	i2toa			; /62/ convert to ascii
 	clrb	@r1			; all done, make it .asciz
-	unsave	<r3,r2,r1,r0>
+	unsave	^/r3,r2,r1,r0/
 	return
 
 	.end

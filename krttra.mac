@@ -22,9 +22,9 @@
 ;
 ;	Copyright 1984 Change Software, Inc.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	.mcall	.TTYOUT	,.TWAIT
 
@@ -34,12 +34,12 @@ fifteen:.word	0 ,15			; wait fifteen ticks after EOF
 short:	.word	0 ,1			; wait up to 1 tick for remote to echo
 twarea:	.word	0 ,0			; .twait work area
 
-
+	.page
 	.psect	$code
 	.sbttl	TRANSMIT		; /BBS/ heavily hacked..
 
 ;	input:	argbuf	= name of file to send
-;	output:	   r0	= if <>, error code
+;	output:	   r0	= if ^//, error code
 
 c$tran::tst	remote			; /62/ disallow to TT
 	beq	10$			; prevents typing TSX lead-in!
@@ -49,10 +49,10 @@ c$tran::tst	remote			; /62/ disallow to TT
 10$:	clr	r2			; input_open := false
 	clr	r3			; terminal_set := false
 	upcase	argbuf			; /62/ upper case all args
-	calls	fparse	,<argbuf,#srcnam> ; /62/ parse the file name please
+	calls	fparse	,^/argbuf,#srcnam/ ; /62/ parse the file name please
 	tst	r0			; did the $parse work ok?
 	bne	50$			; no
-	calls	iswild	,<#srcnam>	; check for wildcarded file spec
+	calls	iswild	,^/#srcnam/	; check for wildcarded file spec
 	tst	r0			; is it?
 	bne	50$			; ya..
 
@@ -60,24 +60,24 @@ c$tran::tst	remote			; /62/ disallow to TT
 	tst	r0			; did it work?
 	bne	50$			; no
 	mov	sp	,r3		; ya, flag link is init'd..
-	calls	open	,<#srcnam,#lun.in,#text> ; open the input file
+	calls	open	,^/#srcnam,#lun.in,#text/ ; open the input file
 	tst	r0			; did it work?
 	bne	50$			; no
 	mov	sp	,r2		; ya, flag the file is open
 
 20$:	tst	cccnt			; ^C typed?
 	bne	60$			; ya, exit
-	calls	getc	,<#lun.in>	; no, get the next char in the file
+	calls	getc	,^/#lun.in/	; no, get the next char in the file
 	tst	r0			; did that work?
 	bne	50$			; no
 	cmpb	r1	,#lf		; a line feed we don't need?
 	beq	20$			; ya, skip it
 	mov	r1	,-(sp)		; one word buffer
 	mov	sp	,r1		; point to it please
-	calls	binwri	,<r1,#1>	; simple to put a single char
+	calls	binwri	,^/r1,#1/	; simple to put a single char
 	tst	(sp)+			; pop the tiny buffer now
 	.twait	#twarea	,#short		; wait one tick
-30$:	calls	xbinrea	,<#-1>		; now try for the echo please
+30$:	calls	xbinrea	,^/#-1/		; now try for the echo please
 	tst	r0			; get anything back?
 	bne	20$			; no, continue sending
 	tst	tsxsav			; running under TSX?
@@ -95,7 +95,7 @@ c$tran::tst	remote			; /62/ disallow to TT
 60$:	tst	r2			; input file still open?
 	beq	100$			; no
 	.twait	#twarea	,#fifteen	; after EOF, wait 15. ticks
-70$:	calls	xbinrea	,<#-1>		; now clean up echo at end
+70$:	calls	xbinrea	,^/#-1/		; now clean up echo at end
 	tst	r0			; get anything back this time?
 	bne	90$			; no, all done
 	tst	tsxsav			; running under TSX?
@@ -106,7 +106,7 @@ c$tran::tst	remote			; /62/ disallow to TT
 	.ttyout				; dump it to the terminal
 	br	70$			; see if another can be had
 
-90$:	calls	close	,<#lun.in>	; close the input file
+90$:	calls	close	,^/#lun.in/	; close the input file
 100$:	cmp	r4	,#er$eof	; end of file today?
 	beq	130$			; ya, reconnect with link open
 	tst	r3			; should we put the terminal back?

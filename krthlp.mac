@@ -33,7 +33,7 @@
 ;	intelligent, in that it understands wildcarding (HELP SET *), and
 ;	can build subtopic prompting strings and process accordingly.
 
-
+	.page
 ;	   Directions for rebuilding the RMS Index for KRTHLP.HLP
 ;
 ;	If the help text file must be edited, added to or changed, one
@@ -63,15 +63,15 @@
 ;	The maximun length of a line of help text is 132. bytes, although
 ;	it's best to stay within 80 columns if at all possible.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	.mcall	.RCTRLO
 
 	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.LCUC ! C.TSPA ; arg processing
 
-
+	.page
 	.sbttl	Local data
 
 	.psect	$pdata
@@ -81,16 +81,16 @@ rtname:	.word	10$ ,20$ ,30$ ,40$ ,0	; /63/ this is the help file path
 20$:	.asciz	"KRT:KRTHLP.HLP"	; /BBS/ then here, etc..
 30$:	.asciz	"SY:KRTHLP.HLP"
 40$:	.asciz	"DK:KRTHLP.HLP"
-addinf:	.ascii	"    Additional information is available on:"<cr><lf> ; /63/
+addinf:	.ascii	"    Additional information is available on:"^/cr/^/lf/ ; /63/
  fill7:	.byte	cr ,lf ,40 ,40 ,40 ,40 ,40 ,40 ; /BBS/ a newline and 7 blanks
  fill:	.byte	40 ,0			; or just one blank, for formatting
 bugtxt:	.asciz	"Upgrades"		; /62/ for the BUG command
 dbldash:.asciz	" --"			; /BBS/ a space and a double dash..
 errhdr:	.asciz	"?KRTHLP-W-"		; /63/
-errmis:	.asciz	"Can't find KRTHLP.HLP on HLP, KRT, SY or DK"<cr><lf>
-errver:	.asciz	" is an incorrect version"<cr><lf>
+errmis:	.asciz	"Can't find KRTHLP.HLP on HLP, KRT, SY or DK"^/cr/^/lf/
+errver:	.asciz	" is an incorrect version"^/cr/^/lf/
 hlp2lp:	.asciz	"LP:KRTHLP.OUT"		; /62/ where HPRINT sends a file
-nohelp:	.asciz	"% Help not found for the requested topic"<cr><lf> ; /63/
+nohelp:	.asciz	"% Help not found for the requested topic"^/cr/^/lf/ ; /63/
 ptopic:	.asciz	" Select topic, please: " ; /BBS/ for prompting
 	.even
 
@@ -106,14 +106,14 @@ rmsidx:	.word	0			; /BBS/ current place in RMS index
 sub.2:	.blkb	100			; /62/ fill in with sub topics
 sub.3:	.blkb	100			; /62/ as required by how far in
 sub.4:	.blkb	100			; /62/ nested wildcarding goes..
-subwild:.word	0			; /62/ <> if 1st char of input is "*"
+subwild:.word	0			; /62/ ^// if 1st char of input is "*"
 topics:	.word	0 ,0 ,0 ,0 ,0 ,0 ,0 ,0	; /BBS/ list of topic/subtopic addrs
 topbuf:	.blkb	200			; (nested) topics buffer
 toplev:	.word	0			; level of current topic
 ttbuff:	.blkb	134.			; /63/ terminal read buffer
-wild:	.word	0			; <> if topic wildcarded
+wild:	.word	0			; ^// if topic wildcarded
 
-
+	.page
 	.psect	$code
 	.sbttl	BUG, HPRINT
 
@@ -121,7 +121,7 @@ c$phlp::tst	outopn			; /63/ come here to print it too..
 	beq	10$			; output channel is available
 	mov	#er$lby	,r0		; chan is busy
 	br	20$			; handle error
-10$:	calls	create	,<#hlp2lp,#lun.ou,#text> ; open chan to LP:
+10$:	calls	create	,^/#hlp2lp,#lun.ou,#text/ ; open chan to LP:
 	tst	r0			; did it work?
 	bne	20$			; /63/ no
 	mov	sp	,outopn		; flag output channel is open
@@ -133,7 +133,7 @@ c$phlp::tst	outopn			; /63/ come here to print it too..
 c$bug::	strcpy	argbuf	,#bugtxt	; /62/ do this for
 	.br	c$help			; /63/ the "BUG" command
 
-
+	.page
 	.sbttl	HELP main_loop
 
 ;	(1)  Try to open help file, if it fails print an error message
@@ -209,10 +209,10 @@ c$help::call	hlpopn			; come here for just plain help..
 	clr	subwild			; /62/ first char of input isn't a "*"
 	.rctrlo				; /BBS/ be sure output is on
 	.newline
-	calls	readcmd	,<#ttbuff,r3>	; /BBS/ use SL editor
+	calls	readcmd	,^/#ttbuff,r3/	; /BBS/ use SL editor
 	tst	r0			; successful terminal read?
 	bne	150$			; /BBS/ no, got to exit
-	calls	cvt$$	,<#ttbuff,r1,#cvtarg> ; remove garbage, upper case
+	calls	cvt$$	,^/#ttbuff,r1,#cvtarg/ ; remove garbage, upper case
 	tst	r0			; anything left?
 	beq	140$			; /62/ no, exit please
 	clrb	ttbuff(r0)		; ya, ensure .asciz
@@ -224,18 +224,18 @@ c$help::call	hlpopn			; come here for just plain help..
 	jmp	40$			; and parse the command all over again
 
 140$:	clr	r0			; /62/ here if error already handled
-150$:	save	<r0>			; /62/ moved hlpclo here..
+150$:	save	^/r0/			; /62/ moved hlpclo here..
 	tst	outopn			; is chan to LP open?
 	beq	160$			; no
-	calls	close	,<#lun.ou>	; ya, close it
+	calls	close	,^/#lun.ou/	; ya, close it
 	clr	outopn			; say it's now closed
 160$:	clr	xprint			; turn off hprint
-	calls	close	,<#lun.in>	; close the help text file
+	calls	close	,^/#lun.in/	; close the help text file
 	clr	inopn			; flag channel is now free
-	unsave	<r0>			; /62/
+	unsave	^/r0/			; /62/
 	return
 
-
+	.page
 	.sbttl	Parse command line
 
 ;	P A R S E
@@ -244,7 +244,7 @@ c$help::call	hlpopn			; come here for just plain help..
 ;	return:	topics	= addresses to each topic/subtopic
 ;			  extra embedded spaces are removed
 
-parse:	save	<r3,r4,r5>
+parse:	save	^/r3,r4,r5/
 	mov	#topbuf	,r4		; where to copy the text
 	mov	#topics	,r3		; where to place the pointers to it
 	clr	@r3			; assume nothing was passed
@@ -264,10 +264,10 @@ parse:	save	<r3,r4,r5>
 	br	30$			; next please
 40$:	clrb	(r4)+			; ensure .asciz please
 	br	10$			; next subtopic
-50$:	unsave	<r5,r4,r3>
+50$:	unsave	^/r5,r4,r3/
 	return
 
-
+	.page
 	.sbttl	Find the topic in the help file
 
 ;	input:	topics	= list of addresses of text to match
@@ -278,7 +278,7 @@ parse:	save	<r3,r4,r5>
 ; /BBS/	modified to scan an internal index and return pointer in rmsidx
 ;	to block and offset of beginning of desired text in KRTHLP.HLP
 
-hfind:	save	<r2,r3,r4,r5>
+hfind:	save	^/r2,r3,r4,r5/
 	mov	#topics	,r5		; point to the help topic list
 	mov	#'1	,r2		; current topic level
 	clrb	htopic			; clear out header
@@ -334,14 +334,14 @@ hfind:	save	<r2,r3,r4,r5>
 	bne	90$			; /62/ ya
 	tst	subwild			; /62/ don't dump the index if first
 	bne	90$			; /62/ char of inout is a "*"
-	save	<r1>			; /62/ no, stash this address..
+	save	^/r1/			; /62/ no, stash this address..
 	mov	backup	,rmsidx		; /62/ prep to dump the main text
 	mov	backlev	,toplev		; /62/ for a wildcarded [sub]topic
 	clr	wild			; /62/ but only that for the moment
 	call	hprint			; /62/ display main topic text & index
 	.newline			; /62/ format the display
 	mov	sp	,wild		; /62/ restore wildcarded status
-	unsave	<r1>			; /62/ pop address of topic name
+	unsave	^/r1/			; /62/ pop address of topic name
 90$:	dec	r1			; /BBS/ back up to include a blank
 	strcpy	#hlpbuf	,r1		; /62/ used to build first header
 	mov	r2	,toplev		; save the topic level
@@ -359,10 +359,10 @@ hfind:	save	<r2,r3,r4,r5>
 	sub	#6	,r4		; /BBS/ back up to last good one
 120$:	mov	r4	,rmsidx		; /BBS/ save a copy of where it is now
 	clr	backup			; /BBS/ clear nested error rmsidx buff
-130$:	unsave	<r5,r4,r3,r2>
+130$:	unsave	^/r5,r4,r3,r2/
 	return
 
-
+	.page
 	.sbttl	Print help text found by HFIND
 
 ;	assumes:	both PARSE and HFIND have been called already
@@ -372,7 +372,7 @@ hfind:	save	<r2,r3,r4,r5>
 
 ; /BBS/	patched to support indexing for help text in KRTHLP.HLP
 
-hprint:	save	<r2,r3,r4>
+hprint:	save	^/r2,r3,r4/
 	clrb	sub.2			; /62/ init wildcarded
 	clrb	sub.3			; /62/ sub topics
 	clrb	sub.4			; /62/ nested names buffers
@@ -392,7 +392,7 @@ hprint:	save	<r2,r3,r4>
 	bcc	30$			; /62/ it worked
 20$:	jmp	170$			; /62/ it didn't work
 
-30$:	calls	getrec	,<r4,#lun.in,#132.> ; /62/ read the next record
+30$:	calls	getrec	,^/r4,#lun.in,#132./ ; /62/ read the next record
 	tst	r0			; error?
 	bne	20$			; /62/ yes, exit
 	clrb	hlpbuf(r1)		; ensure it's .asciz please
@@ -465,17 +465,17 @@ hprint:	save	<r2,r3,r4>
 150$:	mov	#1	,r0		; return(sub_topic_found)
 	br	170$
 160$:	clr	r0			; return(success)
-170$:	unsave	<r4,r3,r2>
+170$:	unsave	^/r4,r3,r2/
 	return
 
-
+	.page
 	.sbttl	Preset an I/O channel to an exact block and offset ; /BBS/
 
 preset:	mov	rmsidx	,r0		; get copy of indexing pointer
-	calls	prewind	,<#lun.in,2(r0),4(r0)>	; load and preset buffer
+	calls	prewind	,^/#lun.in,2(r0),4(r0)/	; load and preset buffer
 	return				; 2(r0)=block 4(r0)=offset
 
-
+	.page
 	.sbttl	Print index
 
 ;	passed:	 2(sp)	= sub-topic level at which index is expected
@@ -484,12 +484,12 @@ preset:	mov	rmsidx	,r0		; get copy of indexing pointer
 
 ; /63/	modified to use an internal index which lives in KRTIDX.MAC
 
-hindex:	save	<r2,r4,r5>
+hindex:	save	^/r2,r4,r5/
 	mov	sp	,idxdmp		; flag that we have been here
 	clr	-(sp)			; allocate
 	clr	-(sp)			; some buffers
 	mov	sp	,r5		; and a pointer to them
-	movb	2+<5*2>(sp),2(r5)	; /BBS/ get the passed topic level
+	movb	2+^/5*2/(sp),2(r5)	; /BBS/ get the passed topic level
 	cmpb	2(r5)	,#'1		; is this the main menu today?
 	bhi	10$			; no, don't reposition the file
 	clrb	hlpbuf			; flag nothing's there
@@ -535,11 +535,11 @@ hindex:	save	<r2,r4,r5>
 100$:	clr	r0			; success
 	mov	r4	,rmsidx		; /BBS/ save current RMS index pointer
 	cmp	(sp)+	,(sp)+		; pop some local buffers...
-	unsave	<r5,r4,r2>
+	unsave	^/r5,r4,r2/
 	mov	(sp)+	,(sp)		; move return address up
 	return
 
-
+	.page
 	.sbttl	Open the help file
 
 ; /BBS/ modified to check for correct version of KRTHLP.HLP..
@@ -547,24 +547,24 @@ hindex:	save	<r2,r4,r5>
 hlpopn:	mov	#rtname	,r3		; top of list of file specs to try
 10$:	tst	@r3			; end of the list yet?
 	beq	40$			; yes, can't find the help file
-	calls	fparse	,<@r3,#srcnam>	; use Kermit's DK, not the os default
-	calls	open	,<#srcnam,#lun.in,#text> ; try to open file
+	calls	fparse	,^/@r3,#srcnam/	; use Kermit's DK, not the os default
+	calls	open	,^/#srcnam,#lun.in,#text/ ; try to open file
 	tst	r0			; did it work?
 	bne	30$			; no
 	mov	#hlpbuf	,r4		; check for correct help file
-	calls	getrec	,<r4,#lun.in,#132.> ; /63/ read the first line of it
+	calls	getrec	,^/r4,#lun.in,#132./ ; /63/ read the first line of it
 	tst	r0			; error?
 	bne	20$			; ya
 	clrb	hlpbuf(r1)		; no, ensure it's .asciz please
 	call	loahlp			; /63/ load overlay containing hident
 	strlen	#hident			; length of verifying string
-	calls	instr	,<r4,r1,#hident,r0> ; check it
+	calls	instr	,^/r4,r1,#hident,r0/ ; check it
 	tst	r0			; a match?
 	bne	50$			; found it, file is ok
 20$:	wrtall	#errhdr			; /63/ "?KRTHLP-W-"
 	wrtall	#srcnam			; the bad version's file name
 	wrtall	#errver			; /63/ " is an incorrect version",cr
-	calls	close	,<#lun.in>	; dump the channel to it
+	calls	close	,^/#lun.in/	; dump the channel to it
 30$:	tst	(r3)+			; prep for the
 	br	10$			; next one
 

@@ -26,9 +26,9 @@
 
 ;	Copyright 1984 Change Software, Inc.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 ; /62/	.PEEK,.POKE bypassed for V4, also expanded to allow assy under same
 
@@ -51,16 +51,16 @@ wrtemt:	.byte	0 ,114			; /63/ TSX hi-eff write to TT emt
 wrtloc:	.word	0			; /63/ address of buffer to write
 wrtlen:	.word	0			; /63/ write this many chars
 
-
+	.page
 	.psect	$code
 	.sbttl	Initialize the terminal	; /BBS/ heavily hacked
 
 ;	T T Y I N I
 ;
-;	input:	  (r5)	= if <> don't force ^W/^B off, as for CONNECT mode
+;	input:	  (r5)	= if ^// don't force ^W/^B off, as for CONNECT mode
 ;	output:	   r0	= cleared, no error possible
 
-t.ttyini::save	<r1,r2>
+t.ttyini::save	^/r1,r2/
 	tst	tsxsave			; running under TSX?
 	bne	30$			; ya, skip to TSX term init
 	.gval	#rtwork,#$tcfig		; no, get term config word addr
@@ -104,23 +104,23 @@ t.ttyini::save	<r1,r2>
 70$:	wrtall	#limits			; set some terminal parameters
 
 80$:	mov	#1000	,r2		; eat anything that's pending please
-90$:	calls	t.binrea,<#-1>		; force call to t.binread
+90$:	calls	t.binrea,^/#-1/		; force call to t.binread
 	dec	r2			; don't loop forever please
 	beq	100$			; exit the loop
 	tst	r0			; did we get anything at all?
 	beq	90$			; yes, eat some more input
 100$:	clr	r0			; indicate success
-	unsave	<r2,r1>
+	unsave	^/r2,r1/
 	return
 
-
+	.page
 	.sbttl	Binary read
 
 ;	B I N R E A
 ;
 ;	input:	  (r5)	= time-out
 ;	output:	   r1	= character just read
-;		   r0	= if <>, error code
+;		   r0	= if ^//, error code
 
 t.xbinre::				; same here, different in KRTXL
 t.binrea::cmp	(r5)	,#-1		; read without any wait?
@@ -149,12 +149,12 @@ t.binrea::cmp	(r5)	,#-1		; read without any wait?
 	clr	r1			; /BBS/ ensure nothing output
 50$:	return
 
-
+	.page
 	.sbttl	Binary write
 
 ;	B I N W R I
 ;
-;	output:	  r0	= if <>, error code
+;	output:	  r0	= if ^//, error code
 
 t.binwri::tst	tsxsav			; /63/ running under TSX?
 	beq	10$			; /63/ no
@@ -165,18 +165,18 @@ t.binwri::tst	tsxsav			; /63/ running under TSX?
 	emt	375			; /63/ do the write to TT
 	br	40$			; /63/ done
 
-10$:	save	<r1,r2>			; /63/ RT-11 output done here
+10$:	save	^/r1,r2/			; /63/ RT-11 output done here
 	mov	2(r5)	,r2		; get the string length
 	beq	30$			; /63/ nothing to do
 	mov	@r5	,r1		; get the string address
 20$:	.ttyou	(r1)+			; dump one char
 	sob	r2	,20$		; next please
-30$:	unsave	<r2,r1>			; /63/
+30$:	unsave	^/r2,r1/			; /63/
 
 40$:	clr	r0			; no error possible
 	return
 
-
+	.page
 	.sbttl	Reset an XOFF		; /BBS/ all new
 
 t.ttxon::movb	tsxsave	,xonlin		; TSX line number
@@ -187,7 +187,7 @@ t.ttxon::movb	tsxsave	,xonlin		; TSX line number
 	emt	375			; SET TT XON
 	br	40$
 
-10$:	save	<r1,r2>
+10$:	save	^/r1,r2/
 	.gval	#rtwork,#$tcfig		; get term config word addr
 	cmp	rt11ver	,#5		; /62/ is this RT-11 V5 or above?
 	bge	20$			; /62/ ya, .peek will work
@@ -220,21 +220,21 @@ t.ttxon::movb	tsxsave	,xonlin		; TSX line number
 	MOV	r1	,2.(R0)		; /62/
 	MOV	r2	,4.(R0)		; /62/
 	EMT	^o375			; /62/
-30$:	unsave	<r2,r1>
+30$:	unsave	^/r2,r1/
 
 40$:	.rctrlo				; force update again
 	.ttyout	#xon			; send an XON
 	clr	r0			; success
 	return
 
-
+	.page
 	.sbttl	Hose the terminal port, cancel type_ahead
 
 t.hose::				; same here, different in KRTXL
 t.cantyp::call	t.ttxon			; /BBS/ dump a possible XOFF then
 	jmp	clrcns			; /62/ eat any pending terminal input
 
-
+	.page
 	.sbttl	Handler functions not needed for TT
 
 t.dcdtst::				; /62/

@@ -39,9 +39,9 @@
 ;
 ;	07-MAY-1986 10:55  Brian Nelson
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	.mcall	.CMKT	,.MRKT	,.RSUM	,.SCCA	,.SPFUN
 	.mcall	.SPND	,.TTINR	,.TTOUTR,.TWAIT	,.WRITC
@@ -63,17 +63,17 @@
 	mov	(sp)+	,r0
 	.endm	schedule
 
-
+	.page
 	.sbttl	Local buffers
 
 	.psect	condat	,rw,d,lcl,rel,con
 brkwrk:	.word	0 ,0 ,0 ,0		; /62/ break mark time work area
 cancel:	.word	0 ,0 ,0 ,0		; .cmkt work area
-crflag:	.word	0			; if <> last char was a CR
-done:	.word	0			; set this <> to exit scheduler
-iopend:	.word	0			; if <> XL write completion is pending
+crflag:	.word	0			; if ^// last char was a CR
+done:	.word	0			; set this ^// to exit scheduler
+iopend:	.word	0			; if ^// XL write completion is pending
 rmbuff:	.word	0			; one word buffer for writes to XL
-rt.v51:	.word	0			; if <> XL is from RT-11 V5.1
+rt.v51:	.word	0			; if ^// XL is from RT-11 V5.1
 scca:	.word	0 ,0 ,0			; trap ^C here
 short:	.word	0 ,1			; wait one tick
 stsmark:.word	0 ,0 ,0 ,0		; status watcher mark time work area
@@ -82,7 +82,7 @@ twait:	.word	0 ,0			; .twait work area
 xkmark:	.word	0 ,0 ,0 ,0		; xktime mark time work area
 xkwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; writes to handler work area
 
-
+	.page
 	.sbttl	Task scheduler data table
 
 ; these are NOT saved and may be used only within the then active task
@@ -97,7 +97,7 @@ xkwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; writes to handler work area
 ;	r5	= pointer to CURRENT task's entry in table
 
 	TASKADDR = 0			; task's starting address
-	STATE	 = 2			; if <> run this task next time thru
+	STATE	 = 2			; if ^// run this task next time thru
 
 ;	       taskaddr	,state		; /62/ rmhead MUST follow tthead in
 tlist:					; /62/ this table, see note in rmproc
@@ -117,31 +117,31 @@ xktime:	.word	0 ,2			; wait to clear stuffed output buffer
 con.01:	.asciz	"Connecting to "
 con.02:	.asciz	"  DTE speed: "		; "DTE" as path speed may be different
 con.03:	.asciz	"N/A"
-con.04:	.asciz	<cr><lf>"Type ^"
-con.05:	.asciz	"C to return to your local machine"<cr><lf>
+con.04:	.asciz	^/cr/^/lf/"Type ^"
+con.05:	.asciz	"C to return to your local machine"^/cr/^/lf/
 con.06:	.asciz	"%KRTCON-W-Carrier "
-con.07:	.asciz	"lost"<cr><lf>
-con.08:	.asciz	"detected"<cr><lf>
+con.07:	.asciz	"lost"^/cr/^/lf/
+con.08:	.asciz	"detected"^/cr/^/lf/
 con.09:	.asciz	"Logfile is "
 con.10:	.asciz	", cur/max blk: "
 con.11:	.asciz	"/"
 con.12:	.asciz	"No LOGFILE is open"
-hlptxt:	.ascii	<cr><lf>
-	.ascii	"B	Send a break"<cr><lf>
-	.ascii	"C	Connect back to the local Kermit-11"<cr><lf>
-	.ascii	"I	Drop DTR for 0.5sec (hang up) then restore it"<cr><lf>
-	.ascii	"Q	Suspend CONSOLE logging"<cr><lf>
-	.ascii	"R	Resume CONSOLE logging"<cr><lf>
-	.ascii	"S	CONSOLE logging status"<cr><lf>
-	.ascii	"X	Flow control reset"<cr><lf>
-	.ascii	"Z	Zap (100% hose & try to unhang) the handler"<cr><lf>
+hlptxt:	.ascii	^/cr/^/lf/
+	.ascii	"B	Send a break"^/cr/^/lf/
+	.ascii	"C	Connect back to the local Kermit-11"^/cr/^/lf/
+	.ascii	"I	Drop DTR for 0.5sec (hang up) then restore it"^/cr/^/lf/
+	.ascii	"Q	Suspend CONSOLE logging"^/cr/^/lf/
+	.ascii	"R	Resume CONSOLE logging"^/cr/^/lf/
+	.ascii	"S	CONSOLE logging status"^/cr/^/lf/
+	.ascii	"X	Flow control reset"^/cr/^/lf/
+	.ascii	"Z	Zap (100% hose & try to unhang) the handler"^/cr/^/lf/
 	.ascii	'^x	Send control char "x" using A..Z[\]~? '
-	.ascii	"prefixed with a carat"<cr><lf>	; /63/ added for clarity
-	.asciz	"RUBOUT	Send a break"<cr><lf><cr><lf>
+	.ascii	"prefixed with a carat"^/cr/^/lf/	; /63/ added for clarity
+	.asciz	"RUBOUT	Send a break"^/cr/^/lf/^/cr/^/lf/
 lis.ct:	.asciz	"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Initialization
 
@@ -152,7 +152,7 @@ doconn::call	opentt			; /63/ open the link device
 
 10$:	.scca	#scca	,#scca+4	; kill ^C, this is reset by setcc
 	.cmkt	#cancel	,#40		; then dump setcc's mark timer
-	calls	t.ttyini,<#-1>		; init terminal (w/flag for ^W)
+	calls	t.ttyini,^/#-1/		; init terminal (w/flag for ^W)
 
 	tst	conmsg			; display sign-on text?
 	bne	40$			; nope..
@@ -165,19 +165,19 @@ doconn::call	opentt			; /63/ open the link device
 	wrtall	#con.03			; /63/ "N/A"
 	br	30$			; continue
 20$:	call	L10266			; write speed in r0 as dec num to TT
-30$:	wrtall	#con.04			; /63/ <cr><lf>"Type ^"
+30$:	wrtall	#con.04			; /63/ ^/cr/^/lf/"Type ^"
 	mov	conesc	,r0		; get esc char
 	dec	r0			; lis.ct here has no null entry
 	movb	lis.ct(r0),r0		; make it printable
 	call	writ1ch			; write it to TT
-	wrtall	#con.05			; /63/ "C to return .."<cr><lf>
+	wrtall	#con.05			; /63/ "C to return .."^/cr/^/lf/
 40$:	clr	conmsg			; reset sign-on bypass flag
 	mov	sp	,logini		; /62/ force logerr msg into the clear
 
 	clr	r4			; init TT input buffer
 	tst	milnet			; MILNET mode on?
 	beq	50$			; no
-	mov	#xon+<xon*400>,r4	; ya, stuff a couple XONs for remote
+	mov	#xon+^/xon*400/,r4	; ya, stuff a couple XONs for remote
 
 50$:	.spfun	#rtwork,#xc.control,#stsdrv,#xcsts,#0,#1 ; /62/ get status
 
@@ -210,7 +210,7 @@ doconn::call	opentt			; /63/ open the link device
 	call	readxk			; get data or set completion routine
 	.br	100$			; /63/
 
-
+	.page
 	.sbttl	CONNECT main_loop
 
 100$:	mov	#tlist	,r5		; get top of the task list
@@ -226,7 +226,7 @@ doconn::call	opentt			; /63/ open the link device
 	tst	done			; time to go now?
 	beq	100$			; no, loop again
 
-
+	.page
 	.sbttl	Shut_down and exit
 
 	clr	xk.con			; send completed reads data to binread
@@ -236,7 +236,7 @@ doconn::call	opentt			; /63/ open the link device
 	clr	logini			; /62/ indicate cursor on a clean line
 	return
 
-
+	.page
 	.sbttl	Scheduler's mark time completion routines
 
 stsdone:mov	sp	,sthead+state	; /63/ make the status test runnable
@@ -256,7 +256,7 @@ rerun:	tst	suspnd			; need to resume?  /62/ add rerun ept
 	.rsum				; get scheduler going
 S10$:	return
 
-
+	.page
 	.sbttl	Process TT input
 
 ttproc:	tst	done			; finished?
@@ -269,7 +269,7 @@ ttproc:	tst	done			; finished?
 
 	tst	con8bit			; SET CON 8?
 	bne	20$			; ya
-	bic	#^c<177>,r0		; no, strip any parity present
+	bic	#^c^/177/,r0		; no, strip any parity present
 20$:	cmpb	r0	,conesc		; escape sequence?
 	bne	60$			; no, dump character as is
 	mov	#5	,r1		; ya, wait up to five seconds
@@ -282,7 +282,7 @@ ttproc:	tst	done			; finished?
 	br	130$			; exit as we did not get anything
 40$:	tst	con8bit			; SET CON 8?
 	bne	50$			; ya
-	bic	#^c<177>,r0		; strip junk from the character
+	bic	#^c^/177/,r0		; strip junk from the character
 50$:	cmpb	r0	,conesc		; another escape character?
 	beq	60$			; yes, dump that character as is
 	call	concmd			; console command processor
@@ -290,9 +290,9 @@ ttproc:	tst	done			; finished?
 
 60$:	bit	#2	,xcsts		; /62/ remote asserted flow control?
 	beq	70$			; no
-	save	<r0>			; /62/ ya, save the input byte
+	save	^/r0/			; /62/ ya, save the input byte
 	beep				; beep & continue, _OVERWRITING_ data
-	unsave	<r0>			; /62/ by restoring input byte and
+	unsave	^/r0/			; /62/ by restoring input byte and
 	clr	r4			; /62/ ensuring it's bit settable here
 70$:	tst	tsxsav			; running under TSX?
 	bne	90$			; ya, skip LF processing..
@@ -330,7 +330,7 @@ ttproc:	tst	done			; finished?
 	.mrkt	#ttmark,#ttwait,#ttdone,#3 ; sched another try for TT input
 140$:	return
 
-
+	.page
 	.sbttl	Send data from XL to TT
 
 xkproc:	clr	r0			; avoid sign extension
@@ -345,15 +345,15 @@ xkproc:	clr	r0			; avoid sign extension
 	beq	30$			; ya, don't type this to TT
 20$:	.ttoutr				; dump the char
 	bcs	50$			; buffer full, go wait a bit
-30$:	bit	#<log$co!log$on>,trace	; /63/ logging enabled?
+30$:	bit	#^/log$co!log$on/,trace	; /63/ logging enabled?
 	beq	40$			; no
 	mov	#lun.lo	,r1		; log file chan, char is still in r0
 	call	putcr0			; that's it folks
 	tst	r0			; /62/ did it work?
 	beq	40$			; /62/ ya
-	save	<r0>			; /62/ no, save error code
+	save	^/r0/			; /62/ no, save error code
 	beep				; /62/ call attention to this!
-	unsave	<r0>			; /62/ recover error code
+	unsave	^/r0/			; /62/ recover error code
 	call	logerr			; /62/ handle the error
 40$:	inc	xkpoint			; bump to next byte
 	br	xkproc			; loop for it
@@ -365,7 +365,7 @@ xkproc:	clr	r0			; avoid sign extension
 60$:	clr	state(r5)		; no longer runnable
 	jmp	readxk			; /63/ get more data from XL
 
-
+	.page
 	.sbttl	Write one word from TT input to XL
 
 rmproc:	tst	iopending		; we still waiting for XL?
@@ -386,7 +386,7 @@ rmproc:	tst	iopending		; we still waiting for XL?
 30$:	clr	iopending		; I/O no longer pending
 	return
 
-
+	.page
 	.sbttl	Status_watcher
 
 stproc:	mov	xcsts	,r2		; /62/ save prior status
@@ -397,8 +397,8 @@ stproc:	mov	xcsts	,r2		; /62/ save prior status
 	bne	10$			; CL uses bit 2
 	asr	r1			; KM, XC and XL use bit 3
 	asr	r2			; make it 2 here
-10$:	bic	#^c<4>	,r2		; recover the carrier
-	bic	#^c<4>	,r1		; detect bits
+10$:	bic	#^c^/4/	,r2		; recover the carrier
+	bic	#^c^/4/	,r1		; detect bits
 	cmp	r1	,r2		; any change?
 	beq	30$			; no
 	beep				; ya, make a small noise
@@ -413,7 +413,7 @@ stproc:	mov	xcsts	,r2		; /62/ save prior status
 	.mrkt	#stsmark,#ststime,#stsdone,#7	; reschedule us
 	return
 
-
+	.page
 	.sbttl	Internal command processor
 
 concmd:	call	strip0			; /62/ strip parity, upcase if alpha
@@ -433,7 +433,7 @@ C20$:	.word	con.$
 	.word	con.q	,con.r	,con.s	,con.x	,con.z	,con.ctr,con.br
 	.restore
 
-
+	.page
 	.sbttl	CONCMD sub-routines
 
 con.$:	beep				; bad command, ring the bell
@@ -481,15 +481,15 @@ con.br:	.spfun	#rtwork,#xc.control,#brkdrv,#0,#1,#1 ; /62/ turn break on
 	.mrkt	#brkwrk,#break,#20$,#20	; /62/ queue this to turn it off
 	return
 
-20$:	save	<r0>			; /62/ this is a completion routine
+20$:	save	^/r0/			; /62/ this is a completion routine
 	.spfun	#rtwork,#xc.control,#brkdrv,#0,#0,#1 ; /62/ turn break off
-	unsave	<r0>
+	unsave	^/r0/
 	return
 
 con.hl:	wrtall	#hlptxt			; dump help text to terminal
 	jmp	con.s0			; /63/ sho debug status
 
-
+	.page
 	.sbttl	Send a control char ala VTCOM's ^x command
 
 con.ctrl:mov	#5	,r1		; wait five seconds
@@ -520,10 +520,10 @@ con.ctrl:mov	#5	,r1		; wait five seconds
 50$:	schedule #rmhead		; dump the data down the line
 60$:	return
 
-
+	.page
 	.sbttl	Strip parity and upcase	; /62/ moved this here, now shared..
 
-strip0:	bic	#^c<177>,r0		; strip parity
+strip0:	bic	#^c^/177/,r0		; strip parity
 	cmp	r0	,#'a!40		; convert
 	blo	10$			; char
 	cmp	r0	,#'z!40		; to

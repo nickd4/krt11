@@ -30,11 +30,11 @@
 ; of the high order (parity) bit, thus preventing an 8-bit data path from
 ; being used.
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
+	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.CMKT	,.MRKT	,.PURGE	,.SCCA
 	.mcall	.READW	,.TTINR	,.TTYOUT,.TWAIT
@@ -44,7 +44,7 @@
 	wrtall	#$beep2			; make the terminal beep twice
 	.endm	beep2
 
-
+	.page
 	.sbttl	Local data
 
 	ACK	= 6			; acknowledge packet (ok)
@@ -82,26 +82,26 @@ xtime:	.word	0 ,30.			; wait 0.5sec when finished or abort
 
 	.psect	$pdata			; /63/ consolidate here..
 $beep2:	.byte	bell ,bell ,0		; two bells
-sen.10:	.asciz	<bell>"Send completed"	; /62/
-sen.11:	.asciz	<bell>"Send failed"
+sen.10:	.asciz	^/bell/"Send completed"	; /62/
+sen.11:	.asciz	^/bell/"Send failed"
 sen.12:	.asciz	'Processing file name "'
 sen.13:	.asciz	'"'
 xmo.01:	.asciz	"File open: "		; tell user about the file
 xmo.02:	.asciz	"["			; size in RT-11 blocks goes here
 xmo.03:	.asciz	"], "			; format the display
-xmo.04:	.ascii	" Xmodem (128 byte) blocks"<cr><lf>	; tag file size
+xmo.04:	.ascii	" Xmodem (128 byte) blocks"^/cr/^/lf/	; tag file size
 	.asciz	"Awaiting ready signal (^X aborts).."	; ready to rip..
 xmo.05:	.asciz	"File transfer completed"
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Send file(s)		; /BBS/ somewhat modified..
 					; /62/ moved here for smaller root
 c$send::clr	wasmore			; init multi-args display flag
 	tst	inopn			; is an input file currently open?
 	beq	10$			; no
-	calls	close	,<#lun.in>	; yes, please close old file up
+	calls	close	,^/#lun.in/	; yes, please close old file up
 10$:	mov	argbuf	,r1		; address of command line buffer
 	tstb	@r1			; anything there?
 	beq	20$			; no
@@ -111,17 +111,17 @@ c$send::clr	wasmore			; init multi-args display flag
 20$:	mov	#er$snd	,r0		; emit a syntax error message
 	br	50$			; goto error handler
 
-30$:	calls	chk.tt	,<#srcnam>	; /63/ disallow TT as an input dev
+30$:	calls	chk.tt	,^/#srcnam/	; /63/ disallow TT as an input dev
 	tst	r0			; /63/ well?
 	bne	50$			; /63/ it was TT
 	tst	wasmore			; working with more than 1 file?
 	beq	40$			; no
-	calls	printm	,<#3,#sen.12,#srcnam,#sen.13> ; ya, say which it is
+	calls	printm	,^/#3,#sen.12,#srcnam,#sen.13/ ; ya, say which it is
 40$:	upcase	#srcnam			; upper case the input file name
 	tst	remote			; in remote mode?
 	beq	70$			; no
 	clr	index			; /62/ init lookup's file counter
-	calls	lookup	,<#srcnam,#spare1> ; /62/ look for something to do
+	calls	lookup	,^/#srcnam,#spare1/ ; /62/ look for something to do
 	tst	r0			; /62/ well?
 	beq	60$			; /62/ at least one file exists
 	cmp	r0	,#er$nmf	; if error is "No more files"
@@ -131,13 +131,13 @@ c$send::clr	wasmore			; init multi-args display flag
 	.purge	#lun.sr			; /62/ hose dir search channel
 	br	130$			; go say it's over..
 
-60$:	calls	suspend	,<sendly>	; allow time to start REC at other end
+60$:	calls	suspend	,^/sendly/	; allow time to start REC at other end
 
 70$:	call	opentt			; open and initialize the link
 	tst	r0			; did it work?
 	bne	120$			; no, error displayed by ttyini
 	call	cantyp			; flush any accumulated NAKs
-80$:	calls	xbinread,<#-1>		; /63/ read with no wait to flush
+80$:	calls	xbinread,^/#-1/		; /63/ read with no wait to flush
 	tst	r0			; /63/ any possible junk in buffer
 	beq	80$			; /63/ loop until nothing remains
 	tst	locase			; SET FIL NAM LOWER-CASE?
@@ -148,12 +148,12 @@ c$send::clr	wasmore			; init multi-args display flag
 	tst	r0			; did it work?
 	bne	120$			; no, getnxt has sent the error packet
 	mov	sp	,inprogress	; packets are being exchanged
-	calls	sensw	,<#msg$snd>	; now send the file
+	calls	sensw	,^/#msg$snd/	; now send the file
 	tst	r0			; did it work?
 	bne	120$			; no
 	mov	nextone	,r0		; ya, any more arguments to process?
 	bne	100$			; ya, go do it
-	calls	printm	,<#1,#sen.10>	; no, done
+	calls	printm	,^/#1,#sen.10/	; no, done
 	br	140$			; note r0 is clear here too
 100$:	cmpb	(r0)	,#space		; is first byte a blank?
 	bne	110$			; no
@@ -162,13 +162,13 @@ c$send::clr	wasmore			; init multi-args display flag
 110$:	copyz	r0 ,argbuf ,#ln$max	; pull up remaining args to top of buf
 	jmp	10$			; /63/ loop back for more
 
-120$:	calls	printm	,<#1,#sen.11>	; it failed, say so if local
+120$:	calls	printm	,^/#1,#sen.11/	; it failed, say so if local
 130$:	inc	status			; /45/ flag for batch exit
 140$:	clrb	asname			; /36/ ensure no more alternate names
 	call	clostt			; release the link
 	jmp	clrcns			; /62/ flush TT input, clear r0
 
-
+	.page
 	.sbttl	XMODEM a file		; /62/ moved this here too..
 
 c$xmodem::tst	tsxsav			; send only, via TT only
@@ -178,7 +178,7 @@ c$xmodem::tst	tsxsav			; send only, via TT only
 
 10$:	tst	inopn			; input file currently open?
 	beq	20$			; no
-	calls	close	,<#lun.in>	; yes, please close old file first
+	calls	close	,^/#lun.in/	; yes, please close old file first
 20$:	upcase	argbuf			; upper case all command args
 	mov	argbuf	,r1		; address of command line buffer
 	tstb	@r1			; anybody home?
@@ -191,11 +191,11 @@ c$xmodem::tst	tsxsav			; send only, via TT only
 	cmpb	@r1	,#space		; so stop at first space
 	bgt	40$			; next byte
 	clrb	@r2			; ensure source name is asciz
-50$:	calls	iswild	,<#srcnam>	; check for wildcarding
+50$:	calls	iswild	,^/#srcnam/	; check for wildcarding
 	tst	r0			; if .ne., then wildcarded
 	bne	60$			; can't process wildcards
-	calls	fparse,<#srcnam,#filnam>  ; parse file name
-	calls	open,<#filnam,#lun.in,#binary>  ; try to open the file
+	calls	fparse,^/#srcnam,#filnam/  ; parse file name
+	calls	open,^/#filnam,#lun.in,#binary/  ; try to open the file
 	tst	r0			; did it work?
 	beq	70$			; ya..
 60$:	direrr	r0			; no.. print mapped error msg
@@ -203,12 +203,12 @@ c$xmodem::tst	tsxsav			; send only, via TT only
 	br	80$			; and bail out
 
 70$:	call	x$modem			; run xmodem
-	calls	close	,<#lun.in>	; close file
+	calls	close	,^/#lun.in/	; close file
 	.newline			; ensure prompt is on a newline
 80$:	clr	r0			; any error was already handled
 	return
 
-
+	.page
 	.sbttl	Initialization
 
 x$modem:.scca	#ttctlc	,#ttctlc+4	; /62/ off ^C
@@ -243,7 +243,7 @@ x$modem:.scca	#ttctlc	,#ttctlc+4	; /62/ off ^C
 
 	mov	#nosingle,r0		; single char input dies in hieff mode
 	emt	375			; if activation chars are declared
-	calls	t.ttyini,<#0>		; init TT
+	calls	t.ttyini,^/#0/		; init TT
 	movb	#1	,hieff		; setup high efficiency emt
 	mov	#hieff	,r0
 	emt	375			; do it
@@ -255,7 +255,7 @@ x$modem:.scca	#ttctlc	,#ttctlc+4	; /62/ off ^C
 	mov	#1	,xrecno		; init xmodem block count
 	.br	dnload			; /63/
 
-
+	.page
 	.sbttl	Download
 
 dnload:	call	rdblk			; read some input
@@ -273,7 +273,7 @@ dnload:	call	rdblk			; read some input
 	beq	dnload			; yes, then better read in some more
 	br	10$			; else go send another block
 
-
+	.page
 	.sbttl	End of file processing
 
 eof:	mov	#eot	,r0		; send end of transmission
@@ -289,7 +289,7 @@ eof:	mov	#eot	,r0		; send end of transmission
 	wrtall	#xmo.05			; /63/ "File transfer completed"
 	br	reset			; and reset parameters
 
-
+	.page
 	.sbttl	Clean up and exit Xmodem
 
 abort:	beep2
@@ -310,7 +310,7 @@ reset:	.twait	#rtwork	,#xtime		; wait for remote to come back
 	clr	r0			; no errors passed back..
 	return
 
-
+	.page
 	.sbttl	Wait for initial NAK from remote
 
 waitnk:	clr	aflag			; clear abort flag
@@ -338,7 +338,7 @@ waitnk:	clr	aflag			; clear abort flag
 50$:	.cmkt	#marea	,#41		; cancel timer
 	return
 
-
+	.page
 	.sbttl	Wait for ACK from remote
 
 getack:	clr	aflag			; clear abort flag
@@ -361,7 +361,7 @@ getack:	clr	aflag			; clear abort flag
 40$:	clr	aflag			; clear abort
 	return
 
-
+	.page
 	.sbttl	Send a checksummed block to the remote
 
 sndblk:	clr	chksum			; clear checksum
@@ -390,7 +390,7 @@ sndblk:	clr	chksum			; clear checksum
 20$:	.ttyout				; send checksum
 	return
 
-
+	.page
 	.sbttl	Read a block from the input file
 
 rdblk:	clr	point			; clear pointer
@@ -410,7 +410,7 @@ rdblk:	clr	point			; clear pointer
 	beep2				; this doesn't preserve r0..
 	jmp	reset			; exit the program
 
-
+	.page
 	.sbttl	Schedule a completion routine
 
 stimer:	.cmkt	#marea	,#41		; cancel possible outstanding request
@@ -420,7 +420,7 @@ stimer:	.cmkt	#marea	,#41		; cancel possible outstanding request
 timout:	com	tflag			; set timout flag to indicate time-out
 	return
 
-
+	.page
 	.sbttl	Update CRC, routine from Steve Brecher's COM program
 
 ; Update CRC in r3 with datum in the low byte of r0.  Registers preserved.
@@ -432,7 +432,7 @@ timout:	com	tflag			; set timout flag to indicate time-out
 CON	= 10041		;constant = 1021 hex, for CCITT, recommended
 			;polynomial of x**16 + x**12 + x**5 + 1
 
-updcrc:	save	<r0,r1,r2>
+updcrc:	save	^/r0,r1,r2/
 	mov	#con	,r2		; the constant
 	mov	#8.	,r1		; number of data bits
 10$:	rolb	r0			; rotate left, byte mode
@@ -440,7 +440,7 @@ updcrc:	save	<r0,r1,r2>
 	bcc	20$			; nothing shifted out of msb
 	xor	r2	,r3		; something shifted out, fix it
 20$:	sob	r1	,10$		; next data bit
-	unsave	<r2,r1,r0>
+	unsave	^/r2,r1,r0/
 	return
 
 getcrc:	clr	r0			; after all data have passed through

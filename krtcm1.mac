@@ -50,9 +50,9 @@
 ;
 ;	12-Sep-86  10:39:27 BDN Convert for I/D space
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	.mcall	.PURGE	,.SPFUN		; /62/
 
@@ -82,11 +82,11 @@ parlst:	.word	P00$ ,P10$ ,P20$ ,P30$ ,P40$	; parity display in SHOW LINE
  P20$:	.asciz	"EVEN"
  P30$:	.asciz	"MARK"
  P40$:	.asciz	"SPACE"
-cm1.01:	.asciz	" closed"<cr><lf>	; shared string: TAKE, defterm
-cm1.02:	.asciz	" opened"<cr><lf>
-cm1.03:	.asciz	" Files copied:"<cr><lf>
-cm1.04:	.asciz	"?TYPE-W-Binary file filter enabled"<cr><lf>
-cm1.05:	.asciz	" to TT:"<cr><lf>
+cm1.01:	.asciz	" closed"^/cr/^/lf/	; shared string: TAKE, defterm
+cm1.02:	.asciz	" opened"^/cr/^/lf/
+cm1.03:	.asciz	" Files copied:"^/cr/^/lf/
+cm1.04:	.asciz	"?TYPE-W-Binary file filter enabled"^/cr/^/lf/
+cm1.05:	.asciz	" to TT:"^/cr/^/lf/
 cm1.06:	.asciz	"Link device is "
 cm1.07:	.asciz	"TT:   "
 cm1.08:	.asciz	" via Line #"
@@ -109,19 +109,19 @@ takdef::.asciz	".COM"			; default take file extent, patchable
 typdef:	.asciz	".LST"			; default extent for type
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	The SET command		; /BBS/ just about all new..
 
 c$set::	upone	argbuf			; upper case just next arg
 	call	loaset			; load the set commands overlay
-	calls	getcm0	,<argbuf,r0>	; lookup address of desired command
+	calls	getcm0	,^/argbuf,r0/	; lookup address of desired command
 	mov	r0	,r2		; save a copy of it
 	bmi	60$			; some sort of error occurred
 	tst	wasnul			; were commands listed via "?"
 	bne	110$			; ya
 	call	loaset			; reload set commands overlay
-	calls	getcm1	,<argbuf,r0,r2>	; check possible argument to command
+	calls	getcm1	,^/argbuf,r0,r2/	; check possible argument to command
 	tst	r0			; well?
 	bmi	60$			; bad arg..
 
@@ -186,7 +186,7 @@ skipit::tst	restof			; was a comma in the arg string?
 	clr	restof			; indicate it has been used here
 120$:	return
 
-
+	.page
 	.sbttl	SET CLn LINE x		; /BBS/ this is all new..
 
 ;	input:	entire command argbuf, .asciz
@@ -346,7 +346,7 @@ isitcl:	mov	r0	,r4		; save incoming error
 	mov	(r1)	,r0		; and return its address to caller
 260$:	return
 
-
+	.page
 	.sbttl	SET CL LINE * processor
 
 cl.wild:tst	r50dev			; is there now a link device?
@@ -452,7 +452,7 @@ cl.wild:tst	r50dev			; is there now a link device?
 	cmpb	(r4)+	,#'/		; is next byte a slash?
 	bne	160$			; no, it's an error
 	call	220$			; extract a speed value
-	calls	setspd	,<r3>		; give it a try
+	calls	setspd	,^/r3/		; give it a try
 	tst	r0			; well?
 	bne	170$			; it failed
 	clr	b4speed			; reset this if above succeeds..
@@ -518,7 +518,7 @@ cl.wild:tst	r50dev			; is there now a link device?
 260$:	clrb	(r0)			; terminate
 	return
 
-
+	.page
 	.sbttl	The CONNECT command	; /BBS/ heavily modified
 
 c$conn::tstb	ttname			; anything to connect ??
@@ -542,7 +542,7 @@ c$conn::tstb	ttname			; anything to connect ??
 40$:	clr	r0			; /62/ only do error message once
 	return
 
-
+	.page
 	.sbttl	The TAKE command	; /BBS/ heavily hacked ..
 
 c$take::tst	cmdlun			; indirect file already open?
@@ -556,7 +556,7 @@ c$take::tst	cmdlun			; indirect file already open?
 	beq	20$			; Not very
 	wrtall	#indnam			; dump file name
 	wrtall	#cm1.01			; /63/ " closed",cr
-20$:	calls	close	,<#lun.ta>	; close the file
+20$:	calls	close	,^/#lun.ta/	; close the file
 	clr	cmdlun			; clear the it's open flag for it
 
 30$:	clr	r4			; init try the path flag
@@ -586,20 +586,20 @@ c$take::tst	cmdlun			; indirect file already open?
 	br	140$			; bail out
 
 90$:	copyz	(r3)+	,#indnam,#16+1	; /62/ current name in list to opener
-100$:	calls	fparse	,<#indnam,#srcnam> ; parse the file name please
+100$:	calls	fparse	,^/#indnam,#srcnam/ ; parse the file name please
 	tst	r0			; did the $parse work?
 	bne	140$			; /62/ no
-	calls	iswild	,<#srcnam>	; wildcarded file spec?
+	calls	iswild	,^/#srcnam/	; wildcarded file spec?
 	tst	r0			; no support for it yet here..
 	bne	140$			; /62/ disallow wildcarded file name
 
-;	calls	chkext	,<#srcnam>	; check for binary file type
+;	calls	chkext	,^/#srcnam/	; check for binary file type
 ;	tst	r0			; iz it binary?
 ;	beq	110$			; nope
 ;	mov	#er$fnm	,r0		; ya, bad file name
 ;	br	130$			; bail out
 
-110$:	calls	open,<#srcnam,#lun.ta,#text> ; open file for input
+110$:	calls	open,^/#srcnam,#lun.ta,#text/ ; open file for input
 	tst	r0			; did the open for command file work?
 	bne	130$			; no, print error and exit
 	mov	#lun.ta	,cmdlun		; yes, stuff the unit number in
@@ -618,19 +618,19 @@ c$take::tst	cmdlun			; indirect file already open?
 	clrb	indnam			; zero out take file name buffer
 150$:	return
 
-
+	.page
 	.sbttl	Local DIRECTORY and SPACE commands  ; /BBS/ modified a bit
 
 c$spac::mov	sp	,summary	; flag for summary only
 c$dir::	upcase	argbuf			; upper case all command args
-	calls	fixwild	,<argbuf>	; convert "?" to "%"
-	calls	dodir	,<argbuf>	; /62/ do the directory
+	calls	fixwild	,^/argbuf/	; convert "?" to "%"
+	calls	dodir	,^/argbuf/	; /62/ do the directory
 	tst	r0			; did it work?
 	beq	10$			; yes
 	direrr	r0			; no, print the error
 10$:	return
 
-
+	.page
 	.sbttl	MOUNT, DISMOUNT a logical disk  (TSX+ only)  ; /BBS/ all new
 
 c$dismou::mov	sp	,r1		; set dismount flag
@@ -653,18 +653,18 @@ c.mnt:	tst	tsxsav			; /63/ running under TSX?
 30$:	direrr	r0			; no, print error message
 40$:	return
 
-
+	.page
 	.sbttl	The local TYPE command	; /BBS/ heavily hacked..
 
 	.save
 	.psect	$pdata
-less:	.asciz	<cr><lf>		; only type these for a binary file
-more:	.asciz	<bell><bs><tab><cr><ff><lf><ctrl$n><ctrl$o><esc> ; ok in text
+less:	.asciz	^/cr/^/lf/		; only type these for a binary file
+more:	.asciz	^/bell/^/bs/^/tab/^/cr/^/ff/^/lf/^/ctrl$n/^/ctrl$o/^/esc/ ; ok in text
 	.even
 	.restore
 
 c$type::upcase	argbuf			; upper case all args
-	calls	fparse	,<argbuf,#srcnam> ; parse the file name please
+	calls	fparse	,^/argbuf,#srcnam/ ; parse the file name please
 	tst	r0			; did the $parse work?
 	beq	10$			; ya
 	jmp	170$			; no
@@ -675,9 +675,9 @@ c$type::upcase	argbuf			; upper case all args
 	bne	20$			; ya..
 	strcat	#srcnam	,#typdef	; no, add ".LST" to it
 
-20$:	calls	iswild	,<#srcnam>	; wildcarded?
+20$:	calls	iswild	,^/#srcnam/	; wildcarded?
 	mov	r0	,r4		; save copy of answer
-30$:	calls	lookup	,<#srcnam,#filnam> ; /62/
+30$:	calls	lookup	,^/#srcnam,#filnam/ ; /62/
 	tst	r0			; did it work?
 	beq	70$			; yes
 	clr	r1			; clear try for another flag..
@@ -693,13 +693,13 @@ c$type::upcase	argbuf			; upper case all args
 
 70$:	mov	#more	,r3		; init for text file filtering
 	clr	r1			; init binary/text flag
-	calls	chkext	,<#filnam>	; check for binary file type
+	calls	chkext	,^/#filnam/	; check for binary file type
 	tst	r0			; iz it binary?
 	beq	80$			; no..
 	mov	#less	,r3		; ya, get binary file filter
 	inc	r1			; flag as binary
 80$:	clr	r2			; assume file not open
-	calls	open,<#filnam,#lun.in,r1> ; open file for input
+	calls	open,^/#filnam,#lun.in,r1/ ; open file for input
 	tst	r0			; but did the open work?
 	bne	170$			; no
 	com	r2			; flag it as being open please
@@ -715,7 +715,7 @@ c$type::upcase	argbuf			; upper case all args
 	beq	110$			; no, skip naming of each one
 	wrtall	#filnam			; print the expanded name out
 	wrtall	#cm1.05			; /63/ " to TT:",cr
-110$:	calls	open,<#0,#lun.kb,r1>	; open (init) TT for putc output
+110$:	calls	open,^/#0,#lun.kb,r1/	; open (init) TT for putc output
 
 120$:	mov	#lun.in	,r0		; I/O chan to use
 	call	getcr0			; get a byte
@@ -733,11 +733,11 @@ c$type::upcase	argbuf			; upper case all args
 	bcc	150$			; /62/ no
 	cmpb	r1	,#lf		; /62/ is this byte a LF?
 	beq	150$			; /62/ ya
-	calls	putc	,<#lf,#lun.kb>	; /62/ no, append LF to CR just typed
+	calls	putc	,^/#lf,#lun.kb/	; /62/ no, append LF to CR just typed
 150$:	cmpb	r1	,#cr		; /62/ is this byte a CR?
 	bne	160$			; /62/ no
 	inc	crflag			; /62/ ya, flag it is
-160$:	calls	putc	,<r1,#lun.kb>	; put char to TT
+160$:	calls	putc	,^/r1,#lun.kb/	; put char to TT
 	br	120$			; next char please
 
 170$:	mov	r0	,r1		; save copy for wildcard loop
@@ -745,10 +745,10 @@ c$type::upcase	argbuf			; upper case all args
 	beq	190$			; ya
 180$:	direrr	r0			; no, print the error out
 	clr	r1			; clear look for another flag
-190$:	calls	close	,<#lun.kb>	; flush TT out buffer
+190$:	calls	close	,^/#lun.kb/	; flush TT out buffer
 	tst	r2			; is the type file open?
 	beq	200$			; no
-	calls	close	,<#lun.in>	; ya, close it
+	calls	close	,^/#lun.in/	; ya, close it
 200$:	cmp	r1	,#er$eof	; try for another match?
 	bne	210$			; nope, done
 	.newline			; ya, put possible next file in clear
@@ -757,7 +757,7 @@ c$type::upcase	argbuf			; upper case all args
 	clr	r0			; /62/ any error was already handled
 	return
 
-
+	.page
 	.sbttl	SHOW LINE		; /BBS/ moved here, added defterm
 
 defterm::tst	infomsg			; SET TT NOQ during init?
@@ -845,7 +845,7 @@ sho$li::wrtall	#cm1.06			; /63/ "Link device is "
 
 150$:	.newline
 	wrtall	#cm1.18			; /63/ "Flow-Control: "
-	bit	#40	,r1		; /62/ if <> it's done in hardware
+	bit	#40	,r1		; /62/ if ^// it's done in hardware
 	bne	160$
 	wrtall	#cm1.19			; /63/ "XOFF/XON   "
 	br	170$
@@ -859,18 +859,18 @@ sho$li::wrtall	#cm1.06			; /63/ "Link device is "
 	clr	r0			; no error possible
 	return
 
-
+	.page
 	.sbttl	Cleanup before exiting to monitor	; /BBS/ enhanced
 
 c$exit::call	sd$off			; close possibly open debug file
 	tst	outopn			; is an output file open?
 	beq	10$			; no
-	calls	close	,<#lun.ou>	; ya, close it
+	calls	close	,^/#lun.ou/	; ya, close it
 10$:	mov	mready	,-(sp)		; save modem status
 	call	c$idle			; reset modem, if need be..
 	tst	(sp)+			; was there a modem?
 	beq	20$			; nope
-	calls	suspend	,<#0,settle>	; ya, let it settle
+	calls	suspend	,^/#0,settle/	; ya, let it settle
 20$:	call	xl.dump			; drop DTR, handler interrupts
 	tst	tsxcl			; using a CL line?
 	beq	30$			; no

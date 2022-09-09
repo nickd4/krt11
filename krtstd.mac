@@ -20,13 +20,13 @@
 ;	Call LOASET to get the overlay loaded and
 ;	return the command list address in r0
 
-
+	.page
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtcdf.mac"
-	.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
+	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
 
-
+	.page
 	.psect	$pdata
 	.sbttl	Local data		; /63/ consolidate data here..
 
@@ -58,7 +58,7 @@ std.25:	.asciz	"Interval: "
 std.26:	.asciz	"Local or Remote? "
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	Define the SET commands
 

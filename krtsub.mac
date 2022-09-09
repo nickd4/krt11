@@ -34,7 +34,7 @@
 
 
 	.include "krtmac.mac"
-	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
+	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 
 	.sbttl	Local data
@@ -47,11 +47,11 @@ junkch:	.byte	cr ,lf ,ff ,esc	; for the c.crlf option
 radchr:	.ascii	" ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789"
 	.even
 
-
+	.page
 	.psect	$code
 	.sbttl	BASIC+ CVT$$ function	; /62/ unused functions pulled..
 
-;	calls	cvt$$	,<addr(input),len(input),val(cvt_bit_pattern)>
+;	calls	cvt$$	,^/addr(input),len(input),val(cvt_bit_pattern)/
 ;
 ;	returns:  addr(input)	= trimmed string
 ;		    r0		= length of what's left
@@ -69,7 +69,7 @@ radchr:	.ascii	" ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789"
 	SADDR	=	4	; string address
 	LSIZE	=	6	; work space size (for the above 3 words)
 
-cvt$$::	save	<r1,r2,r3,r4,r5>
+cvt$$::	save	^/r1,r2,r3,r4,r5/
 	sub	#lsize	,sp		; allocate some work space
 	mov	sp	,r4		; point to it
 	mov	(r5)+	,r2		; the string address for output
@@ -140,10 +140,10 @@ cvt$$::	save	<r1,r2,r3,r4,r5>
 	bne	120$			; not a tab
 110$:	sob	r0	,100$		; tab or space, check next
 120$:	add	#lsize	,sp		; pop small work area
-	unsave	<r5,r4,r3,r2,r1>
+	unsave	^/r5,r4,r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	Get length of .asciz string
 
 ;	input:	 r0	= address of .asciz string
@@ -156,14 +156,14 @@ l$len::	mov	r0	,-(sp)		; save start address to calc length
 	dec	r0			; pointer less 1 returns the length
 	return
 
-
+	.page
 	.sbttl	Write a right justified decimal number to TT
 
 	DFWIDTH	= 6			; default width
 
 ;	input:   (r5)	= number to write
 
-l$wrdec::save	<r1,r4,r5>
+l$wrdec::save	^/r1,r4,r5/
 	mov	#dfwidth,r1		; the width
 	mov	r1	,r4		; save for a moment
 	add	#6	,r1		; make it round up to even number
@@ -180,18 +180,18 @@ l$wrdec::save	<r1,r4,r5>
 	wrtall	(r5)			; print it out
 	add	r1	,sp		; pop buffer
 	cmp	(sp)+	,(sp)+		; pop width and number buffers
-	unsave	<r5,r4,r1>
+	unsave	^/r5,r4,r1/
 	mov	(sp)+	,(sp)		; put return address where number was
 	return
 
-
+	.page
 	.sbttl	The real number conversion subroutine
 
 ;	input:	 (r5)	= buffer address
 ;		2(r5)	= value to print, string will be right justified
 ;		4(r5)	= field width, if zero will be set to dfwidth
 
-l$cvtnum::save	<r0,r1,r2,r3,r4>
+l$cvtnum::save	^/r0,r1,r2,r3,r4/
 	mov	(r5)	,r2		; the buffer address to use
 	mov	4(r5)	,r3		; the field width to use
 	bgt	10$			; non-zero
@@ -221,10 +221,10 @@ l$cvtnum::save	<r0,r1,r2,r3,r4>
 	 movb	#'-	,-(r2)		; yes, insert a minus symbol
 	br	60$
 50$:	movb	#'*	,@r2		; field overflow, place a "*" in
-60$:	unsave	<r4,r3,r2,r1,r0>	; beginning of the buffer
+60$:	unsave	^/r4,r3,r2,r1,r0/	; beginning of the buffer
 	return
 
-
+	.page
 	.sbttl	Simple (non-wildcarded) string comparison
 
 ;	input:   (r5)	= address of the first string
@@ -234,7 +234,7 @@ l$cvtnum::save	<r0,r1,r2,r3,r4>
 ;	output:   r0	if > 0 then r0=position of second in first
 ;			if = 0 the second is not a substring
 
-instr::	save	<r1,r2,r3,r4>
+instr::	save	^/r1,r2,r3,r4/
 	mov	(r5)	,r0		; address of first string
 	mov	4(r5)	,r1		; address of second one
 	mov	6(r5)	,r2		; length of second one
@@ -250,7 +250,7 @@ instr::	save	<r1,r2,r3,r4>
 	  cmpb	(r0)+	,(r1)		; see if current character in
 	  bne	50$			; matches first one in second
 
-	    save	<r0,r1,r2>	; found first character match
+	    save	^/r0,r1,r2/	; found first character match
 	    inc	r1			; point to the next character
 	    dec	r2			; length of pattern thats left
 	    ble	30$			; in case the len(pattern)=1
@@ -260,24 +260,24 @@ instr::	save	<r1,r2,r3,r4>
 	    sob	r2	,20$		; loop for len(pattern)-1
 30$:	    mov	r3	,r0		; the current loop count
 	    inc	r0			; point to the next character
-	    add	#6	,sp		; fix the stack from save <r0,r1,r2>
+	    add	#6	,sp		; fix the stack from save ^/r0,r1,r2/
 	    br	70$
 
-40$:	    unsave	<r2,r1,r0>	; the match failed, restore the
+40$:	    unsave	^/r2,r1,r0/	; the match failed, restore the
 50$:	  inc	r3			; pointers and go try the next
 	br	10$			; character in the first string
 
 60$:	clr	r0			; no match
-70$:	unsave	<r4,r3,r2,r1>
+70$:	unsave	^/r4,r3,r2,r1/
 	return
 
-
+	.page
 	.sbttl	Convert rad50 word to 3 ascii bytes
 
 ;	input:	 (r5)	= address of where to put ascii chars
 ;		2(r5)	= the value of rad 50 word
 
-rdtoa::	save	<r0,r1,r3>
+rdtoa::	save	^/r0,r1,r3/
 	mov	2(r5)	,r1		; go get the rad50 character
 	mov	(r5)	,r3		; where to put the characters
 	clr	r0			; prepare for divide
@@ -287,10 +287,10 @@ rdtoa::	save	<r0,r1,r3>
 	div	#50	,r0		; this one gives char 2
 	movb	radchr(r0),(r3)+	; put this in buffer
 	movb	radchr(r1),(r3)+	; and also char 3
-	unsave	<r3,r1,r0>
+	unsave	^/r3,r1,r0/
 	return
 
-
+	.page
 	.sbttl	16-bit integer to ascii conversion routines	; /BBS/
 
 L10012::MOV	R0	,-(SP)	; convert integer in r0
@@ -317,7 +317,7 @@ L10272:	INC	R0
 L10316:	MOVB	(SP)+	,R0
 	jmp	writ1ch
 
-
+	.page
 	.sbttl	32-bit integer to ascii from RSX SYSLIB.OLB
 
 ;	clr	r2			; suppress leading 0s in $CDDMG output
@@ -408,14 +408,14 @@ $SAVRG:	MOV	R4	,-(SP)
 	MOV	(SP)+	,R5
 	RETURN
 
-
+	.page
 	.sbttl	Decimal ascii to integer	; /BBS/ made this unsigned..
 
 ;	input:	 (r5)	= address of .asciz decimal number string to convert
 ;	output:	  r1	= binary value of the string
-;		  r0	= if <>, not a number
+;		  r0	= if ^//, not a number
 
-l$val::	save	<r3>
+l$val::	save	^/r3/
 	clr	r1			; initialize the result
 	mov	(r5)	,r3		; the address of the string
 10$:	movb	(r3)+	,r0		; /62/ next char
@@ -432,17 +432,17 @@ l$val::	save	<r3>
 20$:	mov	#er$bad	,r0		; /63/ illegal number, flag an error
 	br	40$
 30$:	clr	r0			; indicate success
-40$:	unsave	<r3>
+40$:	unsave	^/r3/
 	return
 
-
+	.page
 	.sbttl	Octal ascii to integer
 
 ;	input:	 (r5)	= address of .asciz octal number string to convert
 ;	output:	  r1	= binary value of the string
-;		  r0	= if <>, not a number
+;		  r0	= if ^//, not a number
 
-octval::save	<r3>			; /62/ all new..
+octval::save	^/r3/			; /62/ all new..
 	clr	r1			; initialize the result
 	mov	(r5)	,r3		; the address of the string
 10$:	movb	(r3)+	,r0		; next char
@@ -456,26 +456,26 @@ octval::save	<r3>			; /62/ all new..
 20$:	mov	#er$bad	,r0		; /63/ illegal number, flag an error
 	br	40$
 30$:	clr	r0			; indicate success
-40$:	unsave	<r3>
+40$:	unsave	^/r3/
 	return
 
-
+	.page
 	.sbttl	Integer to ascii octal conversion
 
 ;	input:	 (r5)	= buffer address
 ;		2(r5)	= binary number to write as ascii string in above
 
-l$otoa::save	<r0,r1,r2>		; /62/ all new..
+l$otoa::save	^/r0,r1,r2/		; /62/ all new..
 	mov	(r5)	,r1		; the buffer for ascii output
 	mov	2(r5)	,r0		; the binary number to convert
 	mov	#6	,r2		; loop 6 times, zero filling..
 	call	10$			; call conversion routine
 	clrb	(r1)			; add null termination byte
-	unsave	<r2,r1,r0>
+	unsave	^/r2,r1,r0/
 	return
 
 10$:	mov	r0	,-(sp)		; copy of the number
-	bic	#^c<7>	,(sp)		; mask for lower 3 bits
+	bic	#^c^/7/	,(sp)		; mask for lower 3 bits
 	add	#60	,(sp)		; make result an ascii digit
 	ror	r0			; rotate next group of 3 bits into low
 	asr	r0			; order bits of r0..
@@ -486,26 +486,26 @@ l$otoa::save	<r0,r1,r2>		; /62/ all new..
 20$:	movb	(sp)+	,(r1)+		; last in first out back to text buff
 	return
 
-
+	.page
 	.sbttl	Write integer in (r5) to TT as octal number
 
-l$wroc::save	<r0>
+l$wroc::save	^/r0/
 	sub	#10	,sp		; use stack for a buffer
 	mov	sp	,r0		; pointer to said buffer
-	calls	l$otoa	,<r0,(r5)>	; call the conversion subroutine
+	calls	l$otoa	,^/r0,(r5)/	; call the conversion subroutine
 	wrtall	r0			; display the number on terminal
 	add	#10	,sp		; dump the buffer
-	unsave	<r0>
+	unsave	^/r0/
 	return
 
-
+	.page
 	.sbttl	Copy an .asciz string
 
 ;	input:	2(sp)	= destination string address
 ;		4(sp)	= source string address
 ;		6(sp)	= length to copy or zero for max
 
-copyz$::save	<r0,r1>
+copyz$::save	^/r0,r1/
 	tst	4+6(sp)			; see if a maxlen was passed
 	bne	10$			; yes
 	mov	#77777	,4+6(sp)	; no, say we can have max int chars
@@ -516,12 +516,12 @@ copyz$::save	<r0,r1>
 	dec	4+6(sp)			; or we have copied maxlen number
 	bne	20$			; of characters over
 	clrb	-(r1)			; ensure output .asciz please
-30$:	unsave	<r1,r0>			; /63/ move 30$ here
+30$:	unsave	^/r1,r0/			; /63/ move 30$ here
 	mov	@sp	,6(sp)		; move return address up
 	add	#6	,sp		; fix the stack
 	return
 
-
+	.page
 	.sbttl	STRCAT and STRCPY
 
 ;	input:	 (sp)	= return address
@@ -529,18 +529,18 @@ copyz$::save	<r0,r1>
 ;		4(sp)	= source address
 ;	output:	  r0	= destination address
 
-strcpy::save	<r1>
+strcpy::save	^/r1/
 	mov	2+2(sp)	,r0		; destination address
 	mov	2+4(sp)	,r1		; source .asciz address
 10$:	movb	(r1)+	,(r0)+		; copy until a null
 	bne	10$			; not done
 	mov	2+2(sp)	,r0		; return the dst address
-	unsave	<r1>
+	unsave	^/r1/
 	mov	(sp)	,4(sp)		; move return address up now
 	cmp	(sp)+	,(sp)+		; pop junk
 	return
 
-strcat::save	<r1>
+strcat::save	^/r1/
 	mov	2+2(sp)	,r0		; destination address
 	mov	2+4(sp)	,r1		; source .asciz address
 10$:	tstb	(r0)+			; look for the end of the dst string
@@ -549,29 +549,29 @@ strcat::save	<r1>
 20$:	movb	(r1)+	,(r0)+		; copy until a null
 	bne	20$			; not done
 	mov	2+2(sp)	,r0		; return the dst address
-	unsave	<r1>
+	unsave	^/r1/
 	mov	(sp)	,4(sp)		; move return address up now
 	cmp	(sp)+	,(sp)+		; pop junk
 	return
 
-
+	.page
 	.sbttl	Control or uncontrol a char
 
-l$xor::	save	<r0>
+l$xor::	save	^/r0/
 	mov	4(sp)	,r0		; the input
 	ixor	#100	,r0		; bump up or down 64. in ascii table
 	mov	r0	,4(sp)		; the output
-	unsave	<r0>
+	unsave	^/r0/
 	return
 
-
+	.page
 	.sbttl	Scan a string for a character
 
 ;	input:	4(sp)	= string address
 ;		2(sp)	= character to look for
 ;	output:	  r0	= position of char in string
 
-scanch::save	<r2>
+scanch::save	^/r2/
 	mov	6(sp)	,r2		; get address of the string
 	clr	r0			; initial found position
 10$:	tstb	@r2			; end of the string yet?
@@ -581,20 +581,20 @@ scanch::save	<r2>
 	bne	10$			; no, try again
 	br	30$			; yes, exit loop
 20$:	clr	r0			; failure, return position = 0
-30$:	unsave	<r2>
+30$:	unsave	^/r2/
 	mov	@sp	,4(sp)		; move return address up
 	cmp	(sp)+	,(sp)+		; pop stack
 	return
 
-
+	.page
 	.sbttl	Upper case one arg, or all of them  ; /BBS/ added
 	.enabl	lsb
 
-upone::	save	<r1,r0>
+upone::	save	^/r1,r0/
 	mov	#space	,r1		; stop at next space
 	br	10$			; share common code
 
-upcase::save	<r1,r0>
+upcase::save	^/r1,r0/
 	clr	r1			; stop at null, do the whole string
 10$:	cmpb	(r0)	,r1		; hit the delimiter yet?
 	blos	30$			; yes, exit
@@ -605,18 +605,18 @@ upcase::save	<r1,r0>
 	bicb	#40	,(r0)		; yes, make it upper case
 20$:	inc	r0			; bump pointer to next char
 	br	10$			; and go check it
-30$:	unsave	<r0,r1>
+30$:	unsave	^/r0,r1/
 	return
 
 	.dsabl	lsb
 
-
+	.page
 	.sbttl	Integer to decimal ascii conversion  ; /BBS/ added
 
 i4toa::	mov	#X4$	,r2	; four decimal places, or 0000 if need be
 	br	itoa		; share the rest
 i2toa::	mov	#X2$	,r2	; come here for 2 place numbers
-itoa:	save	<r0>		; enter here with r2 loaded
+itoa:	save	^/r0/		; enter here with r2 loaded
 10$:	movb	#'0-1	,r0	; initialize the ascii char output register
 20$:	inc	r0		; step thru ascii 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 	sub	(r2)	,r3	; while subtracting divisor from input integer
@@ -625,13 +625,13 @@ itoa:	save	<r0>		; enter here with r2 loaded
 	movb	r0	,(r1)+	; put ascii equiv in out buff
 	tst	(r2)		; done yet?
 	bne	10$		; nope, next one, please..
-	unsave	<r0>
+	unsave	^/r0/
 	rts	pc
 
-
+	.page
 	.sbttl	Unformat a string, inverse of PRSARG
 					; /63/ moved here from KRTCVT so
-unfmts::save	<r1,r2,r3,r4>		; /63/ KRTMDM can be in KRTCVT's ovrly
+unfmts::save	^/r1,r2,r3,r4/		; /63/ KRTMDM can be in KRTCVT's ovrly
 	mov	r0	,r3		; /63/ copy the address of the data
 	mov	#spare1	,r4		; /63/ (bigger) target buffer
 10$:	movb	(r3)+	,r1		; /63/ get the data
@@ -656,10 +656,10 @@ unfmts::save	<r1,r2,r3,r4>		; /63/ KRTMDM can be in KRTCVT's ovrly
 40$:	br	10$			; next please
 100$:	clrb	@r4			; ensure .asciz
 	mov	#spare1	,r0		; /53/ return addr of converted data
-	unsave	<r4,r3,r2,r1>		; /63/
+	unsave	^/r4,r3,r2,r1/		; /63/
 	return
 
-
+	.page
 	.if df NONEIS		; /BBS/ only do this for non-EIS version!
 
 	.sbttl	MUL for a non-EIS CPU	; /BBS/ rewrote this ..
@@ -691,7 +691,7 @@ p$mul::	mov	r0	,-(sp)	; this a is SINGLE PRECISION multiply!
 	mov	(sp)+	,(sp)	; move return address up, calling macro
 	return			; pushes 2 args on stack but only pops 1
 
-
+	.page
 	.sbttl	DIV for a non-EIS CPU	; /BBS/ moved here + commented this..
 
 ; /BBS/	 WARNING:  This routine does _NOT_ set C or V bits ala the EIS divide!

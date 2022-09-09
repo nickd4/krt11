@@ -10,14 +10,14 @@
 
 ;	Copyright 1985,1986 Change Software, Inc.
 
-
+	.page
 	.psect	$code	,ro,i,lcl,rel,con	; /63/ added this to..
 	.sbttl	Load this overlay and return its location
 
 loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	return				; /63/ done
 
-
+	.page
 	.sbttl	Modem data base structure
 
 ;	Loosely based on CKUDIAL.C
@@ -39,26 +39,26 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	dial.string	==:	20	; address of dial format string
 	dial.rate	==:	22	; ticks delay between sending chars
 	dial.ack	==:	24	; modem response to confirm number
-	dial.blind	==:	26	; if <> dial w/o wait for dial tone
+	dial.blind	==:	26	; if ^// dial w/o wait for dial tone
 	dial.wait	==:	30	; string for pause format effector
 	dial.confirm	==:	32	; string to confirm number for dialing
 	dial.go		==:	34	; ie, va212 returns "DIALING\n"
-	res.bin		==:	36	; if <> it's binary responses (DF03)
-	dial.echo	==:	40	; if <> modem echoes its input
+	res.bin		==:	36	; if ^// it's binary responses (DF03)
+	dial.echo	==:	40	; if ^// modem echoes its input
 	mod.comment	==:	42	; addr of brief description of modem
 	res.head	==:	44	; head of the list of result messages
 	dial.xabort	==:	46	; /45/ string to kill call in progress
 	dial.idle	==:	50	; /45/ string puts modem in idle state
 	dial.pulse	==:	52	; /45/ pulse dialing command string
 	dial.nopulse	==:	54	; /45/ tone dialing command string
-	init.once	==:	56	; /BBS/ if <> modem stays initialized
+	init.once	==:	56	; /BBS/ if ^// modem stays initialized
 	time.settle	==:	60	; /62/ reset settle-time in secs
 	x.result	==:	62	; /62/ "Hayes" style extended mode
 	ph.answer	==:	64	; /62/ enable answer mode string
 	ph.noanswer	==:	66	; /62/ disable answer mode string
 	mod.size	==:	70	; /62/ length of data defined above
 
-
+	.page
 	.sbttl	Macros for individual fields of a modem's data structure
 
 	; NOTE:	these first two fields are inserted by the define macro
@@ -70,7 +70,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	dial$time
 
 	.macro	wake$string	s
-	modstr	<s> ,wake.string	;  6  address of wakeup string
+	modstr	^/s/ ,wake.string	;  6  address of wakeup string
 	.endm	wake$string
 
 	.macro	wake$rate	v
@@ -82,15 +82,15 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	wake$prompt
 
 	.macro	dmod$string	s
-	modstr	<s> ,dmod.string	; 14  address of dial initiate string
+	modstr	^/s/ ,dmod.string	; 14  address of dial initiate string
 	.endm	dmod$string
 
 	.macro	dmod$prompt	s
-	modstr	<s> ,dmod.prompt	; 16  address of prompt returned by it
+	modstr	^/s/ ,dmod.prompt	; 16  address of prompt returned by it
 	.endm	dmod$prompt
 
 	.macro	dial$string	s
-	modstr	<s> ,dial.string	; 20  address of dial format string
+	modstr	^/s/ ,dial.string	; 20  address of dial format string
 	.endm	dial$string
 
 	.macro	dial$rate	v
@@ -98,31 +98,31 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	dial$rate
 
 	.macro	dial$ack	s
-	modstr	<s> ,dial.ack		; 24  modem response to confirm number
+	modstr	^/s/ ,dial.ack		; 24  modem response to confirm number
 	.endm	dial$ack
 
 	.macro	dial$blind	s
-	modstr	<s> ,dial.blind		; 26  if <> dial w/o waiting dial tone
+	modstr	^/s/ ,dial.blind		; 26  if ^// dial w/o waiting dial tone
 	.endm	dial$blind
 
 	.macro	dial$wait	s
-	modstr	<s> ,dial.wait		; 30  string for pause format effector
+	modstr	^/s/ ,dial.wait		; 30  string for pause format effector
 	.endm	dial$wait
 
 	.macro	dial$confirm	s
-	modstr	<s> ,dial.confirm	; 32  string to confirm dialed number
+	modstr	^/s/ ,dial.confirm	; 32  string to confirm dialed number
 	.endm	dial$confirm
 
 	.macro	dial$go		s
-	modstr	<s> ,dial.go		; 34  ie, va212 returns "DIALING\n"
+	modstr	^/s/ ,dial.go		; 34  ie, va212 returns "DIALING\n"
 	.endm	dial$go
 
 	.macro	res$bin		v
-	modval	v ,res.bin		; 36  if <> it's binary responses
+	modval	v ,res.bin		; 36  if ^// it's binary responses
 	.endm	res$bin
 
 	.macro	dial$echo	v
-	modval	v ,dial.echo		; 40  if <> modem echoes its input
+	modval	v ,dial.echo		; 40  if ^// modem echoes its input
 	.endm	dial$echo
 
 	.macro	mod$comment	s
@@ -134,7 +134,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 ;	res.head(current_modem) --> first entry of linked list
 ;
 ;	.word	link_to_next		or zero for the last entry
-;	.word	response_class		<0 fail, 0 info, 1 ring, >1 success
+;	.word	response_class		^/0 fail, 0 info, 1 ring, /1 success
 ;	.asciz	"response_string"
 ;
 	.list me
@@ -143,7 +143,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.nlist me
 	$res1 = .			; save current pc in "resdat"
 	.word	0			; link to next is zero for now..
-	.if  b	<class>			; if class not specified, then
+	.if  b	^/class/			; if class not specified, then
 	.word	0			; make it zero (info only message)
 	.iff				; else insert specified
 	.word	class			; response class
@@ -171,23 +171,23 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	mod$res
 
 	.macro	dial$xabort	s
-	modstr	<s> ,dial.xabort	; 46  string to kill call in progress
+	modstr	^/s/ ,dial.xabort	; 46  string to kill call in progress
 	.endm	dial$xabort
 
 	.macro	dial$idle	s
-	modstr	<s> ,dial.idle		; 50  string puts modem in idle state
+	modstr	^/s/ ,dial.idle		; 50  string puts modem in idle state
 	.endm	dial$idle
 
 	.macro	dial$pulse	s
-	modstr	<s> ,dial.pulse		; 52  pulse dialing command string
+	modstr	^/s/ ,dial.pulse		; 52  pulse dialing command string
 	.endm	dial$pulse
 
 	.macro	dial$nopulse	s
-	modstr	<s> ,dial.nopulse	; 54  tone dialing command string
+	modstr	^/s/ ,dial.nopulse	; 54  tone dialing command string
 	.endm	dial$nopulse
 
 	.macro	init$once	v
-	modval	v ,init.once		; 56  if <> modem stays initialized
+	modval	v ,init.once		; 56  if ^// modem stays initialized
 	.endm	init$once
 
 	.macro	time$settle	v
@@ -199,14 +199,14 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	x$result
 
 	.macro	ph$answer	s
-	modstr	<s> ,ph.answer		; 64  enable answer mode string
+	modstr	^/s/ ,ph.answer		; 64  enable answer mode string
 	.endm	ph$answer
 
 	.macro	ph$noanswer	s
-	modstr	<s> ,ph.noanswer	; 66  disable answer mode string
+	modstr	^/s/ ,ph.noanswer	; 66  disable answer mode string
 	.endm	ph$noanswer
 
-
+	.page
 	.sbttl	Macros to place data in the individual fields
 
 	.macro	modstr	s ,offset	; insert a string in modem's data
@@ -222,8 +222,8 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	    $$ = 100			; char is a ^, set flag for next char
 	    .iff
 	      .if ne $$			; if not a ^ but last char flag is set
-		.if  ge  <ch1!40>-<'a!40> ; ensure alpha chars are upper case
-		.iif le <<ch1!40>-<'z!40>> ch1 = ch1&137 ; so char-100 works!
+		.if  ge  ^/ch1!40/-^/'a!40/ ; ensure alpha chars are upper case
+		.iif le ^?^/ch1!40/-^/'z!40/? ch1 = ch1&137 ; so char-100 works!
 		.endc
 	      .endc
 	    .byte ch1-$$		; char-100 = control char of same name
@@ -249,7 +249,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.nlist me
 	.endm	modval
 
-
+	.page
 	.sbttl	The actual modem definition macro
 
 ;	The following creates a modem's data structure, inserting the default
@@ -265,7 +265,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	$res	  = 0			; init the result message
 	$reslast  = 0			; macro counters
 
-	.if nb	<user>			; if we are doing the "user-defined"
+	.if nb	^/user/			; if we are doing the "user-defined"
 	.list me			; modem we need to be in a
 	.save				; psect that is never swapped out
 	.globl	lab			; user-defined listhead must be global
@@ -300,23 +300,23 @@ lab:	.word	0		;  0 mod.next	   link to next please
 	.word	null		; 30 dial.wait	   pause character string
 	.word	null		; 32 dial.confirm  optional "ok" string
 	.word	null		; 34 dial.go	   optional "dialing" string
-	.word	0		; 36 res.bin	   if <> single char response
-	.word	0		; 40 dial.echo	   if <> modem echos commands
+	.word	0		; 36 res.bin	   if ^// single char response
+	.word	0		; 40 dial.echo	   if ^// modem echos commands
 	.word	null		; 42 mod.comment   modem comment string
 	.word	0		; 44 res.head	   result messages listhead
 	.word	null		; 46 dial.xabort   abort dialing string
 	.word	null		; 50 dial.idle	   reset modem to idle string
 	.word	null		; 52 dial.pulse	   PULSE dialing string
 	.word	null		; 54 dial.nopulse  TONE dialing string
-	.word	0		; 56 init.once	   if <> modem stays initted
+	.word	0		; 56 init.once	   if ^// modem stays initted
 	.word	20.		; 60 time.settle   ticks to wait after a reset
 	.word	-1		; 62 x.result	   Hayes Xmode, default is off
 	.word	null		; 64 ph.answer	   enable auto-answer string
 	.word	null		; 66 ph.noanswer   disable auto-answer string
 	$$end	= .
-	.iif ne	 <<$$end-$$current>-mod.size> .error <; 's define size error>
+	.iif ne	 ^?^/$$end-$$current/-mod.size? .error ^/; 's define size error/
 
-	.if  b	<user>			; if not the user-defined modem
+	.if  b	^/user/			; if not the user-defined modem
 	. = $$prev			; insert link address of modem data
 	.word	lab			; just defined in the previous modem
 	. = $$end			; then go back where we were
@@ -329,10 +329,10 @@ lab:	.word	0		;  0 mod.next	   link to next please
 	.word	lab			; /62/ insert link to user-defined
 	. = $$$
 	.nlist me
-	.endc	; b <user>
+	.endc	; b ^/user/
 	.endm	define
 
-
+	.page
 	.sbttl	Modem response classes	; /BBS/
 
 	CON38400  ==:	38400.	; /62/ connect at designated speeds
@@ -352,7 +352,7 @@ lab:	.word	0		;  0 mod.next	   link to next please
 ; /62/	NOTE:  Since an INFO message is anything undefined, INFO
 ;	       messages have been dumped here to save space.
 
-
+	.page
 	.psect	modinf	,ro,d,lcl,rel,con
 	.sbttl	Finally, we can define the modems
 
@@ -368,405 +368,405 @@ lab:	.word	0		;  0 mod.next	   link to next please
 modinf:					; /62/ this is the top of the list
 	$$TRIP = 0			; /62/ init for the define macro
 
-define		concord	,<CONCORD-224>		; /BBS/ added
-mod$comment	<Concord Data 224>
-wake$string	<^M^M>				; keyboard interactive mode
+define		concord	,^/CONCORD-224/		; /BBS/ added
+mod$comment	^/Concord Data 224/
+wake$string	^/^M^M/				; keyboard interactive mode
 wake$prompt	^~CDS >~
-dial$string	<D %M %S ^M>
-dial$wait	<W>
+dial$string	^/D %M %S ^M/
+dial$wait	^/W/
 dial$echo	1
-dial$pulse	<P>
-dial$nopulse	<M>
-dial$xabort	<^K>
-dial$idle	<E>
+dial$pulse	^/P/
+dial$nopulse	^/M/
+dial$xabort	^/^K/
+dial$idle	^/E/
 dial$time	45.
-mod$res		<BUSY>		,FAILED
-mod$res		<CALL FAILED>	,FAILED
-mod$res		<INITIATING>	,CONNECT
-mod$res		<NO ANSWER>	,FAILED
-mod$res		<NO DIAL TONE>	,FAILED
-mod$res		<NO RINGING>	,FAILED
-mod$res		<RINGING>	,RING
-mod$res		<VOICE>		,FAILED
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CALL FAILED/	,FAILED
+mod$res		^/INITIATING/	,CONNECT
+mod$res		^/NO ANSWER/	,FAILED
+mod$res		^/NO DIAL TONE/	,FAILED
+mod$res		^/NO RINGING/	,FAILED
+mod$res		^/RINGING/	,RING
+mod$res		^/VOICE/		,FAILED
 
-define		cts24	,<CTS2424>
-mod$comment	<CTS/Fabri-Tek 2424AD>
-wake$string	<^T^WAT^M>
+define		cts24	,^/CTS2424/
+mod$comment	^?CTS/Fabri-Tek 2424AD?
+wake$string	^/^T^WAT^M/
 wake$rate	10
-wake$prompt	<Modem Ready>
-dial$string	<D%M%B%S^M>
+wake$prompt	^/Modem Ready/
+dial$string	^/D%M%B%S^M/
 dial$rate	10
-dial$wait	<+>
+dial$wait	^/+/
 dial$echo	1
-dial$blind	<&>
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^T^W>
-dial$idle	<^T^W>
+dial$blind	^/&/
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^T^W/
+dial$idle	^/^T^W/
 dial$time	35.
-mod$res		<Busy>		,FAILED
-mod$res		<Dead Line>	,FAILED
-mod$res		<Disconnect>	,FAILED
-mod$res		<No Answer>	,FAILED
-mod$res		<No Dialtone>	,FAILED
-mod$res		<No Tone>	,FAILED
-mod$res		<On Line>	,CONNECT	; /BBS/ <On Line Originate>
-mod$res		<Ring>		,RING
+mod$res		^/Busy/		,FAILED
+mod$res		^/Dead Line/	,FAILED
+mod$res		^/Disconnect/	,FAILED
+mod$res		^/No Answer/	,FAILED
+mod$res		^/No Dialtone/	,FAILED
+mod$res		^/No Tone/	,FAILED
+mod$res		^/On Line/	,CONNECT	; /BBS/ ^/On Line Originate/
+mod$res		^/Ring/		,RING
 
-define		df03	,<DF03>
-mod$comment	<DEC DF03AC>
-wake$string	<^A^B>				; this inits to dial
-dial$string	<%S^M>				; /62/ needs a return here
+define		df03	,^/DF03/
+mod$comment	^/DEC DF03AC/
+wake$string	^/^A^B/				; this inits to dial
+dial$string	^/%S^M/				; /62/ needs a return here
 dial$echo	1
-dial$xabort	<^C>				; /63/
+dial$xabort	^/^C/				; /63/
 dial$time	30.
 res$bin		1				; single char responses
-mod$res		<A>		,CONNECT
-mod$res		<B>		,FAILED
+mod$res		^/A/		,CONNECT
+mod$res		^/B/		,FAILED
 
-define		df100	,<DF100>
-mod$comment	<DEC DF112>
-wake$string	<^B>
-wake$prompt	<Ready>
-dial$string	<%S#>				; /45/
+define		df100	,^/DF100/
+mod$comment	^/DEC DF112/
+wake$string	^/^B/
+wake$prompt	^/Ready/
+dial$string	^/%S#/				; /45/
 dial$rate	10
 dial$echo	1
-dial$xabort	<^M>
+dial$xabort	^/^M/
 dial$time	30.
-mod$res		<Attached>	,CONNECT
-mod$res		<Busy>		,FAILED
-mod$res		<Disconnected>	,FAILED
-mod$res		<Error>		,FAILED
-mod$res		<No answer>	,FAILED
-mod$res		<No dial tone>	,FAILED
+mod$res		^/Attached/	,CONNECT
+mod$res		^/Busy/		,FAILED
+mod$res		^/Disconnected/	,FAILED
+mod$res		^/Error/		,FAILED
+mod$res		^/No answer/	,FAILED
+mod$res		^/No dial tone/	,FAILED
 
-define		df200	,<DF200>
-mod$comment	<DEC DF224>
-wake$string	<^B>
-wake$prompt	<Ready>
-dial$string	<%B%M%S!>			; /60/
+define		df200	,^/DF200/
+mod$comment	^/DEC DF224/
+wake$string	^/^B/
+wake$prompt	^/Ready/
+dial$string	^/%B%M%S!/			; /60/
 dial$echo	1
-dial$blind	<^A>				; /60/
-dial$pulse	<P>				; /60/
-dial$xabort	<^B>				; /60/
-dial$nopulse	<T>				; /60/
+dial$blind	^/^A/				; /60/
+dial$pulse	^/P/				; /60/
+dial$xabort	^/^B/				; /60/
+dial$nopulse	^/T/				; /60/
 dial$time	30.
-mod$res		<Attached>	,CONNECT
-mod$res		<Busy>		,FAILED
-mod$res		<Disconnected>	,FAILED
-mod$res		<Error>		,FAILED
-mod$res		<No answer>	,FAILED
-mod$res		<No dial tone>	,FAILED
+mod$res		^/Attached/	,CONNECT
+mod$res		^/Busy/		,FAILED
+mod$res		^/Disconnected/	,FAILED
+mod$res		^/Error/		,FAILED
+mod$res		^/No answer/	,FAILED
+mod$res		^/No dial tone/	,FAILED
 
-define		hayes	,<HAYES>		; /BBS/ updated..
+define		hayes	,^/HAYES/		; /BBS/ updated..
 mod$comment	^~Hayes Generic Command Set - DTE follows DCE speed~
-wake$string	<AT E1 Q0 S0=0 S7=255 V1 %X ^M>	; note time-out set to
-wake$prompt	<OK>				; 255 so dial$time (which
-dial$string	<AT %X %A D%M %S ^M>		; is settable) will prevail..
+wake$string	^/AT E1 Q0 S0=0 S7=255 V1 %X ^M/	; note time-out set to
+wake$prompt	^/OK/				; 255 so dial$time (which
+dial$string	^/AT %X %A D%M %S ^M/		; is settable) will prevail..
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	45.
-time$settle	<25.>				; /62/ add a few ticks..
-x$result	<4>				; /62/ extended mode, "ATX4"
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-mod$res		<CONNECT 19200>	,CON19200	; /62/ added
-mod$res		<CONNECT 14400>	,CON19200	; /63/
-mod$res		<CONNECT 12000>	,CON19200	; /63/
-mod$res		<CONNECT 9600>	,CON9600	; set DTE to indicated speed..
-mod$res		<CONNECT 7200>	,CON7200	; /63/
-mod$res		<CONNECT 4800>	,CON4800
-mod$res		<CONNECT 2400>	,CON2400
-mod$res		<CONNECT 1200>	,CON1200
-mod$res		<CONNECT 300>	,CON300		; /63/
-mod$res		<CONNECT>	,CON300		; 300 is implied here
-mod$res		<ERROR>		,FAILED
-mod$res		<NO ANSWER>	,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIALTONE>	,FAILED		; true Hayes
-mod$res		<NO DIAL TONE>	,FAILED		; many clones
-mod$res		<RING>		,RING		; includes "RINGING"
-mod$res		<RRING>		,RING		; Telebit-style rringing
-mod$res		<VOICE>		,FAILED
+time$settle	^/25./				; /62/ add a few ticks..
+x$result	^/4/				; /62/ extended mode, "ATX4"
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CONNECT 19200/	,CON19200	; /62/ added
+mod$res		^/CONNECT 14400/	,CON19200	; /63/
+mod$res		^/CONNECT 12000/	,CON19200	; /63/
+mod$res		^/CONNECT 9600/	,CON9600	; set DTE to indicated speed..
+mod$res		^/CONNECT 7200/	,CON7200	; /63/
+mod$res		^/CONNECT 4800/	,CON4800
+mod$res		^/CONNECT 2400/	,CON2400
+mod$res		^/CONNECT 1200/	,CON1200
+mod$res		^/CONNECT 300/	,CON300		; /63/
+mod$res		^/CONNECT/	,CON300		; 300 is implied here
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO ANSWER/	,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIALTONE/	,FAILED		; true Hayes
+mod$res		^/NO DIAL TONE/	,FAILED		; many clones
+mod$res		^/RING/		,RING		; includes "RINGING"
+mod$res		^/RRING/		,RING		; Telebit-style rringing
+mod$res		^/VOICE/		,FAILED
 
-define		hayes.mnp ,<HAYES-MNP>		; /BBS/ added from above..
-mod$comment	<Hayes Generic V.42/MNP - Lock DTE speed before using!>
-wake$string	<AT E1 Q0 S0=0 S7=255 V1 %X ^M>
-wake$prompt	<OK>
-dial$string	<AT %X %A D%M %S ^M>
+define		hayes.mnp ,^/HAYES-MNP/		; /BBS/ added from above..
+mod$comment	^?Hayes Generic V.42/MNP - Lock DTE speed before using!?
+wake$string	^/AT E1 Q0 S0=0 S7=255 V1 %X ^M/
+wake$prompt	^/OK/
+dial$string	^/AT %X %A D%M %S ^M/
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	60.
-time$settle	<25.>
-x$result	<4>
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-mod$res		<CONNECT>	,CONNECT
-mod$res		<ERROR>		,FAILED
-mod$res		<NO ANSWER>	,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIALTONE>	,FAILED
-mod$res		<NO DIAL TONE>	,FAILED
-mod$res		<RING>		,RING
-mod$res		<RRING>		,RING
-mod$res		<VOICE>		,FAILED
+time$settle	^/25./
+x$result	^/4/
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CONNECT/	,CONNECT
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO ANSWER/	,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIALTONE/	,FAILED
+mod$res		^/NO DIAL TONE/	,FAILED
+mod$res		^/RING/		,RING
+mod$res		^/RRING/		,RING
+mod$res		^/VOICE/		,FAILED
 
-define		microcom ,<MICROCOM>
-mod$comment	<MicroCom SX1200>
-wake$string	<4445^MSE2^MS1C0^MSCE ON^M>
+define		microcom ,^/MICROCOM/
+mod$comment	^/MicroCom SX1200/
+wake$string	^/4445^MSE2^MS1C0^MSCE ON^M/
 wake$rate	10
-wake$prompt	<!>
-dial$string	<D%S^M>
+wake$prompt	^/!/
+dial$string	^/D%S^M/
 dial$rate	10
 dial$echo	1
 dial$time	35.
-mod$res		<!>		,FAILED
-mod$res		<CONNECT>	,CONNECT
-mod$res		<NO CONNECT>	,FAILED
+mod$res		^/!/		,FAILED
+mod$res		^/CONNECT/	,CONNECT
+mod$res		^/NO CONNECT/	,FAILED
 
-define		r212a	,<R212A>		; added by edit RTM01
-mod$comment	<Rixon R212A>
-wake$string	<^M^M>
+define		r212a	,^/R212A/		; added by edit RTM01
+mod$comment	^/Rixon R212A/
+wake$string	^/^M^M/
 wake$rate	10				; wait 8. ticks
-wake$prompt	<$>
-dmod$string	<K>
-dmod$prompt	<NUMBER:>
-dial$string	<%S^M>
+wake$prompt	^/$/
+dmod$string	^/K/
+dmod$prompt	^/NUMBER:/
+dial$string	^/%S^M/
 dial$rate	10
-dial$go		<DIALING:>
+dial$go		^/DIALING:/
 dial$echo	1
 dial$time	60.				; long time-out for overseas
-mod$res		<BUSY>		,FAILED
-mod$res		<DEAD LINE>	,FAILED
-mod$res		<ON LINE>	,CONNECT
-mod$res		<ON-LINE>	,CONNECT
-mod$res		<NO ANSWER>	,FAILED
-mod$res		<RINGING>	,RING
+mod$res		^/BUSY/		,FAILED
+mod$res		^/DEAD LINE/	,FAILED
+mod$res		^/ON LINE/	,CONNECT
+mod$res		^/ON-LINE/	,CONNECT
+mod$res		^/NO ANSWER/	,FAILED
+mod$res		^/RINGING/	,RING
 
-define		T2500	,<T2500>		; /BBS/ added..
+define		T2500	,^/T2500/		; /BBS/ added..
 mod$comment	^~Telebit w/o error correction - DTE follows DCE speed~
-wake$string	<AT E1 Q0 S0=0 S7=255 S66=0 S95=0 S97=0 S106=0 V1 %X ^M>
-wake$prompt	<OK>
-dial$string	<AT %X %A D%M %S ^M>
+wake$string	^/AT E1 Q0 S0=0 S7=255 S66=0 S95=0 S97=0 S106=0 V1 %X ^M/
+wake$prompt	^/OK/
+dial$string	^/AT %X %A D%M %S ^M/
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	45.
-x$result	<3>
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-mod$res		<CONNECT FAST>	,CON19200	; /63/
-mod$res		<CONNECT 19200>	,CON19200
-mod$res		<CONNECT 9600>	,CON9600
-mod$res		<CONNECT 4800>	,CON4800
-mod$res		<CONNECT 2400>	,CON2400
-mod$res		<CONNECT 1200>	,CON1200
-mod$res		<CONNECT 300>	,CON300		; /63/
-mod$res		<CONNECT>	,CON300
-mod$res		<ERROR>		,FAILED
-mod$res		<NO ANSWER>	,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIAL TONE>	,FAILED
-mod$res		<RRING>		,RING
+x$result	^/3/
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CONNECT FAST/	,CON19200	; /63/
+mod$res		^/CONNECT 19200/	,CON19200
+mod$res		^/CONNECT 9600/	,CON9600
+mod$res		^/CONNECT 4800/	,CON4800
+mod$res		^/CONNECT 2400/	,CON2400
+mod$res		^/CONNECT 1200/	,CON1200
+mod$res		^/CONNECT 300/	,CON300		; /63/
+mod$res		^/CONNECT/	,CON300
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO ANSWER/	,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIAL TONE/	,FAILED
+mod$res		^/RRING/		,RING
 
-define		T2500MNP ,<T2500MNP>		; /BBS/ added..
-mod$comment	<Telebit MNP only - Locks DTE speed>
-wake$string	<AT E1 Q0 S0=0 S7=255 S66=1 S95=2 S97=0 S106=0 V1 %X ^M>
-wake$prompt	<OK>
-dial$string	<AT %X %A D%M %S ^M>
+define		T2500MNP ,^/T2500MNP/		; /BBS/ added..
+mod$comment	^/Telebit MNP only - Locks DTE speed/
+wake$string	^/AT E1 Q0 S0=0 S7=255 S66=1 S95=2 S97=0 S106=0 V1 %X ^M/
+wake$prompt	^/OK/
+dial$string	^/AT %X %A D%M %S ^M/
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	60.
-x$result	<3>
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-mod$res		<CONNECT>	,CONNECT	; includes all CONNECT msgs
-mod$res		<ERROR>		,FAILED
-mod$res		<NO ANSWER>	,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIAL TONE>	,FAILED
-mod$res		<RRING>		,RING
+x$result	^/3/
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CONNECT/	,CONNECT	; includes all CONNECT msgs
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO ANSWER/	,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIAL TONE/	,FAILED
+mod$res		^/RRING/		,RING
 
-define		T2500V.42 ,<T2500V.42>		; /BBS/ added..
-mod$comment	<Telebit V.42/MNP - Locks DTE speed>
-wake$string	<AT E1 Q0 S0=0 S7=255 S66=1 S95=2 S97=0 S106=1 V1 %X ^M>
-wake$prompt	<OK>
-dial$string	<AT %X %A D%M %S ^M>
+define		T2500V.42 ,^/T2500V.42/		; /BBS/ added..
+mod$comment	^?Telebit V.42/MNP - Locks DTE speed?
+wake$string	^/AT E1 Q0 S0=0 S7=255 S66=1 S95=2 S97=0 S106=1 V1 %X ^M/
+wake$prompt	^/OK/
+dial$string	^/AT %X %A D%M %S ^M/
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	60.
-x$result	<3>
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-mod$res		<CONNECT>	,CONNECT
-mod$res		<ERROR>		,FAILED
-mod$res		<NO ANSWER>	,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIAL TONE>	,FAILED
-mod$res		<RRING>		,RING
+x$result	^/3/
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CONNECT/	,CONNECT
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO ANSWER/	,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIAL TONE/	,FAILED
+mod$res		^/RRING/		,RING
 
-define		T3000	,<T3000>		; /62/ added..
+define		T3000	,^/T3000/		; /62/ added..
 mod$comment	^~Telebit w/o V.42/MNP - DTE follows DCE - XOFF restraint~
-wake$string	<AT E1 Q S0=0 S7=255 S58=3 S180=0 S181=0 V1 %X ^M> ; /63/
-wake$prompt	<OK>
-dial$string	<AT %X %A D%M %S ^M>
+wake$string	^/AT E1 Q S0=0 S7=255 S58=3 S180=0 S181=0 V1 %X ^M/ ; /63/
+wake$prompt	^/OK/
+dial$string	^/AT %X %A D%M %S ^M/
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	45.
-time$settle	<35.>				; the T3000 is SLOW to recover
-x$result	<12.>
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-;mod$res	<CONNECT FAST>	,CON38400	; /63/ use this if you can, or
-mod$res		<CONNECT FAST>	,CON19200	; this if 19.2 is max speed..
-mod$res		<CONNECT 38400>	,CON38400
-mod$res		<CONNECT 19200>	,CON19200
-mod$res		<CONNECT 14400>	,CON19200	; /63/
-mod$res		<CONNECT 12000>	,CON19200	; /63/
-mod$res		<CONNECT 9600>	,CON9600
-mod$res		<CONNECT 7200>	,CON7200
-mod$res		<CONNECT 4800>	,CON4800
-mod$res		<CONNECT 2400>	,CON2400
-mod$res		<CONNECT 1200>	,CON1200
-mod$res		<CONNECT>	,CON300
-mod$res		<ERROR>		,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIALTONE>	,FAILED
-mod$res		<NO PROMPTTONE>	,FAILED		; /63/
-mod$res		<RRING>		,RING
+time$settle	^/35./				; the T3000 is SLOW to recover
+x$result	^/12./
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+;mod$res	^/CONNECT FAST/	,CON38400	; /63/ use this if you can, or
+mod$res		^/CONNECT FAST/	,CON19200	; this if 19.2 is max speed..
+mod$res		^/CONNECT 38400/	,CON38400
+mod$res		^/CONNECT 19200/	,CON19200
+mod$res		^/CONNECT 14400/	,CON19200	; /63/
+mod$res		^/CONNECT 12000/	,CON19200	; /63/
+mod$res		^/CONNECT 9600/	,CON9600
+mod$res		^/CONNECT 7200/	,CON7200
+mod$res		^/CONNECT 4800/	,CON4800
+mod$res		^/CONNECT 2400/	,CON2400
+mod$res		^/CONNECT 1200/	,CON1200
+mod$res		^/CONNECT/	,CON300
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIALTONE/	,FAILED
+mod$res		^/NO PROMPTTONE/	,FAILED		; /63/
+mod$res		^/RRING/		,RING
 
-define		T3000V.42 ,<T3000V.42>		; /62/ added..
-mod$comment	<Telebit V.42/MNP - DTE is locked - RTS/CTS restraint>
-wake$string	<AT E1 Q S0=0 S7=255 S58=2 S180=2 S181=1 V1 %X ^M>
-wake$prompt	<OK>
-dial$string	<AT %X %A D%M %S ^M>
+define		T3000V.42 ,^/T3000V.42/		; /62/ added..
+mod$comment	^?Telebit V.42/MNP - DTE is locked - RTS/CTS restraint?
+wake$string	^/AT E1 Q S0=0 S7=255 S58=2 S180=2 S181=1 V1 %X ^M/
+wake$prompt	^/OK/
+dial$string	^/AT %X %A D%M %S ^M/
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	60.
-time$settle	<35.>				; the T3000 is SLOW to recover
-x$result	<12.>
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-mod$res		<CONNECT>	,CONNECT
-mod$res		<ERROR>		,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIALTONE>	,FAILED
-mod$res		<NO PROMPTTONE>	,FAILED		; /63/
-mod$res		<RRING>		,RING
+time$settle	^/35./				; the T3000 is SLOW to recover
+x$result	^/12./
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CONNECT/	,CONNECT
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIALTONE/	,FAILED
+mod$res		^/NO PROMPTTONE/	,FAILED		; /63/
+mod$res		^/RRING/		,RING
 
-define		T3000X.42 ,<T3000X.42>		; /63/ added..
-mod$comment	<Telebit V.42/MNP - DTE is locked - XOFF restraint>
-wake$string	<AT E1 Q S0=0 S7=255 S48=0 S58=3 S180=2 S181=1 V1 %X ^M>
-wake$prompt	<OK>
-dial$string	<AT %X %A D%M %S ^M>
+define		T3000X.42 ,^/T3000X.42/		; /63/ added..
+mod$comment	^?Telebit V.42/MNP - DTE is locked - XOFF restraint?
+wake$string	^/AT E1 Q S0=0 S7=255 S48=0 S58=3 S180=2 S181=1 V1 %X ^M/
+wake$prompt	^/OK/
+dial$string	^/AT %X %A D%M %S ^M/
 dial$echo	1
 init$once	1
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<AT Z ^M>
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/AT Z ^M/
 dial$time	60.
-time$settle	<35.>				; the T3000 is SLOW to recover
-x$result	<12.>
-ph$answer	<S0=1>				; /62/
-ph$noanswer	<S0=0>				; /62/
-mod$res		<BUSY>		,FAILED
-mod$res		<CONNECT>	,CONNECT
-mod$res		<ERROR>		,FAILED
-mod$res		<NO CARRIER>	,FAILED
-mod$res		<NO DIALTONE>	,FAILED
-mod$res		<NO PROMPTTONE>	,FAILED		; /63/
-mod$res		<RRING>		,RING
+time$settle	^/35./				; the T3000 is SLOW to recover
+x$result	^/12./
+ph$answer	^/S0=1/				; /62/
+ph$noanswer	^/S0=0/				; /62/
+mod$res		^/BUSY/		,FAILED
+mod$res		^/CONNECT/	,CONNECT
+mod$res		^/ERROR/		,FAILED
+mod$res		^/NO CARRIER/	,FAILED
+mod$res		^/NO DIALTONE/	,FAILED
+mod$res		^/NO PROMPTTONE/	,FAILED		; /63/
+mod$res		^/RRING/		,RING
 
-define		vadic	,<VADIC>
-mod$comment	<Vadic Generic VA212>
-wake$string	<^E^M>
+define		vadic	,^/VADIC/
+mod$comment	^/Vadic Generic VA212/
+wake$string	^/^E^M/
 wake$rate	10
-wake$prompt	<*>
-dial$string	<%S^M>
+wake$prompt	^/*/
+dial$string	^/%S^M/
 dial$rate	10
-dial$wait	<K>
-dial$ack	<^M>
-dmod$string	<D^M>
-dmod$prompt	<?>
-dial$confirm	<^M>
-dial$go		<DIALING>
+dial$wait	^/K/
+dial$ack	^/^M/
+dmod$string	^/D^M/
+dmod$prompt	^/?/
+dial$confirm	^/^M/
+dial$go		^/DIALING/
 dial$echo	1
-dial$xabort	<^M>
-dial$idle	<I^M>
+dial$xabort	^/^M/
+dial$idle	^/I^M/
 dial$time	35.
-mod$res		<BUSY>		,FAILED
-mod$res		<FAILED CALL>	,FAILED
-mod$res		<NO DIAL>	,FAILED
-mod$res		<ON LINE>	,CONNECT
-mod$res		<ONLINE>	,CONNECT
-mod$res		<RINGING>	,RING
-mod$res		<TIME OUT>	,FAILED
-mod$res		<VOICE>		,FAILED
+mod$res		^/BUSY/		,FAILED
+mod$res		^/FAILED CALL/	,FAILED
+mod$res		^/NO DIAL/	,FAILED
+mod$res		^/ON LINE/	,CONNECT
+mod$res		^/ONLINE/	,CONNECT
+mod$res		^/RINGING/	,RING
+mod$res		^/TIME OUT/	,FAILED
+mod$res		^/VOICE/		,FAILED
 
-define		va42	,<VA4224>
-mod$comment	<Vadic 4224>
-wake$string	<^E^M>
+define		va42	,^/VA4224/
+mod$comment	^/Vadic 4224/
+wake$string	^/^E^M/
 wake$rate	10
-wake$prompt	<*>
-dial$string	<D%M%S%B^M>
+wake$prompt	^/*/
+dial$string	^/D%M%S%B^M/
 dial$rate	10
-dial$wait	<K>
-dial$go		<DIALING>
+dial$wait	^/K/
+dial$go		^/DIALING/
 dial$echo	1
-dial$blind	<B>
-dial$pulse	<P>
-dial$nopulse	<T>
-dial$xabort	<^M>
-dial$idle	<I^M>
+dial$blind	^/B/
+dial$pulse	^/P/
+dial$nopulse	^/T/
+dial$xabort	^/^M/
+dial$idle	^/I^M/
 dial$time	35.
-mod$res		<BUSY>		,FAILED
-mod$res		<FAILED CALL>	,FAILED
-mod$res		<NO DIAL>	,FAILED
-mod$res		<ON LINE 2400>	,CONNECT	; /BBS/ CON2400 ?
-mod$res		<ON LINE 1200>	,CONNECT	; /BBS/ CON1200 ?
-mod$res		<ON LINE 300>	,CONNECT	; /BBS/ CON300 ?
-mod$res		<ON LINE>	,CONNECT
-mod$res		<ONLINE>	,CONNECT
-mod$res		<RINGING>	,RING
-mod$res		<TIME OUT>	,FAILED
-mod$res		<VOICE>		,FAILED
+mod$res		^/BUSY/		,FAILED
+mod$res		^/FAILED CALL/	,FAILED
+mod$res		^/NO DIAL/	,FAILED
+mod$res		^/ON LINE 2400/	,CONNECT	; /BBS/ CON2400 ?
+mod$res		^/ON LINE 1200/	,CONNECT	; /BBS/ CON1200 ?
+mod$res		^/ON LINE 300/	,CONNECT	; /BBS/ CON300 ?
+mod$res		^/ON LINE/	,CONNECT
+mod$res		^/ONLINE/	,CONNECT
+mod$res		^/RINGING/	,RING
+mod$res		^/TIME OUT/	,FAILED
+mod$res		^/VOICE/		,FAILED
 
-
+	.page
 	.sbttl	User-Defined modem
 
 ;	This one MUST be the LAST in the list.  The USER-DEFINED modem can
@@ -775,7 +775,7 @@ mod$res		<VOICE>		,FAILED
 ;	it's started, thus the individual field data macros above will not
 ;	work here because this buffer is NOT stored in this overlay.
 
-define	usermd	,<USER-DEFINED>	,GLOBAL
+define	usermd	,^/USER-DEFINED/	,GLOBAL
 
 ;	No more modem definitions allowed past here!
 
