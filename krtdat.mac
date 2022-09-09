@@ -17,7 +17,7 @@
 ;	added a general use buffer, some flags and variables
 ;	SL editor insert mode default is set on here in edists
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 

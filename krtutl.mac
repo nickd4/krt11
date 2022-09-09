@@ -22,9 +22,9 @@
 ;	18-Jul-84  16:14:46 Brian Nelson
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
-	.include "IN:KRTDEF.MAC"
+	.include "krtdef.mac"
 	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
 
 

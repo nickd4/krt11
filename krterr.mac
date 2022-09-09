@@ -20,7 +20,7 @@
 ;	Copyright 1984 Change Software, Inc.
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 

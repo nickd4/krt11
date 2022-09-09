@@ -85,7 +85,7 @@
 ;	in the init code as it works even in older versions of TSX+.
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 	.sbttl	Macro references, various handy constants defined

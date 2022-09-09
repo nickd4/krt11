@@ -137,9 +137,9 @@
 ;	XINIT	()
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
-	.include "IN:KRTDEF.MAC"
+	.include "krtdef.mac"
 	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
 
 ; /62/	.FPROT,.SFDAT bypassed for V4, also expanded to allow assy under same

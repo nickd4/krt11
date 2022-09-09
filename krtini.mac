@@ -47,7 +47,7 @@
 ;	with KRTATR.  This was done to reduce the task size a bit.
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 	.mcall	.GTIM			; /62/

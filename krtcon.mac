@@ -40,7 +40,7 @@
 ;	07-MAY-1986 10:55  Brian Nelson
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 	.mcall	.CMKT	,.MRKT	,.RSUM	,.SCCA	,.SPFUN

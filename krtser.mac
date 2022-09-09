@@ -39,9 +39,9 @@
 ;	it also has the modules to talk to a remote Kermit
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
-	.include "IN:KRTDEF.MAC"
+	.include "krtdef.mac"
 	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
 
 	.mcall	.PURGE			; /62/

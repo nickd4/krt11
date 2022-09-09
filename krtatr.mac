@@ -38,7 +38,7 @@
 ;	if it should use the data being sent.
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 	.mcall	.DATE	,.GTIM		; /BBS/

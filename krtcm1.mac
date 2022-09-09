@@ -51,7 +51,7 @@
 ;	12-Sep-86  10:39:27 BDN Convert for I/D space
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 	.mcall	.PURGE	,.SPFUN		; /62/

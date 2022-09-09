@@ -64,7 +64,7 @@
 ;	it's best to stay within 80 columns if at all possible.
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 	.mcall	.RCTRLO

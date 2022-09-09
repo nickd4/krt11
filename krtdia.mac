@@ -101,7 +101,7 @@
 ;	09-Feb-89  00:00:00 JCH  Complete definition of DF224 modem
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 

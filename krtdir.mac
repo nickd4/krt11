@@ -34,7 +34,7 @@
 ;	Copyright 1984 Change Software, Inc
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 ; /62/	.PVAL bypassed for V4, also expanded to allow assembly under same

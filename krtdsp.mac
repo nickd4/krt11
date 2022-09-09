@@ -53,7 +53,7 @@
 ;	12-Sep-86  11:20:20 BDN Changed around to separate I/D space
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 ; /62/	.ABTIO,.POKE bypassed for V4, also expanded to allow assy under same

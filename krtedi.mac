@@ -23,7 +23,7 @@
 ;	18-Jul-86  12:00:29  Brian Nelson
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
 
 	; bits used in edists (the editor status word)

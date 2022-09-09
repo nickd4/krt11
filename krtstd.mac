@@ -21,9 +21,9 @@
 ;	return the command list address in r0
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
-	.include "IN:KRTCDF.MAC"
+	.include "krtcdf.mac"
 	.iif ndf  KRTCDF  .error	<; .include for IN:KRTCDF.MAC failed>
 
 

@@ -1382,9 +1382,9 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;	01 08-Jan-84  K11CMD	BDN	fix SET PARITY
 
 
-	.include "IN:KRTMAC.MAC"
+	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	<; .include for IN:KRTMAC.MAC failed>
-	.include "IN:KRTDEF.MAC"
+	.include "krtdef.mac"
 	.iif ndf  MSG$DA  .error	<; .include for IN:KRTDEF.MAC failed>
 
 	.mcall	.CMKT	,.PURGE	,.RCTRLO,.TWAIT	; /62/
