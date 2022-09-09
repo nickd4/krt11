@@ -518,7 +518,7 @@ iswild::save	^/r1/
 
 	.page
 	.sbttl	Open a file		; MTB$OP  20-Nov-86 14:56:59  BDN
-	;;.enabl	lsb
+	;.enabl	lsb
 
 ;	C R E A T E	(write to a file)
 ;	O P E N		(read from a file)
@@ -627,7 +627,7 @@ $10$:	save	^/r1,r2,r3,r4,r5/	; /62/ condensed mtb$op into this..
 140$:	unsave	^/r5,r4,r3,r2,r1/	; /62/
 	return
 
-	;;.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Clear attributes

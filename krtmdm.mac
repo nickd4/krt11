@@ -237,8 +237,10 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.byte	0			; null terminate
 	.list (me)
 	.psect	modinf	,ro,d,lcl,rel,con
+	$$save = . ; link-11 doesn't need this
 	. = $$current+offset
 	.word	$$addr			; where to find it..
+	. = $$save ; link-11 doesn't need this
 	.restore
 	.nlist (me)
 	.endm	modstr
@@ -247,8 +249,10 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.list (me)
 	.save
 	.psect	modinf	,ro,d,lcl,rel,con
+	$$save = . ; link-11 doesn't need this
 	. = $$current+offset		; it goes here..
 	.word	val
+	. = $$save ; link-11 doesn't need this
 	.restore
 	.nlist (me)
 	.endm	modval

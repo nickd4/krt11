@@ -25,7 +25,8 @@
 	.endm
 
 	.macro	.limit
-	.blkb	4 ; just for the time being
+	; for now just output the limits computed by link-11
+	.word	001000,107746
 	.endm
 
 	.macro	call name
