@@ -42,41 +42,46 @@
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.PURGE			; /62/
 
 
 	.macro	dispat	val,dsp,baseval,basedsp,default	; cmd dispatch tables
-	.list me
+	.list (me)
 	.save
-	.nlist me
+	.nlist (me)
 	.if nb ^/baseval/
-	.list me
+	.list (me)
 	.psect	genval	,ro,d,lcl,rel,con
 baseval:
 	.psect	gendsp	,ro,d,lcl,rel,con
 basedsp:
-	.word	default
-	.nlist me
+	; if default is blank, substitute .word 0 (MACRO-11 doesn't need this)
+	.if b ^/default/
+	.word   0
 	.iff
-	.list me
+	.word	default
+	.endc
+	.nlist (me)
+	.iff
+	.list (me)
 	.psect	genval	,ro,d,lcl,rel,con
-	.nlist me
+	.nlist (me)
 	  .if b  ^/val/
 	  .byte	 0
 	  .even
 	  .iff
 	  .byte	 val
-	  .list	 me
+	  .list	 (me)
 	  .psect gendsp	,ro,d,lcl,rel,con
-	  .nlist me
+	  .nlist (me)
 	  .word	 dsp
 	  .endc
 	.endc
-	.list me
+	.list (me)
 	.restore
-	.nlist me
+	.nlist (me)
 	.endm
 
 	.page
@@ -195,7 +200,7 @@ server:	clr	paknum			; packet_number := 0
 	clr	summary			; /BBS/ reset summary only flag
 	clr	dirflg			; /62/ reset embedded blanks flag
 	call	fixchk			; sendpar_checktype := set_checktype
-	mov	serwai	,sertim		; /41/ set a new time-out please
+	mov	serwait	,sertim		; /41/ set a new time-out please
 	bit	#log$pa	,trace		; /62/ logging packets this time?
 	beq	10$			; /62/ no
 	calls	putrec	,^/#0,#0,#lun.lo/ ; /62/ ya, put newline into log file
@@ -215,7 +220,10 @@ server:	clr	paknum			; packet_number := 0
 	jmp	clrcns			; /62/ kill "double prompt" on exit
 
 
-	dispat	basedsp=serdsp	,baseval=sercom	,default=serv.$
+; we don't support named parameters in macro calls
+;	dispat	basedsp=serdsp	,baseval=sercom	,default=serv.$
+; positional parameters are: val,dsp,baseval,basedsp,default
+	dispat	,,sercom,serdsp,serv.$
 
 	dispat	BADCHK		,serchk	; a fubar checksum
 	dispat	MSG$ACK		,serv$$	; things are ok now
@@ -292,7 +300,10 @@ serv.g:	clr	at$len			; /BBS/ used for local sizes too..
 	asl	r0			; word indexing
 	jmp	@gendsp(r0)		; /62/ dispatch the command
 
-	dispat	basedsp=gendsp	,baseval=gencom	,default=gen.$
+; we don't support named parameters in macro calls
+;	dispat	basedsp=gendsp	,baseval=gencom	,default=gen.$
+; positional parameters are: val,dsp,baseval,basedsp,default
+	dispat	^//,^//,gencom,gendsp,gen.$
 
 	dispat	GN$BYE		,gen.l	; bye bye
 	dispat	GN$CONNECT	,gen.c	; connect here means to a directory
@@ -629,7 +640,7 @@ remhos::call	seropn			; init the link
 ;	mov	sp	,logini		; /62/ force result msgs to a newline
 	calls	buffil	,^/argbuf,cmdbuf/ ; /63/ do repeat encoding if need be
 20$:	strlen	cmdbuf			; /63/ get this way in case of retry
-	spack	#msg$com,paknum,r0,cmdbuf ; /63/ get the server to execute
+	spack	#msg$command,paknum,r0,cmdbuf ; /63/ get the server to execute
 30$:	rpack	r2 ,r3	,#packet,#maxlng ; /62/ get the response from remote
 	mov	r3	,paknum		; save the packet number please
 	scan	r1	,#remrsp	; what to do with the response
@@ -650,10 +661,10 @@ c$bye::	call	ckremote		; /62/ moved front end here
 10$:	clr	r0			; /62/
 	return
 
-remcop::calls	doremo	,^/#gn$cop,#2,cmdbuf,argbuf/ ; /62/ remote copy
+remcop::calls	doremo	,^/#gn$copy,#2,cmdbuf,argbuf/ ; /62/ remote copy
 	return
 
-remcwd::mov	#gn$con	,r0		; /63/ do connect to a dir command
+remcwd::mov	#gn$connect,r0		; /63/ do connect to a dir command
 rem.two:mov	argbuf	,r1		; check for optional password
 10$:	tstb	@r1			; end of string?
 	beq	20$			; yes
@@ -667,28 +678,28 @@ rem.two:mov	argbuf	,r1		; check for optional password
 20$:	calls	doremo	,^/r0,#1,argbuf/	; /63/ no password today
 30$:	return
 
-remdel::calls	doremo	,^/#gn$del,#1,argbuf/ ; /62/ remote delete
+remdel::calls	doremo	,^/#gn$delete,#1,argbuf/ ; /62/ remote delete
 	return
 
-remdir::calls	doremo	,^/#gn$dir,#1,argbuf/ ; /62/ remote directory
+remdir::calls	doremo	,^/#gn$directory,#1,argbuf/ ; /62/ remote directory
 	return
 
 remfin::calls	doremo	,^/#gn$exit,#1,#null/ ; /63/ finish
 	return
 
-remhlp::calls	doremo	,^/#gn$hel,#1,#null/ ; remote help
+remhlp::calls	doremo	,^/#gn$help,#1,#null/ ; remote help
 	return
 
-remlgi::mov	#gn$log	,r0		; /63/ do login command
+remlgi::mov	#gn$login,r0		; /63/ do login command
 	br	rem.two			; /63/ common code
 
-remren::calls	doremo	,^/#gn$ren,#2,cmdbuf,argbuf/ ; /62/ remote rename
+remren::calls	doremo	,^/#gn$rename,#2,cmdbuf,argbuf/ ; /62/ remote rename
 	return
 
-remspa::calls	doremo	,^/#gn$dis,#1,argbuf/ ; /62/ remote space
+remspa::calls	doremo	,^/#gn$disk,#1,argbuf/ ; /62/ remote space
 	return				     ; /BBS/ with possible device
 
-remtyp::calls	doremo	,^/#gn$typ,#1,argbuf/ ; /62/ remote type
+remtyp::calls	doremo	,^/#gn$type,#1,argbuf/ ; /62/ remote type
 	return
 
 remwho::calls	doremo	,^/#gn$who,#1,argbuf/ ; /63/ remote who
@@ -732,7 +743,7 @@ doremo:	call	seropn			; initialize the link
 	add	#^/ln$max*2/,sp		; /62/ pop the local buffer
 
 getres:	strlen	cmdbuf			; /63/ get this way in case of retry
-	spack	#msg$gen,paknum,r0,cmdbuf ; /63/ send the command over please
+	spack	#msg$generic,paknum,r0,cmdbuf ; /63/ send the command over please
 10$:	rpack	r2 ,r3	,#packet,#maxlng ; /62/ get the response from remote
 	mov	r3	,paknum		; save the packet number please
 	scan	r1	,#remrsp	; what to do with the response
@@ -751,7 +762,7 @@ xit:	clr	xmode			; no extended reply stuff now
 
 	.save
 	.psect	$pdata
-remrsp:	.byte	msg$err	,msg$nak,msg$snd,msg$ack,msg$tex,timout	,badchk
+remrsp:	.byte	msg$error,msg$nak,msg$snd,msg$ack,msg$text,timout,badchk
 	.byte	0
 	.even
 remdsp:	.word	rem.$

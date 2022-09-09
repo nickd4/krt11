@@ -21,7 +21,8 @@
 	.page
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
-
+	.include "krtdef.mac"
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	CHR	=	1		; string (byte) data
 	INT	=	2		; integer (word) data
@@ -32,7 +33,7 @@
 	.psect	$addr
 	.word	0
 	.iff
-	.dsabl	lc
+	;.dsabl	lc
 	.psect	$name	,ro,d,lcl,rel,con
 	$$ = .
 	.asciz	#name#
@@ -44,7 +45,7 @@
 	.word	type
 	.psect	$size
 	.word	size
-	.enabl	lc
+	;.enabl	lc
 	.endc
 	.restore
 	.endm	entry
@@ -118,7 +119,7 @@ symsiz:
 	entry	^/ebquot/, chr, 1
 	entry	^/errtxt/, chr, erbfsiz
 	entry	^/fetpt/,  int, 1
-	entry	^/fetptm/, int, 1
+	entry	^/fetptmax/, int, 1
 	entry	^/filnam/, chr, ln$max
 	entry	^/filtyp/, int, 5
 	entry	^/freept/, int, 1
@@ -129,7 +130,7 @@ symsiz:
 	entry	^/indnam/, chr, 16+2	; /63/
 	entry	^/ininam/, chr, 16+2	; /63/
 	entry	^/jobsts/, int, 10
-	entry	^/jobtyp/, int, 1
+	entry	^/jobtype/, int, 1
 	entry	^/km.lock/,int, 1
 	entry	^/limits/, chr, 34.
 	entry	^/linksts/,int, 1
@@ -180,7 +181,7 @@ symsiz:
 	entry	^/totp.r/, int, 1	; pointer
 	entry	^/totp.s/, int, 1	; pointer
 	entry	^/tsxcl/,  int, 1
-	entry	^/tsxsav/, int, 1
+	entry	^/tsxsave/, int, 1
 	entry	^/tsxver/, int, 1
 	entry	^/tt$io/,  int, 1
 	entry	^/ttbuf/,  int, ttbsiz+2
@@ -191,10 +192,10 @@ symsiz:
 	entry	^/vbgexe/, int, 1
 	entry	^/xcdone/, int, 1
 	entry	^/xkbuff/, chr, ^/xksize+2/
-	entry	^/xklgbu/, int, 1
+	entry	^/xklgbuf/, int, 1
 	entry	^/xkpoint/,int, 1
 	entry	^/xl.lock/,int, 1
-	entry	^/xmfetp/, int, 1
+	entry	^/xmfetpt/, int, 1
 	entry	^/z.atch/, int, 1
 	entry
 
@@ -261,7 +262,7 @@ prtsym:	save	^/r0/
 	clrb	5(r3)			; null terminate
 	wrtall	r3			; print that out
 	mov	#'.	,r0
-	call	writ1ch			; /BBS/ add decimal point
+	call	writ1char		; /BBS/ add decimal point
 	wrtall	#deb.05			; /BBS/ address header
 	octout	virtad(r5)		; /BBS/ display starting address
 	.newline

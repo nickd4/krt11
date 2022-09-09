@@ -78,3 +78,8 @@ STA.INI		=: 'I&137	; init
 STA.RIN		=: 'R&137	; receive init
 STA.SIN		=: 'S&137	; send init
 STA.TYP		=: 'X&137	; extended reply
+
+; moved here so they can be assemble-time constants rather than globals
+xksize	= 100			; size in bytes for handler reads
+clstat	= 255			; TSX style modem status
+rwsize	= 0x50A			; see krtdat.mac

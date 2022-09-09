@@ -22,7 +22,7 @@
 ;	pulled RT-11 multi-terminal and sj monitor w/o twait stuff..
 ;
 ;	set/reset a list of "activation" chars under TSX which
-;	allows non-printing chars input at the terminal, such as ^O,
+;	allows non-printing chars input at the terminal, such as 0O,
 ;	to be passed to the remote system during the connect mode
 ;
 ;	display handler speed (fixed for 19.2k too) when connecting
@@ -71,7 +71,7 @@ brkwrk:	.word	0 ,0 ,0 ,0		; /62/ break mark time work area
 cancel:	.word	0 ,0 ,0 ,0		; .cmkt work area
 crflag:	.word	0			; if ^// last char was a CR
 done:	.word	0			; set this ^// to exit scheduler
-iopend:	.word	0			; if ^// XL write completion is pending
+iopending:.word	0			; if ^// XL write completion is pending
 rmbuff:	.word	0			; one word buffer for writes to XL
 rt.v51:	.word	0			; if ^// XL is from RT-11 V5.1
 scca:	.word	0 ,0 ,0			; trap ^C here
@@ -138,7 +138,7 @@ hlptxt:	.ascii	^/cr/^/lf/
 	.ascii	'^x	Send control char "x" using A..Z[\]~? '
 	.ascii	"prefixed with a carat"^/cr/^/lf/	; /63/ added for clarity
 	.asciz	"RUBOUT	Send a break"^/cr/^/lf/^/cr/^/lf/
-lis.ct:	.asciz	"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
+lis.ctrl:.asciz	"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 	.even
 
 	.page
@@ -167,9 +167,9 @@ doconn::call	opentt			; /63/ open the link device
 20$:	call	L10266			; write speed in r0 as dec num to TT
 30$:	wrtall	#con.04			; /63/ ^/cr/^/lf/"Type ^"
 	mov	conesc	,r0		; get esc char
-	dec	r0			; lis.ct here has no null entry
-	movb	lis.ct(r0),r0		; make it printable
-	call	writ1ch			; write it to TT
+	dec	r0			; lis.ctrl here has no null entry
+	movb	lis.ctrl(r0),r0		; make it printable
+	call	writ1char	; write it to TT
 	wrtall	#con.05			; /63/ "C to return .."^/cr/^/lf/
 40$:	clr	conmsg			; reset sign-on bypass flag
 	mov	sp	,logini		; /62/ force logerr msg into the clear
@@ -206,14 +206,14 @@ doconn::call	opentt			; /63/ open the link device
 
 	mov	sp	,xk.con		; direct data read from handler here
 	tstb	@xkpoint		; anything unused in buffer?
-	bne	100$			; ya
+	bne	$100$			; ya
 	call	readxk			; get data or set completion routine
-	.br	100$			; /63/
+	.br	$100$			; /63/
 
 	.page
 	.sbttl	CONNECT main_loop
 
-100$:	mov	#tlist	,r5		; get top of the task list
+$100$:	mov	#tlist	,r5		; get top of the task list
 110$:	tst	(r5)			; end of the table now?
 	beq	130$			; ya, go away until something happens
 	tst	state(r5)		; runnable task?
@@ -224,7 +224,7 @@ doconn::call	opentt			; /63/ open the link device
 130$:	inc	suspnd			; flag a .rsum is needed
 	.spnd				; suspend ourself
 	tst	done			; time to go now?
-	beq	100$			; no, loop again
+	beq	$100$			; no, loop again
 
 	.page
 	.sbttl	Shut_down and exit
@@ -294,7 +294,7 @@ ttproc:	tst	done			; finished?
 	beep				; beep & continue, _OVERWRITING_ data
 	unsave	^/r0/			; /62/ by restoring input byte and
 	clr	r4			; /62/ ensuring it's bit settable here
-70$:	tst	tsxsav			; running under TSX?
+70$:	tst	tsxsave			; running under TSX?
 	bne	90$			; ya, skip LF processing..
 	tst	rt.v51			; is this OLD XL/XC from RT-11 V5.1?
 	beq	90$			; no
@@ -308,7 +308,7 @@ ttproc:	tst	done			; finished?
 
 90$:	tst	duplex			; need local echoing?
 	beq	110$			; no
-	tst	tsxsav			; TSX?
+	tst	tsxsave			; TSX?
 	beq	100$			; no
 	cmpb	r0	,m.tsxr		; is it TSX lead-in char?
 	beq	110$			; ya, don't type this to TT
@@ -339,7 +339,7 @@ xkproc:	clr	r0			; avoid sign extension
 	tst	con8bit			; SET CON 7 or 8?
 	bne	10$			; 8
 	bicb	#200	,r0		; 7, strip high bit
-10$:	tst	tsxsav			; TSX?
+10$:	tst	tsxsave			; TSX?
 	beq	20$			; no
 	cmpb	r0	,m.tsxr		; lead-in char?
 	beq	30$			; ya, don't type this to TT
@@ -430,7 +430,7 @@ C10$:	.byte	'/	,'?	,'B&137	,'C&137	,'H&137	,'I&137
 
 C20$:	.word	con.$
 	.word	con.hl	,con.hl	,con.br	,con.c	,con.hl	,con.i
-	.word	con.q	,con.r	,con.s	,con.x	,con.z	,con.ctr,con.br
+	.word	con.q	,con.r	,con.s	,con.x	,con.z	,con.ctrl,con.br
 	.restore
 
 	.page

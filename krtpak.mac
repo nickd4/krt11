@@ -146,7 +146,7 @@
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.CLOSE			; /63/ drop .GTIM, ,.PURGE
 
@@ -324,7 +324,7 @@ waitsoh:clr	r1			; start with nothing
 	mov	sertim	,r0		; /62/ if waiting for server command
 	bne	20$			; /62/ then use that time-out
 	movb	senpar+p.time,r0	; /62/ else use "normal" time-out
-20$:	calls	binrea	,^/r0/		; read with time-out
+20$:	calls	binread	,^/r0/		; read with time-out
 	tst	r0			; did the read work?
 	bne	50$			; oops, just exit then
 	mov	r1	,2(sp)		; /56/ save it
@@ -369,7 +369,7 @@ rpakin:	mov	r4	,r0		; /62/ copy local buffer pointer
 	.page
 	.sbttl	RPACK$ read with time-out
 
-rpakrd:	calls	binrea	,^/.timeo(r4)/	; read input char
+rpakrd:	calls	binread	,^/.timeo(r4)/	; read input char
 	tst	r0			; did it work?
 	bne	10$			; no
 	call	rawio			; perhaps raw I/O logging
@@ -586,7 +586,7 @@ rawio:	save	^/r0,r1/
 	wrtall	#pak.06			; /62/ yes, finish up the display
 	br	60$
 
-30$:	tst	tsxsav			; /BBS/ running under TSX?
+30$:	tst	tsxsave			; /BBS/ running under TSX?
 	beq	40$			; /BBS/ nope
 	cmpb	r1	,m.tsxr		; /62/ ya, is this the TSLICH?
 	beq	60$			; /BBS/ ya, don't type it to TT
@@ -703,7 +703,7 @@ spack$::save	^/r1,r2,r3,r4/
 	inc	@sp			; packetlength := succ(packetlength)
 	mov	(sp)+	,r1		; packet length
 	mov	sp	,r4		; address(buffer)
-	calls	binwri	,^/r4,r1/	; and dump the buffer out now
+	calls	binwrite	,^/r4,r1/	; and dump the buffer out now
 	call	spakfi			; log to disk
 	add	#$allsiz,sp		; pop the buffer
 	unsave	^/r4,r3,r2,r1/
@@ -719,7 +719,7 @@ spakwa:	scan	@r5	,#han.no	; if packet type is in this list..
 	mov	4(r5)	,r2		; /62/ limit looping to packet length
 	add	#14	,r2		; /62/ plus header, trailer, etc..
 	movb	senpar+p.time,r0	; /62/ use "normal" time-out
-10$:	calls	binrea	,^/r0/		; /62/ wait for handshake char
+10$:	calls	binread	,^/r0/		; /62/ wait for handshake char
 	tst	r0			; did the read time out?
 	bne	20$			; /62/ if so, exit
 	bicb	#200	,r1		; ensure no parity is set
@@ -752,7 +752,7 @@ spakin:	bit	#log$pa	,trace		; packet debugging today?
 	bisb	conpar+p.npad,r1	; send some pad characters?
 	beq	50$			; no padding
 	mov	#conpar+p.padc,r2	; /62/ address of the pad character
-40$:	calls	binwri	,^/r2,#1/	; send some padding
+40$:	calls	binwrite	,^/r2,#1/	; send some padding
 	sob	r1	,40$		; next please
 
 50$:	movb	@r5	,r1		; the packet type next
@@ -1181,7 +1181,7 @@ printm::save				; save r0 - r5, inclusive
 	br	20$			; and jumping in here..
 
 10$:	mov	(r5)+	,r3		; get the next message please
-	tst	tsxsav			; TSX?
+	tst	tsxsave			; TSX?
 	beq	20$			; no
 	cmpb	(r3)	,m.tsxr		; is it the TSX lead-in char?
 	bne	20$			; no
@@ -1255,7 +1255,7 @@ logerr::calls	syserr	,^/r0,#errtxt/	; enter with r0=whatever_the_error_was
 	.page
 	.sbttl	Process retry and sync errors
 
-m$retr::save	^/r0/			; retry abort
+m$retry::save	^/r0/			; retry abort
 	bitb	#200	,recbit		; /44/ perhaps parity was going?
 	beq	10$			; /44/ no
 	tst	parity			; /BBS/ do we know about parity?

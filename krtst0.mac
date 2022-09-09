@@ -50,6 +50,8 @@
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtcdf.mac"
 	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
+	.include "krtdef.mac"
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.PURGE	,.SPFUN		; /63/
 
@@ -121,7 +123,7 @@ st0.45:	.asciz	" is not a control character"
 	.page
 	.psect	$code
 	.sbttl	LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
-	.enabl	lsb
+	;.enabl	lsb
 
 	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.LCUC ! C.TSPA ; arg processing
 
@@ -132,7 +134,7 @@ c$logf::call	set$log			; try to open the logfile
 	call	incsts			; set global error flag
 10$:	return
 
-set$lo::tstb	@argbuf			; any arg(s) supplied?
+set$log::tstb	@argbuf			; any arg(s) supplied?
 	bne	40$			; ya
 	bit	#log$op	,trace		; no, is there a logfile open?
 	bne	20$			; no
@@ -273,18 +275,18 @@ L1$:	bic	#log$al!log$io,trace	; /62/ clear all disk debug bits now
 220$:	clr	r0			; success, also clears carry
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET DEBUG
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
-set$de::upcase	argpnt			; /BBS/ upper case all args
+set$debug::upcase argpnt		; /BBS/ upper case all args
 	calls	getcm0	,^/argpnt,#dbglst/ ; find out which option was given
 	tst	r0			; find one?
-	bmi	30$			; /63/ no
+	bmi	a30$			; /63/ no
 	tst	wasnul			; /BBS/ were commands listed via "?"
-	bne	30$			; /63/ ya
+	bne	a30$			; /63/ ya
 	jmp	@r1			; /63/ dispatch now
 
 	command	dbglst	,ALL	,1	,sd$on
@@ -304,112 +306,112 @@ set$de::upcase	argpnt			; /BBS/ upper case all args
 	command	dbglst
 
 sd$con:	call	sdopen			; logfile open?
-	bcs	30$			; no
+	bcs	a30$			; no
 	call	rawchk			; disallow other logging
-	bcs	30$			; if raw is on
+	bcs	a30$			; if raw is on
 	bic	#log$al	,trace		; /BBS/ clear all disk debug bits now
 	bis	#log$co	,trace		; enable connect mode logging
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sd$none:call	sd$off			; /BBS/ do this first
 	clr	trace			; /BBS/ dump everything
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sd$not:	bic	#log$de	,trace		; /62/ turn off terminal debugging
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sd$nrp:	bic	#log$rp	,trace		; /BBS/ off just RPACK debugging
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sd$off::bit	#log$op	,trace		; is there a logfile open?
-	beq	10$			; no
+	beq	a10$			; no
 	calls	close	,^/#lun.lo/	; close it
 	bic	#log$op	,trace		; say it's closed please
 	tst	infomsg			; /41/ inform the user?
-	beq	10$			; /41/ no
+	beq	a10$			; /41/ no
 	wrtall	#prefix			; /41/ call it Logfile now
 	wrtall	#logfil			; /BBS/ include the actual file name
 	wrtall	#st0.38			; /63/ " closed"^/cr/^/lf/
-10$:	bic	#log$al!log$io,trace	; /BBS/ clear all disk debug bits now
-20$:	clr	r0			; success
-30$:	return
+a10$:	bic	#log$al!log$io,trace	; /BBS/ clear all disk debug bits now
+a20$:	clr	r0			; success
+a30$:	return
 
 sd$on:	call	rawchk			; disallow other logging
-	bcs	30$			; if raw is on
+	bcs	a30$			; if raw is on
 	call	sdopen			; a debug file already open?
-	bcs	30$			; no
+	bcs	a30$			; no
 	bis	#log$al	,trace		; set debug on turns on the world
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sd$pak:	call	sdopen			; logfile open?
-	bcs	30$			; no
+	bcs	a30$			; no
 	call	rawchk			; disallow other logging
-	bcs	30$			; if raw is on
+	bcs	a30$			; if raw is on
 	bic	#log$al	,trace		; /BBS/ clear all disk debug bits now
 	bis	#log$pa	,trace		; enable packet logging
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sd$rpa:	bis	#log$rp	,trace		; enable RPACK debugging
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sd$ter:	bis	#log$de	,trace		; /62/ I/O to the local terminal
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
 sdopen:	bit	#log$op	,trace		; a logfile open?
-	beq	50$			; no
+	beq	a50$			; no
 	tst	savpnt			; /BBS/ come here from file opener?
-	bne	40$			; /BBS/ ya, skip this message..
+	bne	a40$			; /BBS/ ya, skip this message..
 	wrtall	#prefix			; /BBS/ no, say it's already there
 	wrtall	#logfil			; /BBS/ including what it is
 	wrtall	#st0.39			; /63/ " is already open"^/cr/^/lf/
-40$:	br	20$			; /63/ no error, clr r0 clears carry
+a40$:	br	a20$			; /63/ no error, clr r0 clears carry
 
-50$:	mov	argbuf	,r0		; /BBS/ bump argpnt to the next arg..
-60$:	tstb	@r0			; /63/ find EOS yet?
-	beq	70$			; /BBS/ yes, exit with an error
+a50$:	mov	argbuf	,r0		; /BBS/ bump argpnt to the next arg..
+a60$:	tstb	@r0			; /63/ find EOS yet?
+	beq	a70$			; /BBS/ yes, exit with an error
 	cmpb	(r0)+	,#space		; /BBS/ found a delimiter yet?
-	bne	60$			; /63/ no, keep looking
+	bne	a60$			; /63/ no, keep looking
 	mov	r0	,argpnt		; /BBS/ pass name to logfile opener
 	call	L1$			; /BBS/ jump in at appropriate place
-	bcc	30$			; /BBS/ carry clear = logfile open
-70$:	mov	#er$lgf	,r0		; /BBS/ please opn a LOGFILE first
-80$:	sec				; /63/ error exit
+	bcc	a30$			; /BBS/ carry clear = logfile open
+a70$:	mov	#er$lgf	,r0		; /BBS/ please opn a LOGFILE first
+a80$:	sec				; /63/ error exit
 	return
 
 rawchk:	bit	#log$io	,trace		; raw I/O debugging?  (clears carry)
-	beq	30$			; /63/ no
+	beq	a30$			; /63/ no
 	mov	#er$rax	,r0		; /BBS/ can't with raw I/O logging on
-	br	80$			; /63/ failure
+	br	a80$			; /63/ failure
 
 sd$raw:	call	sdopen			; logfile open?
-	bcs	30$			; no
+	bcs	a30$			; no
 	mov	trace	,r0		; copy of debugging status word
 	bic	#^/log$rp!log$op/,r0	; hose RPACK and disk file open bits
-	beq	90$			; no other disk_based option is on
+	beq	a90$			; no other disk_based option is on
 	mov	#er$raw	,r0		; /BBS/ can't do raw I/O w/other opts
-	br	30$
-90$:	bis	#log$io	,trace		; enable raw I/O logging
+	br	a30$
+a90$:	bis	#log$io	,trace		; enable raw I/O logging
 	mov	#lun.lo	,r0		; /62/ copy of lun
 	asl	r0			; /62/ word indexing
 	mov	sp	,filtyp(r0)	; /62/ flag to use binary mode
 	tst	infomsg			; SET TT QUIET?
-	beq	20$			; /63/ ya, skip info message
+	beq	a20$			; /63/ ya, skip info message
 	wrtall	#prefix			; /62/ "Logfile "
 	wrtall	#st0.37			; /62/ say binary mode is enabled
-	br	20$			; /63/ success
+	br	a20$			; /63/ success
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET PARITY
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 set$pa::upcase	argbuf			; /BBS/ upper case all args
 	calls	getcm0	,^/argbuf,#parlst/ ; find out which option was given
 	tst	r0			; did we find one
-	bmi	30$			; no
+	bmi	b30$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
-	bne	20$			; /BBS/ ya
+	bne	b20$			; /BBS/ ya
 	jmp	@r1			; /63/ dispatch
 
 	command	parlst	,EVEN	,1	,spa$ev
@@ -419,48 +421,48 @@ set$pa::upcase	argbuf			; /BBS/ upper case all args
 	command	parlst	,SPACE	,1	,spa$sp
 	command	parlst
 
-spa$ev:	mov	#par$ev	,r0		; even
-	br	10$			; /63/
+spa$ev:	mov	#par$even,r0		; even
+	br	b10$			; /63/
 
-spa$od:	mov	#par$od	,r0		; odd
-	br	10$			; /63/
+spa$od:	mov	#par$odd,r0		; odd
+	br	b10$			; /63/
 
-spa$ma:	mov	#par$ma	,r0		; mark
-	br	10$			; /63/
+spa$ma:	mov	#par$mark,r0		; mark
+	br	b10$			; /63/
 
-spa$sp:	mov	#par$sp	,r0		; space
-	br	10$			; /63/
+spa$sp:	mov	#par$space,r0		; space
+	br	b10$			; /63/
 
 spa$no:	clr	r0			; /BBS/ none
-10$:	mov	r0	,parity		; /63/ save returned value
-	beq	20$			; /BBS/ skip msg if parity is set none
+b10$:	mov	r0	,parity		; /63/ save returned value
+	beq	b20$			; /BBS/ skip msg if parity is set none
 	tst	infomsg			; SET TT QUIET?
-	beq	20$			; ya
+	beq	b20$			; ya
 	wrtall	#st0.42			; /63/ "Binary files will be prefixed"
-20$:	clr	r0			; no error
-30$:	return
+b20$:	clr	r0			; no error
+b30$:	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET HANDSHAKE
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 	SQUOTE	= 47	; '
 	DQUOTE	= 42	; "
 
 set$ha::upcase	argbuf			; /BBS/ leaves r0 pointing to argbuf
 	cmpb	@r0	,#squote	; a literal ' quoted character?
-	beq	10$			; yes, use next char as the handshake
+	beq	c10$			; yes, use next char as the handshake
 	cmpb	@r0	,#dquote	; look for " also
-	bne	20$			; not there
-10$:	movb	1(r0)	,r0		; get the handshake character please
-	br	30$			; and copy it please
-20$:	calls	getcm0	,^/r0,#hanlst/	; which option was given?
+	bne	c20$			; not there
+c10$:	movb	1(r0)	,r0		; get the handshake character please
+	br	c30$			; and copy it please
+c20$:	calls	getcm0	,^/r0,#hanlst/	; which option was given?
 	tst	r0			; find one?
-	bmi	50$			; no
+	bmi	c50$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
-	bne	40$			; /BBS/ ya
+	bne	c40$			; /BBS/ ya
 	jmp	@r1			; /63/ dispatch now
 
 	command	hanlst	,CR	,1	,sha$cr
@@ -468,18 +470,18 @@ set$ha::upcase	argbuf			; /BBS/ leaves r0 pointing to argbuf
 	command	hanlst
 
 sha$no:	clrb	r0			; no handshake (the default)
-	br	30$			; /63/
+	br	c30$			; /63/
 
 sha$cr:	movb	#cr	,r0		; wait for a carriage return
-30$:	movb	r0	,handch		; save the result
-40$:	clr	r0			; success
-50$:	return
+c30$:	movb	r0	,handch		; save the result
+c40$:	clr	r0			; success
+c50$:	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET DUPLEX, SET LOCAL-ECHO	; /BBS/ add _ECHO to LOCAL
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 ;	Provide both SET DUPLEX FULL/HALF and SET LOCAL-ECHO ON/OFF
 ;	to provide users with compatibility with the different ways
@@ -492,9 +494,9 @@ set$du::mov	#duplst	,r5		; load pointer to DUPLEX commands
 dulc:	upcase	argbuf			; /BBS/ upper case all args
 	calls	getcm0	,^/argbuf,r5/	; find out which option was given
 	tst	r0			; did we find one
-	bmi	20$			; no
+	bmi	d20$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
-	bne	10$			; /BBS/ ya
+	bne	d10$			; /BBS/ ya
 	jmp	@r1			; /63/ dispatch
 
 	command	duplst	,FULL	,1	,sdu$fu
@@ -506,13 +508,13 @@ dulc:	upcase	argbuf			; /BBS/ upper case all args
 	command	lcelst
 
 sdu$ha:	mov	sp	,duplex		; force local echo on
-	br	10$			; /63/
+	br	d10$			; /63/
 
 sdu$fu:	clr	duplex			; no local echo, the default
-10$:	clr	r0			; no error
-20$:	return
+d10$:	clr	r0			; no error
+d20$:	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET UPDATE
@@ -529,17 +531,17 @@ set$up::calls	l$val	,^/argbuf/	; get the interval into decimal
 
 	.page
 	.sbttl	SET RETRY		; /BBS/ enhanced..
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 set$re::upcase	argbuf			; /BBS/ upper case argument buffer
 	calls	getcm0	,^/argbuf,#trylst/ ; try to parse the first arg
 	tst	r0			; did it work?
-	bmi	20$			; /63/ nope
+	bmi	e20$			; /63/ nope
 	tst	wasnul			; were commands listed via "?"
-	bne	20$			; /63/ ya
+	bne	e20$			; /63/ ya
 	calls	getcm1	,^/argbuf,#trylst,r0/ ; /63/ check for possible arg
 	tst	r0			; /63/ well?
-	bmi	20$			; /63/ bad arg..
+	bmi	e20$			; /63/ bad arg..
 	jmp	@r1			; /63/ dispatch
 
 	command	trylst	,INITIAL-CONNECTION,1	,stry$i	,st0.01
@@ -548,44 +550,44 @@ set$re::upcase	argbuf			; /BBS/ upper case argument buffer
 
 stry$i:	call	stry$$			; initial-connection retries
 	tst	r0			; did it work?
-	bne	20$			; /63/ no
+	bne	e20$			; /63/ no
 	mov	r1	,initry		; ya, save value
 	return
 
 stry$p:	call	stry$$			; data packet retries
 	tst	r0			; did it work?
-	bne	20$			; /63/ no
+	bne	e20$			; /63/ no
 	mov	r1	,maxtry		; ya, save value
 	return
 
 stry$$:	call	nextarg			; get the next argument
 	tstb	@r1			; well?
-	beq	10$			; not there
+	beq	e10$			; not there
 	calls	l$val	,^/r1/		; SET RETRY decimal-number
 	tst	r0			; well?
-	bne	10$			; no, bad value
+	bne	e10$			; no, bad value
 	cmp	r1	,#3.		; a reasonable minimum?
-	blo	10$			; nope..
+	blo	e10$			; nope..
 	cmp	r1	,#30.		; a reasonable maximum?
-	blos	20$			; ya
-10$:	mov	#er$try	,r0		; no, must be between 3. and 30.
-20$:	return
+	blos	e20$			; ya
+e10$:	mov	#er$try	,r0		; no, must be between 3. and 30.
+e20$:	return
 
-	.dsabl	lsb			; /63/
+	;.dsabl	lsb			; /63/
 
 	.page
 	.sbttl	SET SERVER
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 set$sv::upcase	argbuf			; /BBS/ upper case all args
 	calls	getcm0	,^/argbuf,#svlst/ ; find out which option was given
 	tst	r0			; did we find the option?
-	bmi	20$			; /63/ no
+	bmi	f20$			; /63/ no
 	tst	wasnul			; /BBS/ were commands listed via "?"
-	bne	20$			; /63/ ya
+	bne	f20$			; /63/ ya
 	calls	getcm1	,^/argbuf,#svlst,r0/ ; yes, look for value clause now
 	tst	r0			; find it (or read it?)
-	bmi	20$			; /63/ no
+	bmi	f20$			; /63/ no
 	jmp	@r1			; /63/ getcm1 always returns in argbuf
 
 	command svlst	,NOTIME-OUT	,1	,srv$nt
@@ -594,30 +596,30 @@ set$sv::upcase	argbuf			; /BBS/ upper case all args
 
 srv$ti:	calls	l$val	,^/argbuf/	; convert ascii number to integer
 	tst	r0			; did it work?
-	bne	20$			; /63/ no, l$val loads er$bad into r0
+	bne	f20$			; /63/ no, l$val loads er$bad into r0
 	cmp	r1	,#1092.		; /62/ too big?  note r0 is clear here
-	bhi	10$			; /62/ ya, don't set it
+	bhi	f10$			; /62/ ya, don't set it
 	mov	r1	,serwait	; it's ok, save desired time out
-	br	20$
-10$:	mov	#er$bad	,r0		; error, a bad value was given
-20$:	return
+	br	f20$
+f10$:	mov	#er$bad	,r0		; error, a bad value was given
+f20$:	return
 
 srv$nt:	mov	#1092.	,serwait	; /62/ wait the max, 18.2 mins @ 60Hz
 	clr	r0			; no error possible here
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET EOF [NO]EXIT
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 set$ef::upcase	argbuf			; /BBS/ upper case all args
 	calls	getcm0	,^/argbuf,#eflist/ ; parse the first arg
 	tst	r0			; did it work?
-	bmi	20$			; no
+	bmi	g20$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
-	bne	20$			; /BBS/ ya
+	bne	g20$			; /BBS/ ya
 	jmp	@r1			; /63/ dispatch
 
 	command	eflist	,EXIT	,1	,sef$ex
@@ -625,24 +627,24 @@ set$ef::upcase	argbuf			; /BBS/ upper case all args
 	command	eflist
 
 sef$ne:	clr	exieof			; don't exit at end of TAKE file
-	br	10$			; /63/
+	br	g10$			; /63/
 
 sef$ex:	mov	sp	,exieof		; exit to monitor at end of TAKE file
-10$:	clr	r0			; no error
-20$:	return
+g10$:	clr	r0			; no error
+g20$:	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET INCOMPLETE-FILE-DISPOSITION	; /BBS/ all new..
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 set$in::upcase	argbuf			; upper case all args
 	calls	getcm0	,^/argbuf,#inclist/ ; try to parse the first arg
 	tst	r0			; well?
-	bmi	20$			; didn't work
+	bmi	h20$			; didn't work
 	tst	wasnul			; was arg a question mark?
-	bne	20$			; ya, don't dispatch on that
+	bne	h20$			; ya, don't dispatch on that
 	jmp	@r1			; /63/ dispatch the command
 
 	command	inclist	,DISCARD,1	,sin$ds
@@ -650,29 +652,29 @@ set$in::upcase	argbuf			; upper case all args
 	command	inclist
 
 sin$kp:	clr	incfile			; keep incomplete files
-	br	10$			; /63/
+	br	h10$			; /63/
 
 sin$ds:	mov	sp	,incfile	; dump incomplete files
-10$:	clr	r0			; no error
-20$:	return
+h10$:	clr	r0			; no error
+h20$:	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET DIAL		; /BBS/ substantially enhanced
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 set$di::mov	#dialst	,r3		; pointer to command dispatch table
 	mov	#spare1	,r4		; /63/ pointer to a temp buffer
 	upone	argbuf			; upcase just next arg only..
 	calls	getcm0	,^/argbuf,r3/	; parse the first arg
 	tst	r0			; did it work?
-	bmi	60$			; /63/ no, bad option
+	bmi	i60$			; /63/ no, bad option
 	tst	wasnul			; were commands listed via "?"
-	bne	60$			; /63/ ya
+	bne	i60$			; /63/ ya
 	calls	getcm1	,^/argbuf,r3,r0/	; no, look for next arg
 	tst	r0			; get one?
-	bmi	60$			; /63/ no
+	bmi	i60$			; /63/ no
 	jmp	@r1			; /63/ dispatch
 
 	command dialst ,ABORT		,2	,ss$abo	,st0.03
@@ -746,29 +748,29 @@ ss$fai:	mov	#-1	,r3		; call failed
 
 sd.res:	prsbuf	r4			; expand and copy string to workbuffer
 	tst	r0			; successful?
-	bne	60$			; no
+	bne	i60$			; no
 	strlen	r4			; get the length of the result
 	add	#2	,r0		; plus one for the null terminator
 	bic	#1	,r0		; ensure on a word boundary
 	add	#4	,r0		; space for link and status
 	mov	#usermd	,r5		; /BBS/ get base address of structure
-	add	#res.hea,r5		; link to first entry
-20$:	tst	(r5)			; end of the chain yet?
-	beq	30$			; yes
+	add	#res.head,r5		; link to first entry
+i20$:	tst	(r5)			; end of the chain yet?
+	beq	i30$			; yes
 	mov	(r5)	,r5		; no, get the next one please
-	br	20$			; and recheck
-30$:	malloc	r0			; ask for an allocation
+	br	i20$			; and recheck
+i30$:	malloc	r0			; ask for an allocation
 	mov	r0	,(r5)		; /63/ get it?
-	beq	40$			; no, exit
+	beq	i40$			; no, exit
 	mov	(r5)	,r5		; point directly to new area
 	clr	(r5)+			; no link to next
 	mov	r3	,(r5)+		; message class type
 	strcpy	r5	,r4		; insert the string
-	br	50$
-40$:	mov	#er$mal	,r0		; /BBS/ no space left for string
+	br	i50$
+i40$:	mov	#er$mal	,r0		; /BBS/ no space left for string
 	return
-50$:	clr	r0			; /BBS/ no error
-60$:	return
+i50$:	clr	r0			; /BBS/ no error
+i60$:	return
 
 ss$abo:	mov	#dial.xabort,r5		; abort call from modem
 	br	sd.chk
@@ -823,18 +825,18 @@ ss$ton:	mov	#dial.nopulse,r5	; /62/ TONE dialing string
 
 sd.chk:	prsbuf	r4			; expand and copy string to workbuffer
 	tst	r0			; successful?
-	bne	60$			; no
+	bne	i60$			; no
 	strlen	r4			; get the length of the result
 	inc	r0			; plus one for the null terminator
 	inc	r0			; ensure next allocation begins
 	bic	#1	,r0		; on an even address boundary
 	malloc	r0			; ask for the allocation
 	tst	r0			; /BBS/ did we get it?
-	beq	40$			; /BBS/ no, exit
+	beq	i40$			; /BBS/ no, exit
 	add	#usermd	,r5		; /BBS/ ya, point to next free address
 	mov	r0	,(r5)		; insert the new buffer address
 	strcpy	(r5)	,r4		; copy the string
-	br	50$			; /BBS/ share exit code
+	br	i50$			; /BBS/ share exit code
 
 ss$eko:	mov	#dial.echo,r5
 	br	ss$$1			; /63/ modem echoes dial commands
@@ -869,25 +871,25 @@ ss$wra:	mov	#wake.rate,r5		; in ticks
 
 sd.val:	calls	l$val	,^/argbuf/	; convert ascii number to integer
 	tst	r0			; success?
-	bne	80$			; no
-70$:	mov	r1	,usermd(r5)	; yes, insert the value
-80$:	return				; /62/ done
+	bne	i80$			; no
+i70$:	mov	r1	,usermd(r5)	; yes, insert the value
+i80$:	return				; /62/ done
 
 sst$st:	calls	l$val	,^/argbuf/	; /62/ convert to an integer
 	tst	r0			; /62/ ok?
-	bne	80$			; /62/ nope
+	bne	i80$			; /62/ nope
 	mov	r1	,settle		; /62/ ya, save it
 	mov	#time.settle,r5		; /62/ prep to stuff into USER-DEFINED
-	br	70$			; /62/ go do it
+	br	i70$			; /62/ go do it
 
 ss$tmo:	calls	l$val	,^/argbuf/	; convert ascii number to integer
 	tst	r0			; success?
-	bne	80$			; no
+	bne	i80$			; no
 	mov	r1	,diatmo		; number is ok
 	mov	#dial.time,r5		; /62/ prep to stuff into USER-DEFINED
-	br	70$			; /62/ go do it
+	br	i70$			; /62/ go do it
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET PHONE		; /45/ added
@@ -987,14 +989,14 @@ sxm$$$:	mov	#usermd	,r0		; /62/ top of USER-DEFINED modem data
 
 	.page
 	.sbttl	SET SL			; /BBS/ added..
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 set$sl::upcase	argbuf			; upper case all args
 	calls	getcm0	,^/argbuf,#sl.lst/ ; which option was given?
 	tst	r0			; well?
-	bmi	20$			; bad option
+	bmi	j20$			; bad option
 	tst	wasnul			; were commands listed via "?"
-	bne	20$			; ya
+	bne	j20$			; ya
 	call	kp.clr			; reset the keypad
 	jmp	@r1			; /63/ dispatch
 
@@ -1005,23 +1007,23 @@ set$sl::upcase	argbuf			; upper case all args
 	command sl.lst
 
 ssl$ke:	mov	sp	,sl.ked		; put SL into KED mode
-	br	10$			; /63/
+	br	j10$			; /63/
 
 ssl$no:	clr	sl.ked			; put SL in normal mode
-	br	10$			; /63/
+	br	j10$			; /63/
 
 ssl$of:	clr	sl.on			; turn SL off
-	br	10$			; /63/
+	br	j10$			; /63/
 
 ssl$on:	mov	sp	,sl.on		; turn SL on
-10$:	clr	r0			; no error
-20$:	return
+j10$:	clr	r0			; no error
+j20$:	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SET CONTROL-CHARACTER	; /63/ all new..
-	.enabl	lsb
+	;.enabl	lsb
 
 ; Control character quoting may be disabled for each byte individually 
 ; by making its corresponding flag byte in CLTFLGS ^// 0.
@@ -1103,36 +1105,36 @@ ct.bad:	tst	infomsg			; report the bad number?
 	strlen	#spare1			; get length of the offending string
 	sub	#ct.wid	,r0		; subtract total width allowed here
 	neg	r0			; how much do we need to pad?
-	ble	50$			; it's already there or overflowed..
+	ble	k50$			; it's already there or overflowed..
 	mov	r0	,r1		; copy number of blanks needed
 	mov	#space	,r0		; load a blank into the output reg
-40$:	call	writ1char		; write it to the terminal
-	sob	r1	,40$		; repeat until done
-50$:	wrtall	#spare1			; now write the number itself to tt
+k40$:	call	writ1char		; write it to the terminal
+	sob	r1	,k40$		; repeat until done
+k50$:	wrtall	#spare1			; now write the number itself to tt
 	mov	#st0.45	,r5		; load message tag text location
-	br	110$			; go print it
+	br	k110$			; go print it
 
 ct.all:	tst	r4			; allow anything
-	bne	70$			; to be set prefixed
+	bne	k70$			; to be set prefixed
 	cmp	r1	,#1		; unprefixing, is this a NULL?
-	blo	70$			; no but it is ascii 377
-	beq	90$			; ya
+	blo	k70$			; no but it is ascii 377
+	beq	k90$			; ya
 	cmp	r1	,#22		; an XON?
-	beq	60$			; ya
+	beq	k60$			; ya
 	cmp	r1	,#24		; an XOFF?
-	beq	60$			; ya
+	beq	k60$			; ya
 	cmp	r1	,#63		; maybe it's ^/200!XON/
-	beq	60$			; ya
+	beq	k60$			; ya
 	cmp	r1	,#65		; how about ^/200!XOFF/
-	bne	70$			; nope..
-60$:	tst	km.lock			; hardware flow control here is
-	beq	80$			; only supported on the KM handler
+	bne	k70$			; nope..
+k60$:	tst	km.lock			; hardware flow control here is
+	beq	k80$			; only supported on the KM handler
 	clr	-(sp)			; a one word buffer
 	mov	sp	,r2		; pointer to it
 	.spfun	#rtwork,#xc.control,#clstat,r2,#0,#1 ; get the status
 	bit	#cl.flow,(sp)+		; if ^// it's done in hardware
-	beq	80$			; it's software flow control
-70$:	movb	r4	,ctlflgs(r1)	; set or clear as req'd ..
+	beq	k80$			; it's software flow control
+k70$:	movb	r4	,ctlflgs(r1)	; set or clear as req'd ..
 
 ct.loop:call	nextarg			; look for another arg
 	tstb	(r1)			; find one?
@@ -1140,21 +1142,21 @@ ct.loop:call	nextarg			; look for another arg
 	copyz	r1 ,argbuf ,#ln$max-4	; pull it up to top of argument buffer
 	jmp	sct$$			; loop back and give it a go..
 
-80$:	mov	#st0.43	,r5		; enter here for XOFF warning
+k80$:	mov	#st0.43	,r5		; enter here for XOFF warning
 	movb	#1	,ctlflgs(r1)	; ensure char gets quoted
 	br	ct.err
-90$:	mov	#st0.44	,r5		; enter here for NULL warning
+k90$:	mov	#st0.44	,r5		; enter here for NULL warning
 ct.err:	tst	infomsg			; info messages on?
 	beq	ct.loop			; no, skip this stuff
 	cmp	r1	,#41		; is this a shifted down char?
-	blo	100$			; no
+	blo	k100$			; no
 	add	#137	,r1		; ya, bump 101..41 back to 240..200
-100$:	decb	r1			; now back to where we started
+k100$:	decb	r1			; now back to where we started
 	mov	#errtxt	,r2		; a handy buffer
 	deccvt	r1 ,r2 ,#ct.wid		; integer > ascii, right justify
 	clrb	ct.wid(r2)		; null terminate the ascii string
 	wrtall	r2			; display it then
-110$:	wrtall	r5			; add the appropriate tag line
+k110$:	wrtall	r5			; add the appropriate tag line
 	.newline
 	br	ct.loop
 
@@ -1169,7 +1171,7 @@ sct$al:	clr	r3			; start off at offset = zero
 	blos	120$			; loop until they've all been done
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Get the next argument

@@ -49,6 +49,8 @@
 	.page
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
+	.include "krtdef.mac"
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.GTIM			; /62/
 
@@ -99,7 +101,7 @@ ini.15:	.asciz	" .."			; /BBS/ ..for the file to load
 prefix:	.asciz	"The other Kermit "
 cando:	.asciz	"supports long packets, which are disabled locally"
 lmsg:	.asciz	"doesn't support or has disabled long packets"
-warn8m:	.asciz	"Eight-bit quoting forced on"
+warn8msg: .asciz "Eight-bit quoting forced on"
 
 $delim:	.asciz	"/"			; /63/ display format stuff
 $sendh:	.ascii	^/cr/^/esc/"[2K"
@@ -533,7 +535,7 @@ dskdmp::save				; /42/ save r0-r5
 	beq	150$			; no
 	clr	r1			; /BBS/ init a counter for newlines
 	mov	@r5	,r3		; /BBS/ get address of packet buffer
-110$:	tst	tsxsav			; /BBS/ running under TSX?
+110$:	tst	tsxsave			; /BBS/ running under TSX?
 	beq	120$			; /BBS/ nope
 	cmpb	@r3	,m.tsxr		; /62/ ya, is this TSLICH?
 	beq	140$			; /BBS/ ya, don't type it to TT
@@ -658,7 +660,7 @@ incsta::cmp	-(sp)	,-(sp)		; allocate two word buffer
 	.page
 	.sbttl	Initialize repeat count for sending packets
 
-inirep::save	^/r0/
+inirepeat::save	^/r0/
 	clr	dorpt			; assume not doing repeat things
 	tst	setrpt			; repeat count processing disabled?
 	beq	10$			; yes
@@ -722,7 +724,7 @@ recdsp:	.word	rectty	,rectty	,recvt1	,recvt1	,recvt1
 rectty:	mov	#pcnt.r	,r1		; /43/ pass address in r1
 	call	numout			; write the number to the terminal
 	wrtall	#$delim			; a "/" delimiter
-	mov	#pcnt.s+<4*^?^/'N&137/-100?>,r1 ; /43/ 32. bits this time
+	mov	#pcnt.s+(4*^?^/'N&137/-100?),r1 ; /43/ 32. bits this time
 	cmp	2(r1)	,pcnt.n+2	; /43/ unlikely that the NAK
 	beq	10$			; /43/ count would ever be > 65535.
 	mov	2(r1)	,pcnt.n+2	; /43/ use low order 16 bits
@@ -744,14 +746,14 @@ recvt1:	tst	logini			; need the header?
 20$:	wrtall	#$pos1			; position the cursor
 	mov	#pcnt.r	,r1		; /43/ received packet count
 	call	numout			; dump it
-	mov	#pcnt.s+<4*^?^/'N&137/-100?>,r1 ; /43/ get the sent NAK count
+	mov	#pcnt.s+(4*^?^/'N&137/-100?),r1 ; /43/ get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; /43/ really need to update NAKs?
 	beq	30$			; no
 	mov	2(r1)	,pcnt.n+2	; /43/ stuff low order 16 bits
 	wrtall	#npos			; /62/ put cursor where NAK count goes
 	call	numout			; print the NAK count
 30$:	; /BBS/ dotmo moved here
-	mov	#pcnt.r+<4*^?^/'T&137/-100?>,r1 ; /44/ get time-out count
+	mov	#pcnt.r+(4*^?^/'T&137/-100?),r1 ; /44/ get time-out count
 	cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
 	beq	40$			; /44/ no, just exit
 	mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter
@@ -785,7 +787,7 @@ sendsp:	.word	sentty	,sentty	,senvt1	,senvt1	,senvt1
 sentty:	mov	#pcnt.s	,r1		; /43/ 32. bits now
 	call	numout			; write the number to the terminal
 	wrtall	#$delim			; a "/" delimiter
-	mov	#pcnt.r+<4*^?^/'N&137/-100?>,r1 ; get the sent NAK count
+	mov	#pcnt.r+(4*^?^/'N&137/-100?),r1 ; get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; any change in count?
 	beq	10$			; no
 	mov	2(r1)	,pcnt.n+2	; ya, update it
@@ -807,14 +809,14 @@ senvt1:	tst	logini			; need the header?
 20$:	wrtall	#$pos0			; /BBS/ position the cursor
 	mov	#pcnt.s	,r1		; /43/ 32. bits now
 	call	numout			; write number on terminal
-	mov	#pcnt.r+<4*^?^/'N&137/-100?>,r1 ; get the sent NAK count
+	mov	#pcnt.r+(4*^?^/'N&137/-100?),r1 ; get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; any change in count?
 	beq	30$			; no
 	mov	2(r1)	,pcnt.n+2	; ya, update it
 	wrtall	#npox			; /62/ for shortened send logging
 	call	numout			; write number on terminal
 30$:	; /BBS/ dotmo moved here
-	mov	#pcnt.r+<4*^?^/'T&137/-100?>,r1 ; /44/ get time-out count
+	mov	#pcnt.r+(4*^?^/'T&137/-100?),r1 ; /44/ get time-out count
 	cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
 	beq	40$			; /44/ no, just exit
 	mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter

@@ -211,7 +211,7 @@ lookup::save	^/r1,r2,r3/
 
 ;	input:	(r5)	= address of string to process
 
-fixwil::save	^/r2/
+fixwild::save	^/r2/
 	mov	@r5	,r2		; get the string address
 10$:	tstb	@r2			; done with the file name yet?
 	beq	30$			; yes, exit
@@ -321,7 +321,7 @@ dirnex:	mov	dirbfr	,r2		; pointer to buffer
 10$:	R0toR2	#unpspc			; /62/ three spaces..
 20$:	calls	ascdat	,^/r3,lokdate/	; /62/ convert date to asciz
 	R0toR2	r3			; /62/ append the date please
-	tst	tsxsav			; /BBS/ if not TSX
+	tst	tsxsave			; /BBS/ if not TSX
 	beq	40$			; /63/ skip the file time
 	R0toR2	#prospc			; /62/ two blanks
 	calls	filtim	,^/r3,loktime/	; /BBS/ make it displayable
@@ -449,10 +449,10 @@ opndev:	calls	fparse	,^/(r5),#sluggy/	; /62/ check for valid device
 90$:
 ; /62/	.pval	#rtwork	,#blkey	,#0	; /BBS/ force USR to re-read the dir
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#28.*^o400+2,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+2,@R0	; /62/ even though V4 can't run it
 	MOV	#blkey	,2.(R0)		; /62/
 	CLR	4.(R0)			; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 100$:	.lookup #rtwork	,#lun.sr,#csidev ; /62/ open the DEVICE for input
 	bcs	120$			; can not find it
 	clr	r0			; no errors

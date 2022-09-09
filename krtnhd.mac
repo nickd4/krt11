@@ -15,41 +15,54 @@
 	NONEIS	=	1		; force p$mul,p$div into KRTSUB.MAC
 
 	.macro	mul	src,reg		; single precision
-	.ntype	$$	,reg		; save number of input register
+; we have no ntype, skip error checking
+;	.ntype	$$	,reg		; save number of input register
 	mov	src	,-(sp)		; pass multiplier to p$mul
 	mov	reg	,-(sp)		; pass multiplicand too
 	call	p$mul			; multiply, returns a 16-bit product
-	.iif eq ^/$$-1/	mov	(sp)+	,r1	; ..if input register was r1
-	.iif eq ^/$$-3/	mov	(sp)+	,r3	; ditto if r3
-	.iif eq ^/$$-5/	mov	(sp)+	,r5	; ditto if r5
-	.iif ne ^?^/$$+1/&1? .error      ^/; bad dst reg for MUL macro/
+;	.iif eq ^/$$-1/	mov	(sp)+	,r1	; ..if input register was r1
+	.iif idn ^/reg/,r1 mov	(sp)+	,r1	; ..if input register was r1
+;	.iif eq ^/$$-3/	mov	(sp)+	,r3	; ditto if r3
+	.iif idn ^/reg/,r3 mov	(sp)+	,r3	; ditto if r3
+;	.iif eq ^/$$-5/	mov	(sp)+	,r5	; ditto if r5
+	.iif idn ^/reg/,r5 mov	(sp)+	,r5	; ditto if r5
+;	.iif ne ^?^/$$+1/&1? .error      ^/; bad dst reg for MUL macro/
+;	.iif eq ^/$$-3/	mov	(sp)+	,r3	; ditto if r3
+;	.iif eq ^/$$-5/	mov	(sp)+	,r5	; ditto if r5
 	.endm	mul
 
 	.macro	div	src,reg		; /BBS/ made this double precision
-	.ntype	$$	,reg		; # of register with dividend hi word
+; we have no ntype, skip error checking
+;	.ntype	$$	,reg		; # of register with dividend hi word
 	mov	src	,-(sp)		; divisor
-	.if eq $$			; hi word is in r0
+;	.if eq $$			; hi word is in r0
+	.if idn ^/reg/,r0		; hi word is in r0
 	mov	r1	,-(sp)		; dividend low word
 	mov	r0	,-(sp)		; dividend high word
 	.endc
-	.if eq $$-2			; hi word is in r2
+;	.if eq $$-2			; hi word is in r2
+	.if idn ^/reg/,r2		; hi word is in r2
 	mov	r3	,-(sp)
 	mov	r2	,-(sp)
 	.endc
-	.if eq $$-4			; hi word is in r4
+;	.if eq $$-4			; hi word is in r4
+	.if idn ^/reg/,r4		; hi word is in r4
 	mov	r5	,-(sp)
 	mov	r4	,-(sp)
 	.endc
 	call	p$div			; divide
-	.if eq $$			; using r0..
+;	.if eq $$			; using r0..
+	.if idn ^/reg/,r0		; using r0..
 	mov	(sp)+	,r1		; remainder
 	mov	(sp)+	,r0		; this only returns a 16-bit quotient
 	.endc
-	.if eq $$-2			; using r2..
+;	.if eq $$-2			; using r2..
+	.if idn ^/reg/,r2		; using r2..
 	mov	(sp)+	,r3
 	mov	(sp)+	,r2
 	.endc
-	.if eq $$-4			; using r4..
+;	.if eq $$-4			; using r4..
+	.if idn ^/reg/,r4		; using r4..
 	mov	(sp)+	,r5
 	mov	(sp)+	,r4
 	.endc
@@ -61,7 +74,19 @@
 	.endm	sob
 
 	.macro	ash	amount,reg	; arithmetic shift
+	.ntype	lab0	,amount
+	poo = lab0
+	pee = ^/lab0/
+	
 	.ntype	$$$0	,amount
+	poo = $$$0
+	pee = ^/$$$0/
+	blah = 27 - $$$0
+	bleh = ^/27 - $$$0/
+	.if ne ^/27 - $$$0/
+	.error       ^/; must be auto pc for ASH macro/
+	.endc
+	
 	.iif ne ^/27-$$$0/ .error       ^/; must be auto pc for ASH macro/
 	$$type	= 1			; assume left shift
 	$$size	= 0			; how many ASLs or ASRs to generate

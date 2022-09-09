@@ -12,7 +12,7 @@
 ; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
 ;
 ;	this module has been extensively modified, please refer to it
-;	added SET TT XON (TSX) emt to t.ttxon, uses tsxsav for lnum
+;	added SET TT XON (TSX) emt to t.ttxon, uses tsxsave for lnum
 ;	add dummy routines for inqdtr, inqcd
 ;	ttyini - suspend TSX window processing, as in connect, packets
 ;	added support for vlflag under TSX+ to ttyini
@@ -73,17 +73,17 @@ t.ttyini::save	^/r1,r2/
 10$:	mov	r0	,r1		; copy for peek, which uses r0
 ; /62/	.peek	#rtwork	,r1		; must do it this way for XM
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#28.*^o400+1.,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+1.,@R0	; /62/ even though V4 can't run it
 	MOV	r1	,2.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 	mov	r0	,r2		; copy for poke, which also uses r0
 	bic	#crlf$	,r2		; no CR/LF, ignore width that is..
 ; /62/	.poke	#rtwork	,r1,r2		; stuff in new term config word
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#28.*^o400+3,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+3,@R0	; /62/ even though V4 can't run it
 	MOV	r1	,2.(R0)		; /62/
 	MOV	r2	,4.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 20$:	.rctrlo				; force update of it in the os
 	br	80$			; skip past TSX init code
 
@@ -104,7 +104,7 @@ t.ttyini::save	^/r1,r2/
 70$:	wrtall	#limits			; set some terminal parameters
 
 80$:	mov	#1000	,r2		; eat anything that's pending please
-90$:	calls	t.binrea,^/#-1/		; force call to t.binread
+90$:	calls	t.binread,^/#-1/		; force call to t.binread
 	dec	r2			; don't loop forever please
 	beq	100$			; exit the loop
 	tst	r0			; did we get anything at all?
@@ -122,8 +122,8 @@ t.ttyini::save	^/r1,r2/
 ;	output:	   r1	= character just read
 ;		   r0	= if ^//, error code
 
-t.xbinre::				; same here, different in KRTXL
-t.binrea::cmp	(r5)	,#-1		; read without any wait?
+t.xbinread::				; same here, different in KRTXL
+t.binread::cmp	(r5)	,#-1		; read without any wait?
 	bne	10$			; no
 	.ttinr				; try to read a single character
 	bcs	40$			; nothing was there, so exit
@@ -156,7 +156,7 @@ t.binrea::cmp	(r5)	,#-1		; read without any wait?
 ;
 ;	output:	  r0	= if ^//, error code
 
-t.binwri::tst	tsxsav			; /63/ running under TSX?
+t.binwrite::tst	tsxsave			; /63/ running under TSX?
 	beq	10$			; /63/ no
 	mov	2(r5)	,wrtlen		; /63/ ya, get the string length
 	beq	40$			; /63/ nothing to do
@@ -169,7 +169,7 @@ t.binwri::tst	tsxsav			; /63/ running under TSX?
 	mov	2(r5)	,r2		; get the string length
 	beq	30$			; /63/ nothing to do
 	mov	@r5	,r1		; get the string address
-20$:	.ttyou	(r1)+			; dump one char
+20$:	.ttyout	(r1)+			; dump one char
 	sob	r2	,20$		; next please
 30$:	unsave	^/r2,r1/			; /63/
 
@@ -201,25 +201,25 @@ t.ttxon::movb	tsxsave	,xonlin		; TSX line number
 20$:	mov	r0	,r1		; save copy as peek eats r0
 ; /62/	.peek	#rtwork	,r1		; must do it this way for XM
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#28.*^o400+1.,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+1.,@R0	; /62/ even though V4 can't run it
 	MOV	r1	,2.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 	mov	r0	,r2		; save copy as poke also eats r0
 	bic	#page$	,r2		; clear page bit
 ; /62/	.poke	#rtwork	,r1,r2		; set tt nopage
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#28.*^o400+3,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+3,@R0	; /62/ even though V4 can't run it
 	MOV	r1	,2.(R0)		; /62/
 	MOV	r2	,4.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 	.rctrlo				; force update
 	bis	#page$	,r2		; restore page bit
 ; /62/	.poke	#rtwork	,r1,r2		; set tt page
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#28.*^o400+3,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+3,@R0	; /62/ even though V4 can't run it
 	MOV	r1	,2.(R0)		; /62/
 	MOV	r2	,4.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 30$:	unsave	^/r2,r1/
 
 40$:	.rctrlo				; force update again
@@ -238,7 +238,7 @@ t.cantyp::call	t.ttxon			; /BBS/ dump a possible XOFF then
 	.sbttl	Handler functions not needed for TT
 
 t.dcdtst::				; /62/
-t.ttspee::clr	r0			; /62/ not available
+t.ttspeed::clr	r0			; /62/ not available
 	return
 
 t.inqcd::
@@ -250,7 +250,7 @@ t.ttyfin::
 t.setspd::mov	#er$spx	,r0		; /BBS/ TT speed not settable here
 	return
 
-t.ttyhan::mov	#er$pls	,r0		; /BBS/ please SET LINE first..
+t.ttyhang::mov	#er$pls	,r0		; /BBS/ please SET LINE first..
 	return
 
 	.end

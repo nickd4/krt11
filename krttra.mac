@@ -74,13 +74,13 @@ c$tran::tst	remote			; /62/ disallow to TT
 	beq	20$			; ya, skip it
 	mov	r1	,-(sp)		; one word buffer
 	mov	sp	,r1		; point to it please
-	calls	binwri	,^/r1,#1/	; simple to put a single char
+	calls	binwrite	,^/r1,#1/	; simple to put a single char
 	tst	(sp)+			; pop the tiny buffer now
 	.twait	#twarea	,#short		; wait one tick
-30$:	calls	xbinrea	,^/#-1/		; now try for the echo please
+30$:	calls	xbinread	,^/#-1/		; now try for the echo please
 	tst	r0			; get anything back?
 	bne	20$			; no, continue sending
-	tst	tsxsav			; running under TSX?
+	tst	tsxsave			; running under TSX?
 	beq	40$			; no
 	cmpb	r1	,m.tsxr		; /62/ ya, don't type
 	beq	30$			; the lead-in char
@@ -95,10 +95,10 @@ c$tran::tst	remote			; /62/ disallow to TT
 60$:	tst	r2			; input file still open?
 	beq	100$			; no
 	.twait	#twarea	,#fifteen	; after EOF, wait 15. ticks
-70$:	calls	xbinrea	,^/#-1/		; now clean up echo at end
+70$:	calls	xbinread	,^/#-1/		; now clean up echo at end
 	tst	r0			; get anything back this time?
 	bne	90$			; no, all done
-	tst	tsxsav			; running under TSX?
+	tst	tsxsave			; running under TSX?
 	beq	80$			; no
 	cmpb	r1	,m.tsxr		; /62/ ya, don't type
 	beq	70$			; the lead-in char

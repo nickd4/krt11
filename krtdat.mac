@@ -19,6 +19,8 @@
 
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
+	.include "krtdef.mac"
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.page
 	.sbttl	Global read/write data
@@ -39,7 +41,7 @@ break::	 .blkw	2		; /BBS/ break duration (for .mrkt)
 cc$max:: .blkw	1		; /BBS/ number of ^Cs needed to abort
 cccnt::	 .blkw	1		; number of ^Cs typed so far
 charin:: .blkw	2		; /43/ total data bytes in
-charou:: .blkw	2		; /43/ total data bytes out
+charout::.blkw	2		; /43/ total data bytes out
 chksiz:: .blkw	1		; current checksum size (length in bytes)
 chktyp:: .blkw	1		; current checksum type
 cl.pri:: .blkw	1		; /BBS/ run TSX handler at this priority
@@ -48,11 +50,11 @@ cmdadr:: .blkw	1		; saved address of command routine
 cmdbuf:: .blkw	1		; /53/ pointer to command line input buffer
 cmdlun:: .blkw	1		; current command file lun
 cmdnum:: .blkw	1		; index into the current command list
-con8bi:: .blkw	1		; if ^// we pass eight bits to console
+con8bit::.blkw	1		; if ^// we pass eight bits to console
 conesc:: .blkw	1		; escape character for CONNECT
 conmsg:: .blkw	1		; /BBS/ flag to hold CONNECT sign-on
 conpar:: .blkb	20		; other Kermit's sinit parameters
-csi.fak::.blkw	1		; /62/ if ^// use fake CSI comma parser
+csi.fake::.blkw	1		; /62/ if ^// use fake CSI comma parser
 ctlflgs::.blkb	^/1.+32.+1.+32./	; /63/ DEL&200 ,NUL..US ,DEL ,^/NUL..US/&200
 datauk:: .blkw	1		; /62/ data unknown loop counter
 defpri:: .blkw	1		; /BBS/ TSX priority when Kermit was started
@@ -64,7 +66,7 @@ dolong:: .blkw	1		; /42/ if ^// do long packets
 dorpt::	 .blkw	1		; if ^// do repeat counts
 ;doslid::.blkw	1		; /42/ if ^// do sliding windows
 dowild:: .blkw	1		; /63/ if 0 wildcarding must be explicit
-dpnumb:: .blkw	1		; /63/ serial number of data packet
+dpnumber::.blkw	1		; /63/ serial number of data packet
 duplex:: .blkw	1		; if 0, full (default), else half
 ebquot:: .blkw	1		; 8-bit prefixing quote char
 edilen:: .blkw	1		; SL current command line length
@@ -73,23 +75,23 @@ errtxt:: .blkb	erbfsiz+2	; /62/ buffer for syserr(errnum,errtxt)
 exieof:: .blkw	1		; /45/ SET EOF [NO]EXIT
 exstal:: .blkw	1		; /41/ take file current line number pointer
 filein:: .blkw	2		; /43/ file data bytes in
-fileou:: .blkw	2		; /43/ file data bytes out
-filpro:: .blkw	1		; if ^// don't overwrite files
-getcro:: .blkw	1		; alternate address for get char routine
+fileout::.blkw	2		; /43/ file data bytes out
+filprot::.blkw	1		; if ^// don't overwrite files
+getcroutine::.blkw 1		; alternate address for get char routine
 handch:: .blkw	1		; handshake char (for IBM systems)
 image::	 .blkw	1		; if ^// in image mode
 incfile::.blkw	1		; /BBS/ set ^// to keep incomplete file
 incpar:: .blkw	1		; /56/ parity was found in rec'd SOH char
 index::	 .blkw	1		; index into directory, for wildcarded lookups
-infoms:: .blkw	1		; /41/ if ^// display information messages
+infomsg:: .blkw	1		; /41/ if ^// display information messages
 initry:: .blkw	1		; /BBS/ number of retries for init packet only
 inopn::	 .blkw	1		; did sensw ever open anything?
-inprog:: .blkw	1		; /BBS/ packets in progress flag
+inprogress::.blkw 1		; /BBS/ packets in progress flag
 inserv:: .blkw	1		; currently we are a server
-jobtyp:: .blkw	1		; /45/ 0 for interactive, ^// for batch
+jobtype::.blkw	1		; /45/ 0 for interactive, ^// for batch
 lastcmd::.blkw	1		; /BBS/ last command's dispatch address
 lastli:: .blkw	ln$cnt+1	; /BBS/ SL previous commands pointers
-linkst:: .blkw	1		; if ^// the link device is active
+linksts::.blkw	1		; if ^// the link device is active
 locase:: .blkw	1		; /BBS/ if ^// pass lower case file name
 logini:: .blkw	1		; if ^// cursor is not on a newline at column 1
 maxtry:: .blkw	1		; maximum number of retries for data packets
@@ -130,11 +132,11 @@ rectim:: .blkw	1		; /62/ SET RECEIVE TIME-OUT
 rem.ack::.blkw	1		; /63/ if ^// ACK rec'd for REMOTE command
 remote:: .blkw	1		; if ^// we are remote
 restof:: .blkw	1		; /BBS/ pointer to rest of args in argbuf
-rptcou:: .blkw	1		; number of repeated chars in a string
-rptini:: .blkw	1		; repeat init, meaning first time through proc
-rptlas:: .blkw	1		; the last char when checking repeats
+rptcount::.blkw	1		; number of repeated chars in a string
+rptinit::.blkw	1		; repeat init, meaning first time through proc
+rptlast::.blkw	1		; the last char when checking repeats
 rptquo:: .blkw	1		; prefix char for repeat quoting
-rptsav:: .blkw	1		; save failed char in repeat encoding
+rptsave::.blkw	1		; save failed char in repeat encoding
 rtvol::	 .blkw	1		; if ^// do dir disk volume id test
 seed::	 .blkw	1		; to generate random errors for debugging
 senlen:: .blkw	1		; /62/ save SET SEND p.spsiz
@@ -145,18 +147,18 @@ sensop:: .blkw	1		; SET SEND START-OF-PACKET
 sentim:: .blkw	1		; /62/ SET SEND TIME-OUT
 senwin:: .blkw	1		; /42/ sliding windows not yet here..
 sertim:: .blkw	1		; time-out waiting for server command
-serwai:: .blkw	1		; SET SERVER TIME-OUT
-set8bi:: .blkw	1		; if ^// set bit seven on char
-setchk:: .blkw	1		; /62/ save SET BLO here
+serwait::.blkw	1		; SET SERVER TIME-OUT
+set8bit::.blkw	1		; if ^// set bit seven on char
+setchkt::.blkw	1		; /62/ save SET BLO here
 setrpt:: .blkw	1		; used to set repeat encoding on/off
 settle:: .blkw	1		; /BBS/ modem settle ticks on reset
 signon:: .blkw	1		; /BBS/ if ^// sign-on text has been displayed
 size::	 .blkw	1		; size of last call to buffer_fill
-skipfil::.blkw	1		; /BBS/ copy of inc-file-disp to file closer
+skipfile::.blkw	1		; /BBS/ copy of inc-file-disp to file closer
 skipfl:: .blkw	1		; should we send a eof$discard packet?
 sl.ked:: .blkw	1		; /BBS/ make ^// for SL's KED mode
 sl.on::	 .blkw	1		; /BBS/ make ^// to turn on SL
-snd8bi:: .blkw	1		; local do 8-bit prefixing flag
+snd8bit::.blkw	1		; local do 8-bit prefixing flag
 spare0:: .blkb	32.		; /63/ temp buffer, for small stuff..
  SP0SIZ	 ==	^/.-spare0/	; /63/ size of above spare0 buffer
 spare1:: .blkb	256.		; /BBS/ temp buffer, max SVID filespec
@@ -165,7 +167,7 @@ sparsz:: .blkw	1		; size of our sinit packet
 state::	 .blkw	1		; current recsw or sensw state
 summary::.blkw	1		; /BBS/ if ^// do dir summary only
 sy.ini:: .blkw	1		; init file is executing flag
-tgetad:: .blkw	1		; get text address for textsrc macro
+tgetaddr::.blkw	1		; get text address for textsrc macro
 times::	 .blkw	10		; /43/ time stamp stats
 tk.err:: .blkw	1		; /BBS/ format init file error message display
 trace::	 .blkw	1		; file and packet logging status word
@@ -178,14 +180,16 @@ undchr:: .blkb	2		; /BBS/ SL undel char buffer
 undlin:: .blkb	ln$max+2	; /BBS/ SL undel word/line buffer
 units::	 .blkb	16.		; /BBS/ store CL unit numbers to try here
 vttype:: .blkw	1		; the terminal type
-warn8d:: .blkw	1		; /BBS/ 8-bit quote warning has been done flag
+warn8done::.blkw 1		; /BBS/ 8-bit quote warning has been done flag
 wasmore::.blkw	1		; /62/ flag for multiple arguments display
 wasnul:: .blkw	1		; /45/ for "?" processing in the command line
 xgottn:: .blkw	1		; server got an "X" packet
 xmode::	 .blkw	1		; if ^// doing text output to TT
 xredial::.blkw	1		; /BBS/ if ^// redial (retry) a failed call
 xresult::.blkb	4		; /BBS/ SET PHONE XMODE
-RWSIZE	 == ^/.-rwdata/		; end of r/w data zero'd by start-up init
+; we need this to be a constant, therefore, define it in krtdef.mac
+;RWSIZE	 == ^/.-rwdata/		; end of r/w defa zero'd by start-up init
+.iif ne .-rwdata-rwsize .error ^/; rwsize has changed, must update krtdef.mac/
 
 	.page
 	.sbttl	Data to be preserved at start-up

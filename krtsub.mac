@@ -315,7 +315,7 @@ L10272:	INC	R0
 	BEQ	L10316
 	JSR	PC	,L10266
 L10316:	MOVB	(SP)+	,R0
-	jmp	writ1ch
+	jmp	writ1char
 
 	.page
 	.sbttl	32-bit integer to ascii from RSX SYSLIB.OLB
@@ -489,7 +489,7 @@ l$otoa::save	^/r0,r1,r2/		; /62/ all new..
 	.page
 	.sbttl	Write integer in (r5) to TT as octal number
 
-l$wroc::save	^/r0/
+l$wroct::save	^/r0/
 	sub	#10	,sp		; use stack for a buffer
 	mov	sp	,r0		; pointer to said buffer
 	calls	l$otoa	,^/r0,(r5)/	; call the conversion subroutine
@@ -588,15 +588,15 @@ scanch::save	^/r2/
 
 	.page
 	.sbttl	Upper case one arg, or all of them  ; /BBS/ added
-	.enabl	lsb
+	;.enabl	lsb
 
 upone::	save	^/r1,r0/
 	mov	#space	,r1		; stop at next space
-	br	10$			; share common code
+	br	$10$			; share common code
 
 upcase::save	^/r1,r0/
 	clr	r1			; stop at null, do the whole string
-10$:	cmpb	(r0)	,r1		; hit the delimiter yet?
+$10$:	cmpb	(r0)	,r1		; hit the delimiter yet?
 	blos	30$			; yes, exit
 	cmpb	(r0)	,#'a!40		; a small letter?
 	blo	20$			; no
@@ -604,11 +604,11 @@ upcase::save	^/r1,r0/
 	bhi	20$			; no
 	bicb	#40	,(r0)		; yes, make it upper case
 20$:	inc	r0			; bump pointer to next char
-	br	10$			; and go check it
+	br	$10$			; and go check it
 30$:	unsave	^/r0,r1/
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Integer to decimal ascii conversion  ; /BBS/ added

@@ -111,8 +111,8 @@
 ;	ASCDAT	(%loc buffer ,%val date_value)
 ;	ASCTIM	(%loc buffer ,%loc time_value)	; /62/
 ;	ASSDEV	(%loc device_name)
-;	BINREA	(%val time_out)
-;	BINWRI	(%loc buffer ,%val byte_count)
+;	BINREAD	(%val time_out)
+;	BINWRITE(%loc buffer ,%val byte_count)
 ;	CANTYP	()
 ;	CHKABO	()
 ;	CLOSTT	()
@@ -128,11 +128,11 @@
 ;	PRINTM	(%val #_args ,%loc arg_1 ,%loc arg_2 ,... ,%loc arg_n)
 ;	SETCC	()
 ;	SETSPD	(%val speed)
-;	SUSPEN	(%val seconds ,%val ticks)
+;	SUSPEND	(%val seconds ,%val ticks)
 ;	SYSERR	(%val error_number ,%loc error_text_buffer)
 ;	TTSPEE	()
 ;	TTYFIN	()
-;	TTYHAN	()
+;	TTYHANG	()
 ;	TTYRST	(%loc terminal_name)
 ;	XINIT	()
 
@@ -140,7 +140,7 @@
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 ; /62/	.FPROT,.SFDAT bypassed for V4, also expanded to allow assy under same
 
@@ -173,7 +173,7 @@ rtque::	.blkw	10.*nrtque		; buffers for extra queue elements
 ;	by xinit after the initial .settop and swap with the USR
 
 	.psect	rtioda	,rw,d,gbl,rel,con
-;  channel #:	lun.kb	,lun.in	,lun.out,lun.log,lun.take
+;  channel #:	lun.kb	,lun.in	,lun.ou	,lun.log,lun.take
 blknum::.word	0	,0	,0	,0	,0	; current block number
 buflst::.word	ttbuf	,0	,0	,0	,0	; data I/O buffer addr
 bufsiz::.word	ttbsiz	,maxsiz	,maxsiz	,maxsiz	,maxsiz	; size of buffer
@@ -191,7 +191,7 @@ status::.word	0			; this is Kermit-11's error status reg
 totp.s::.word	0			; send packet stats buffer address
 totp.r::.word	0			; and same for rec packet stats
 ttbuf::	.blkb	ttbsiz+2		; TT out buffer for writing via lun.kb
-xklgbu::.word	0			; /51/ pointer to handler write buffer
+xklgbuf::.word	0			; /51/ pointer to handler write buffer
 
 ; device and file data
 asname::.blkb	ln$max			; /62/ for GET or SEND file asfile
@@ -228,19 +228,19 @@ srcnam::.blkb	ln$max			; /62/ in file name as typed by user..
 ; operating system data
 jobsts::.word	0 ,0 ,0 ,0 ,0 ,0 ,0 ,0	; /51/ from .gtjb
 montyp::.word	0			; /51/ ^/0 -/ SJ,  0 -> FB, >0 -> XM
-rt11up::.word	0			; /62/ RT-11 monitor release level
-rt11ve::.word	0			; /62/ and monitor version number
-tsxsav::.word	0			; /BBS/ if TSX, this contains line #
+rt11upd::.word	0			; /62/ RT-11 monitor release level
+rt11ver::.word	0			; /62/ and monitor version number
+tsxsave::.word	0			; /BBS/ if TSX, this contains line #
 tsxver::.word	0			; /BBS/ and this the version number
 vbgexe::.word	0			; /62/ if ^// running under VBGEXE
 
 ; memory allocation data
 fetpt::	.word	0			; /51/ pointer for the next .fetch
-fetptm::.word	0			; /51/ max address for fetching
+fetptmax::.word	0			; /51/ max address for fetching
 freept::.word	0			; /51/ for the next general allocation
-hilimi::.word	50			; /51/ it's 50 for FB, $limit+2 for XM
+hilimit::.word	50			; /51/ it's 50 for FB, $limit+2 for XM
 maxtop::.word	0			; /51/ size after .settop
-xmfetp::.word	0			; /51/ base of area for XM fetching
+xmfetpt::.word	0			; /51/ base of area for XM fetching
 
 ; TSX terminal options
 m.tsxs::.byte	35 ,'Y&137 ,0		; don't echo LF after CR is typed
@@ -248,7 +248,7 @@ m.tsxr::.byte	35 ,'Z&137 ,0		; do echo LF after CR
 limits::.byte	35 ,'D&137 ,3		; /BBS/ kill ^C special handling
 	.byte	35 ,'D&137 ,12		; LF
 	.byte	35 ,'D&137 ,15		; RET
-	.byte	35 ,'D&137 ,17		; ^O
+	.byte	35 ,'D&137 ,17		; 0O
 	.byte	35 ,'D&137 ,22		; ^R
 	.byte	35 ,'D&137 ,24		; ^T
 	.byte	35 ,'D&137 ,25		; ^U
@@ -264,7 +264,7 @@ vlflag::.byte	0			; /BBS/ ^W local/remote flag..
 	.sbttl	Error mapping, codes are defined in KRTERR.MAC
 
 	.psect	$pdata
-alloer::.word	er$sys	,er$120	,er$121	,er$122	,er$120	,er$123
+alloerr::.word	er$sys	,er$120	,er$121	,er$122	,er$120	,er$123
 atterr::.word	er$sys	,er$124	,er$121	,er$125	,er$126	,er$127	,er$120
 cloerr:	.word	er$sy1	,er$sy1	,er$sys	,er$prv
 csierr::.word	er$fnm	,er$dev	,er$sy2
@@ -515,7 +515,7 @@ iswild::save	^/r1/
 
 	.page
 	.sbttl	Open a file		; MTB$OP  20-Nov-86 14:56:59  BDN
-	.enabl	lsb
+	;;.enabl	lsb
 
 ;	C R E A T E	(write to a file)
 ;	O P E N		(read from a file)
@@ -526,10 +526,10 @@ iswild::save	^/r1/
 ;	output:	   r0	= if ^//, error code
 
 create::mov	#1	,r0		; say we want to create
-	br	10$			; and off to common code
+	br	$10$			; and off to common code
 
 open::	clr	r0			; force .lookup for this ept
-10$:	save	^/r1,r2,r3,r4,r5/	; /62/ condensed mtb$op into this..
+$10$:	save	^/r1,r2,r3,r4,r5/	; /62/ condensed mtb$op into this..
 	mov	r0	,r2		; r2 saved, make it enter/lookup flag
 	mov	(r5)	,r1		; filespec address, .asciz
 	mov	2(r5)	,r4		; /62/ recover the lun to use
@@ -624,7 +624,7 @@ open::	clr	r0			; force .lookup for this ept
 140$:	unsave	^/r5,r4,r3,r2,r1/	; /62/
 	return
 
-	.dsabl	lsb
+	;;.dsabl	lsb
 
 	.page
 	.sbttl	Clear attributes
@@ -740,11 +740,11 @@ close::	save	^/r4,r2/			; use r4, for calling clr.at
 	beq	50$			; no date was passed
 ; /62/	.sfdat	#rtwork	,#lun.at,#r50out,date.a(r4) ; set the date
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#lun.at+^/34.*^o400/,@R0	; /62/ even though V4 can't run it
+	MOV	#lun.at+^/34.*0o400/,@R0	; /62/ even though V4 can't run it
 	MOV	#r50out	,2.(R0)		; /62/
 	MOV	date.a(r4),4.(R0)	; /62/
-	EMT	^o375			; /62/
-	tst	tsxsav			; running under TSX?
+	EMT	0o375			; /62/
+	tst	tsxsave			; running under TSX?
 	beq	50$			; no
 	mov	time.a(r4),tim.sf	; load desired time
 	mov	#sftim	,r0		; load set file time emt args
@@ -753,10 +753,10 @@ close::	save	^/r4,r2/			; use r4, for calling clr.at
 	beq	60$			; nope..
 ; /62/	.fprot	#rtwork	,#lun.at,#r50out,#1 ; ya, set the protection
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#lun.at+^/35.*^o400/,@R0	; /62/ even though V4 can't run it
+	MOV	#lun.at+^/35.*0o400/,@R0	; /62/ even though V4 can't run it
 	MOV	#r50out	,2.(R0)		; /62/
 	MOVB	#1	,4.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 60$:	clr	r0			; no errors
 
 70$:	mov	@r5	,r4		; restore pointer
@@ -837,7 +837,7 @@ getcr0::tst	getcroutine		; /38/ is there a routine address set?
 	beq	fgetcr0			; /63/ no, default to file reading
 	jmp	@getcroutine		; /63/ goto currently defined routine
 
-tgetcr::tst	tgetaddr		; /38/ have we ever been initted?
+tgetcr0::tst	tgetaddr		; /38/ have we ever been initted?
 	beq	10$			; /38/ no, return er$eof
 	clr	r1			; /63/   avoid sign extension
 	bisb	@tgetaddr,r1		; /63/ yes, get next character please
@@ -1066,7 +1066,7 @@ putrec::save	^/r1,r2,r3/
 	.page
 	.sbttl	Suspend the mainline program	; /62/ cleaned up..
 
-suspen::save	^/r2,r1/
+suspend::save	^/r2,r1/
 	clr	r0			; start with no error in case no wait
 	mov	@r5	,r1		; sleep time in seconds
 	beq	10$			; nothing, must be fractional
@@ -1096,7 +1096,7 @@ kp.clr::wrtall	#kp.res			; dump reset string to terminal
 	.page
 	.sbttl	Logout
 
-logout::tst	tsxsav			; /45/ does this make sense?
+logout::tst	tsxsave			; /45/ does this make sense?
 	beq	exit			; /BBS/ not really, so just exit
 	mov	#510	,r0		; /45/ address of chain command
 	mov	#4	,(r0)+		; /45/ number of bytes (inc. null)

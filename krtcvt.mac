@@ -75,7 +75,7 @@ okchr:	.asciz	"0123456789.:ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; /BBS/ allow device
 
 	.page
 	.sbttl	BINARY-TYPES default list
-	.dsabl	lc			; binl data MUST be UPPER case
+	;.dsabl	lc			; binl data MUST be UPPER case
 
 ; /BBS/ space-pad to four bytes if file type is less than four bytes..
 
@@ -101,7 +101,7 @@ binl:	.ascii	".BAC"			; compiled BASIC files
 	.ascii	".TSX"			; /BBS/ TSX+ system files
 	.byte	0			; /BBS/ end of it all
 	.even
-	.enabl	lc			; /BBS/ restore
+	;.enabl	lc			; /BBS/ restore
 
 	.page
 	.sbttl	Generate character class table for file name state parsing

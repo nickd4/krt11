@@ -25,7 +25,7 @@
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 
 	.mcall	.CSISPC	,.DELETE,.GTIM	,.RENAME
@@ -309,7 +309,7 @@ copy::	save	^/r2,r3,r4/
 	calls	open	,^/#srcnam,#lun.in,#binary/ ; get the input file
 	tst	r0			; did it work?
 	bne	done			; /63/ no
-	mov	#lun.out,r0		; /62/ output file channel
+	mov	#lun.ou	,r0		; /62/ output file channel
 	asl	r0			; /62/ word indexing
 	mov	lokdate	,date.a(r0)	; /62/ save create date
 	mov	loktime	,time.a(r0)	; /62/ and time
@@ -320,7 +320,7 @@ copy::	save	^/r2,r3,r4/
 10$:	mov	#lun.in	,r1		; input file channel
 	asl	r1			; word indexing
 	mov	sizof(r1),at$len	; pass input file size to file opener
-	calls	create	,^/#filnam,#lun.out,#binary/ ; create destination file
+	calls	create	,^/#filnam,#lun.ou,#binary/ ; create destination file
 	tst	r0			; did it work?
 	bne	purge			; no
 

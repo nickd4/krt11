@@ -54,7 +54,7 @@
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.PURGE			; /62/ to hose dir search ch on err
 
@@ -77,7 +77,7 @@ sen.02:	.asciz	"Warning: Parity found in SOH byte"
 sen.03:	.asciz	"Remote ACK: "		; /63/
 sen.04:	.asciz	"ABORT$CURRENT-FILE"
 sen.05:	.asciz	"ABORT$ALL-FILES"
-sen.06:	.byte	eof$dis	,0
+sen.06:	.byte	eof$discard,0
 sen.07:	.asciz	"Sending file "
 sen.08:	.asciz	" as "			; /63/
 sen.09:	.asciz	" file "
@@ -89,7 +89,7 @@ recpkt:	.blkb	maxpak+2		; /62/ added passed length to rpack
 	.page
 	.psect	$code
 	.sbttl	State controller for send file processing
-	.enabl	lsb
+	;.enabl	lsb
 
 sensw::	movb	@r5	,state		; state at which caller wants to begin
 	clr	cccnt			; /62/ no ^Cs typed yet
@@ -149,34 +149,34 @@ sensw::	movb	@r5	,state		; state at which caller wants to begin
 	.word	seof	,ccabort
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	State routines for SENSW
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
 send.$:	call	bad$pak			; /62/ report ignoring bad packet type
 	movb	state	,r1		; /62/ stay in same state
 	clc				; keep sensw running
 	return
 
-ccabort:spack	#msg$err,paknum		; /36/ break up a deadlock perhaps
+ccabort:spack	#msg$error,paknum	; /36/ break up a deadlock perhaps
 send$$:	mov	sp	,r0		; flag there was an error
 	movb	#sta.abo,r1		; return(abort)
-	br	10$
+	br	a10$
 
 send.c:	clr	r0			; complete
-10$:	sec				; exit sensw
+a10$:	sec				; exit sensw
 	return
 
-	.dsabl	lsb			; /62/
+	;.dsabl	lsb			; /62/
 
 	.page
 	.sbttl	Received bad ACK/NAK and error handling
-	.enabl	lsb			; /62/ all new..
+	;.enabl	lsb			; /62/ all new..
 
 sndx$$:	movb	state	,r1		; time-out, stay in current state
-	br	10$			; kill re-read loop and retry packet
+	br	b10$			; kill re-read loop and retry packet
 sndx.$:	cmp	numtry	,maxtry		; bad data, been here too often?
 	blo	bad$pak			; compare as if already bumped..
 s$retry:call	m$retry			; too many retries error
@@ -185,15 +185,15 @@ sndx.e:	calls	prerrp	,^/#recpkt/	; print out received error packet
 	br	sabort
 s$sync:	call	m$sync			; can't resync packets error
 sabort:	movb	#sta.abo,r1		; exit please
-10$:	clr	datauk			; stop read_only loop
+b10$:	clr	datauk			; stop read_only loop
 	return
 
 bad$pak:mov	#1	,datauk		; listen again, no matter what
 	mov	#badpak	,r3		; point to appropriate text
-	br	20$			; common code..
+	br	b20$			; common code..
 bad$ack:mov	#-1	,datauk		; listen again, but just once
 	mov	#badack	,r3		; point to appropriate text
-20$:	inc	numtry			; this is another retry
+b20$:	inc	numtry			; this is another retry
 	mov	#pcnt.s	,r1		; packet number
 	mov	#spare1	,r0		; where to write ascii output
 	clr	r2			; kill leading zero and spaces
@@ -202,7 +202,7 @@ bad$ack:mov	#-1	,datauk		; listen again, but just once
 	calls	printm	,^/#4,#badpre,r3,#badtag,#spare1/ ; say what's up
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Send debugging and logging	; /62/ major revision..
@@ -235,7 +235,7 @@ sendeb:	mov	trace	,r0		; copy of debug status word
 
 	.page
 	.sbttl	Send attribute data for the current file
-	.enabl	lsb
+	;.enabl	lsb
 
 ; /BBS/	Modified to (w/KRTATR.MAC) send all attributes in a single packet
 ; /E64/ Change this back to send multiple attributes packets if
@@ -272,53 +272,53 @@ sattr:	clr	datauk			; /62/ init re-read only flag
 
 	.save
 	.psect	$pdata
-50$:	.byte	msg$err	,msg$nak,msg$ack,timout	,badchk
+50$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
 60$:	.word	sndx.$					; /62/
 	.word	sndx.e	,satr.n	,satr.y	,sndx$$	,sndx.$	; /62/ badchk = noise
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to SATTR
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
 satr$$:	jmp	sndx$$			; /62/ common code
 
 satr.n:	cmp	r3	,paknum		; /62/ is NAK for this packet?
 	beq	satr$$			; /62/ ya, resend the data
 	dec	r3			; NAK for next packet
-	bge	10$			; is ACK for current packet
+	bge	c10$			; is ACK for current packet
 	mov	#63.	,r3		; if --paknum<0, 63:paknum
-10$:	cmp	r3	,paknum		; well?
-	beq	40$			; /62/ it's an implicit ACK
-	br	20$			; /62/ out of sync, try to fix things
+c10$:	cmp	r3	,paknum		; well?
+	beq	c40$			; /62/ it's an implicit ACK
+	br	c20$			; /62/ out of sync, try to fix things
 
 satr.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
-	beq	40$			; it is
-20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
-	blos	30$			; /62/ not yet
+	beq	c40$			; it is
+c20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
+	blos	c30$			; /62/ not yet
 	jmp	s$sync			; /62/ ya, say so, send error packet
 
-30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
+c30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
 	blt	satr$$			; /62/ ya, re-send packet
 	jmp	bad$ack			; /62/ listen again, but just once
 
-40$:	clr	datauk			; /62/ stop read_only loop
+c40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; retrycount := 0
 	incm64	paknum			; paknum := (paknum+1) mod 64
-50$:	calls	buffil	,^/#0,#packet/	; /63/ get the first buffer of data
+c50$:	calls	buffil	,^/#0,#packet/	; /63/ get the first buffer of data
 	mov	r1	,size		; /BBS/ and save it
 	movb	#sta.dat,r1		; /BBS/ switch to data state
 	return
 
-	.dsabl	lsb			; /62/
+	;.dsabl	lsb			; /62/
 
 	.page
 	.sbttl	Send a break packet
-	.enabl	lsb
+	;.enabl	lsb
 
 sbreak:	clr	datauk			; /62/ init re-read only flag
 	inc	numtry			; abort if retry count is too high
@@ -326,7 +326,7 @@ sbreak:	clr	datauk			; /62/ init re-read only flag
 	blos	10$			; ok
 	jmp	s$retry			; /62/ handle the error please
 
-10$:	spack	#msg$bre,paknum,#0,#packet ; send a break packet
+10$:	spack	#msg$break,paknum,#0,#packet ; send a break packet
 20$:	rpack	r2 ,r3	,#recpkt,#maxpak ; /62/ read the response
 	scan	r1	,#30$		; and dispatch based on it
 	asl	r0			; word indexing
@@ -337,51 +337,51 @@ sbreak:	clr	datauk			; /62/ init re-read only flag
 
 	.save
 	.psect	$pdata
-30$:	.byte	msg$err	,msg$nak,msg$ack,timout	,badchk
+30$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
 40$:	.word	sndx.$					; /62/
 	.word	sndx.e	,sbrk.n	,sbrk.y	,sndx$$	,sndx.$	; /62/ badchk = noise
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to SBREAK
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
-sbrk$$:	jmp	sndx$$			; /62/ common code
+sbrk$$:	jmp	sndx$$			; /d62/ common code
 
 sbrk.n:	cmp	r3	,paknum		; /62/ is NAK for this packet?
-	beq	sbrk$$			; /62/ ya, resend the data
+	beq	sbrk$$			; /d62/ ya, resend the data
 	dec	r3			; NAK for next packet
-	bge	10$			; is ACK for current packet
+	bge	d10$			; is ACK for current packet
 	mov	#63.	,r3		; if --paknum<0, 63:paknum
-10$:	cmp	r3	,paknum		; well?
-	beq	40$			; /62/ it's an implicit ACK
-	br	20$			; /62/ out of sync, try to fix things
+d10$:	cmp	r3	,paknum		; well?
+	beq	d40$			; /62/ it's an implicit ACK
+	br	d20$			; /62/ out of sync, try to fix things
 
 sbrk.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
-	beq	40$			; it is
-20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
-	blos	30$			; /62/ not yet
-	jmp	s$sync			; /62/ ya, say so, send error packet
+	beq	d40$			; it is
+d20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
+	blos	d30$			; /62/ not yet
+	jmp	s$sync			; /d62/ ya, say so, send error packet
 
-30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
-	blt	sbrk$$			; /62/ ya, re-send packet
-	jmp	bad$ack			; /62/ listen again, but just once
+d30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
+	blt	sbrk$$			; /d62/ ya, re-send packet
+	jmp	bad$ack			; /d62/ listen again, but just once
 
-40$:	clr	datauk			; /62/ stop read_only loop
+d40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; ACK for this packet
 	incm64	paknum			; paknum := (paknum+1) mod 64
 	movb	#sta.com,r1		; return(complete)
 	return
 
-	.dsabl	lsb			; /62/
+	;.dsabl	lsb			; /62/
 
 	.page
 	.sbttl	Send file init
-	.enabl	lsb
+	;.enabl	lsb
 
 sinit:	movb	#msg$snd,-(sp)		; normal sinit operation
 	call	.sinit			; for sending files
@@ -415,57 +415,57 @@ sinit:	movb	#msg$snd,-(sp)		; normal sinit operation
 
 	.save
 	.psect	$pdata
-40$:	.byte	msg$err	,msg$nak,msg$ack,timout	,badchk
+40$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
 50$:	.word	sndx.$					; /62/
 	.word	sini.e	,sini.n	,sini.y	,sndx$$	,sndx.$	; /62/ badchk = noise
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to SINIT
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
 sini.$:	jmp	sndx.$			; /62/ common
 sini$$:	jmp	sndx$$			; /62/ code
 
 sini.e:	calls	prerrp	,^/#recpkt/	; /62/ print error message
 	cmpb	r5	,#msg$ser	; if called from sinfo..
-	beq	40$			; /62/ ..ignore errors
+	beq	e40$			; /62/ ..ignore errors
 	jmp	sabort			; /62/ return(abort)
 
 sini.n:	cmp	r3	,paknum		; /62/ is NAK for this packet?
 	bne	sini.$			; /62/ no, try just listening again
 	cmpb	r5	,#msg$ser	; server NAK for "I" (sinfo) packet?
-	bne	10$			; /62/ no
+	bne	e10$			; /62/ no
 	cmp	numtry	,#2		; gotten at least one NAK for "I" ?
-	bhis	40$			; /62/ ya, move to file state
-10$:	br	sini$$			; /62/ no, loop another time
+	bhis	e40$			; /62/ ya, move to file state
+e10$:	br	sini$$			; /62/ no, loop another time
 
 sini.y:	cmp	r3	,paknum		; got an ACK for sinit
-	beq	30$			; and the ACK is for correct packet
+	beq	e30$			; and the ACK is for correct packet
 	cmp	numtry	,initry		; /62/ it isn't, been here too often?
-	blos	20$			; /62/ not yet
+	blos	e20$			; /62/ not yet
 	jmp	s$sync			; /62/ ya, say so, send error packet
 
-20$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
+e20$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
 	blt	sini$$			; /62/ ya, re-send packet
 	jmp	bad$ack			; /62/ listen again, but just once
 
-30$:	calls	rpar	,^/#recpkt,r2/	; load the other's parameters now
-40$:	clr	datauk			; /62/ stop read_only loop
+e30$:	calls	rpar	,^/#recpkt,r2/	; load the other's parameters now
+e40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; number_of_tries := 0
 	incm64	paknum			; pack_number := pack_number+1 mod 64
 	movb	#sta.fil,r1		; return(file)
 	jmp	inirepeat		; /62/ initialize repeat processing
 
-	.dsabl	lsb			; /62/
+	;.dsabl	lsb			; /62/
 
 	.page
 	.sbttl	Send a file
-	.enabl	lsb
+	;.enabl	lsb
 
 sfile:	clr	datauk			; /62/ init re-read only flag
 	inc	numtry			; /62/ moved this test here..
@@ -527,11 +527,11 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 	mov	fillst(r1),r1		; /63/ point to its description
 	calls	printm	,^/#7,#sen.07,#filnam,#errtxt,#sen.08,r1,#sen.09,r4/
 	strlen	r4			; and get the file name length
-	spack	#msg$fil,paknum,r0,r4	; set the file name packet over
+	spack	#msg$file,paknum,r0,r4	; set the file name packet over
 	clrb	asname			; /36/ ensure one shot only
 	br	80$
 
-70$:	spack	#msg$tex,paknum		; server extended reply here, send "X"
+70$:	spack	#msg$text,paknum	; server extended reply here, send "X"
 80$:	rpack	r2 ,r3	,#recpkt,#maxpak ; /62/ get response to the file name
 	scan	r1	,#100$		; and dispatch on the response
 	asl	r0			; word indexing
@@ -543,60 +543,60 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 
 	.save
 	.psect	$pdata
-100$:	.byte	msg$err	,msg$nak,msg$ack,timout	,badchk
+100$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
 110$:	.word	sndx.$					; /62/
 	.word	sndx.e	,sfil.n	,sfil.y	,sndx$$	,sndx.$	; /62/ badchk = noise
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to SFILE
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
 sfil$$:	jmp	sndx$$			; /62/ common code
 
 sfil.n:	cmp	r3	,paknum		; /62/ is NAK for this packet?
 	beq	sfil$$			; /62/ ya, resend the data
 	dec	r3			; NAK for next packet
-	bge	10$			; is ACK for current packet
+	bge	f10$			; is ACK for current packet
 	mov	#63.	,r3		; if --paknum<0, 63:paknum
-10$:	cmp	r3	,paknum		; well?
-	beq	40$			; /62/ it's an implicit ACK
-	br	20$			; /62/ out of sync, try to fix things
+f10$:	cmp	r3	,paknum		; well?
+	beq	f40$			; /62/ it's an implicit ACK
+	br	f20$			; /62/ out of sync, try to fix things
 
 sfil.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
-	beq	40$			; it is
-20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
-	blos	30$			; /62/ not yet
+	beq	f40$			; it is
+f20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
+	blos	f30$			; /62/ not yet
 	jmp	s$sync			; /62/ ya, say so, send error packet
 
-30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
+f30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
 	blt	sfil$$			; /62/ ya, re-send packet
 	jmp	bad$ack			; /62/ listen again, but just once
 
-40$:	tstb	recpkt			; /63/ anything in received packet?
-	beq	50$			; /63/ no
+f40$:	tstb	recpkt			; /63/ anything in received packet?
+	beq	f50$			; /63/ no
 	calls	bufunp	,^/#recpkt,#spare1/ ; /63/ undo repeat encoding first
 	calls	printm	,^/#2,#sen.03,#spare1/ ; /63/ ya, print the packet
-50$:	clr	datauk			; /62/ stop read_only loop
+f50$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; number_of_tries := 0
 	incm64	paknum			; packnumber := packnumber+1 mod 64
 	movb	#sta.atr,r1		; assume return(attribute)
 	tst	xmode			; /38/ is this an extended reply?
-	beq	60$			; /38/ no, attributes are next
+	beq	f60$			; /38/ no, attributes are next
 	calls	buffil	,^/#0,#packet/	; /63/ ya, get first buffer of data
 	mov	r1	,size		; /38/ and save it
 	movb	#sta.dat,r1		; /38/ skip attributes, return(data)
-60$:	return
+f60$:	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Send file data
-	.enabl	lsb
+	;.enabl	lsb
 
 sdata:	clr	datauk			; /62/ init re-read only flag
 	inc	numtry			; abort if we've been trying too much
@@ -604,7 +604,7 @@ sdata:	clr	datauk			; /62/ init re-read only flag
 	blos	10$			; no, keep it up
 	jmp	s$retry			; /62/ flag the error type please
 
-10$:	spack	#msg$dat,paknum,size,#packet ; send the next record please
+10$:	spack	#msg$data,paknum,size,#packet ; send the next record please
 20$:	rpack	r2 ,r3	,#recpkt,#maxpak ; /62/ get the reply
 	scan	r1	,#30$		; look for type in list of responses
 	asl	r0			; word indexing
@@ -615,14 +615,14 @@ sdata:	clr	datauk			; /62/ init re-read only flag
 
 	.save
 	.psect	$pdata
-30$:	.byte	msg$err	,msg$nak,msg$ack,timout	,badchk
+30$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
 40$:	.word	sndx.$					; /62/
 	.word	sndx.e	,sdat.n	,sdat.y	,sdat$$	,sndx.$	; /62/ badchk = noise
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to SDATA
@@ -659,82 +659,82 @@ sdat$$:	tst	dpnumber		; /43/ first data packet?
 10$:	jmp	sndx$$			; /62/ keep current state, try again
 
 	.page
-	.enabl	lsb
+	;.enabl	lsb
 
 sdat.n:	cmp	r3	,paknum		; /62/ is NAK for this packet?
 	beq	sdat$$			; /62/ ya, resend the data
 	dec	r3			; NAK for next packet
-	bge	10$			; is ACK for current packet
+	bge	g10$			; is ACK for current packet
 	mov	#63.	,r3		; if --paknum<0, 63:paknum
-10$:	cmp	r3	,paknum		; well?
-	beq	40$			; /62/ it's an implicit ACK
-	br	20$			; /62/ out of sync, try to fix things
+g10$:	cmp	r3	,paknum		; well?
+	beq	g40$			; /62/ it's an implicit ACK
+	br	g20$			; /62/ out of sync, try to fix things
 
 sdat.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
-	beq	40$			; it is
-20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
-	blos	30$			; /62/ not yet
+	beq	g40$			; it is
+g20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
+	blos	g30$			; /62/ not yet
 	jmp	s$sync			; /62/ ya, say so, send error packet
 
-30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
+g30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
 	blt	sdat$$			; /62/ ya, re-send packet
 	jmp	bad$ack			; /62/ listen again, but just once
 
-40$:	clr	datauk			; /62/ stop read_only loop
+g40$:	clr	datauk			; /62/ stop read_only loop
 	add	#1	,dpnumber	; /43/ datapacket_number++
-	bcc	50$			; /43/
+	bcc	g50$			; /43/
 	mov	#1	,dpnumber	; /43/ avoid overflow
-50$:	clr	numtry			; retry_counter = 0
+g50$:	clr	numtry			; retry_counter = 0
 	incm64	paknum			; paknum = paknum++ mod 64
 	tst	remote			; is this a remote system?
-	bne	90$			; yes, forget about checking
+	bne	g90$			; yes, forget about checking
 	tst	cccnt			; ^C pending?
-	bne	80$			; yes, always send an error packet
+	bne	g80$			; yes, always send an error packet
 	call	chkabo			; now check for ^A, ^E, ^X or ^Z
 	cmpb	r0	,#'A&37		; /56/ ^A stats?
-	bne	60$			; /56/ no
+	bne	g60$			; /56/ no
 	call	cs$out			; /56/ yes, dump char counts
-	br	90$			; /56/ and finish up
-60$:	cmpb	r0	,#abt$err&37	; /56/ if ^E
-	beq	80$			; /56/ then send error packet
+	br	g90$			; /56/ and finish up
+g60$:	cmpb	r0	,#abt$error&37	; /56/ if ^E
+	beq	g80$			; /56/ then send error packet
 	cmpb	r0	,#abt$cur&37	; if ^X
-	beq	70$			; then abort current file
+	beq	g70$			; then abort current file
 	cmpb	r0	,#abt$all&37	; if ^Z
-	bne	90$			; then abort file group
+	bne	g90$			; then abort file group
 	mov	#-1	,index		; flag that we are all done
-70$:	mov	#sta.eof,r1		; force new state to EOF
+g70$:	mov	#sta.eof,r1		; force new state to EOF
 	mov	sp	,skipfl		; get seof to set discard
 	return
-80$:	spack	#msg$err,paknum		; send an error packet
+g80$:	spack	#msg$error,paknum	; send an error packet
 	clr	cccnt			; /36/ clear ^C flag
 	jmp	sabort			; /62/ force state to abort
 
-90$:	cmpb	recpkt	,#abt$cur	; ACK contain a "X" for skipfile?
-	bne	100$			; /BBS/ no
+g90$:	cmpb	recpkt	,#abt$cur	; ACK contain a "X" for skipfile?
+	bne	g100$			; /BBS/ no
 	calls	printm	,^/#2,#sen.03,#sen.04/ ; /63/ ya, say so if not remote
-	br	110$			; /BBS/ then fake EOF
-100$:	cmpb	recpkt	,#abt$all	; ACK contain a "Z" for skip all?
-	bne	120$			; no
+	br	g110$			; /BBS/ then fake EOF
+g100$:	cmpb	recpkt	,#abt$all	; ACK contain a "Z" for skip all?
+	bne	g120$			; no
 	calls	printm	,^/#2,#sen.03,#sen.05/ ; /63/ ya, say so if not remote
 	 mov	#-1	,index		; flag a fake no more files and
-110$:	 movb	#sta.eof,r1		; fake EOF for either "X" or "Z" ACK
+g110$:	 movb	#sta.eof,r1		; fake EOF for either "X" or "Z" ACK
 	 return
 
-120$:	add	size	,charout+2	; /43/ keep track of counts
+g120$:	add	size	,charout+2	; /43/ keep track of counts
 	adc	charout+0		; /43/ 32. bits please
 	calls	buffil	,^/#0,#packet/	; /63/ get next buffer of data to send
 	mov	r1	,size		; and save the size please
-	bne	130$			; something was there
+	bne	g130$			; something was there
 	 movb	#sta.eof,r1		; set state to EOF
 	 return
-130$:	movb	#sta.dat,r1		; not EOF, stay in data state
+g130$:	movb	#sta.dat,r1		; not EOF, stay in data state
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Send end of file packet
-	.enabl	lsb
+	;.enabl	lsb
 
 seof:	clr	datauk			; /62/ init re-read only flag
 	inc	numtry			; abort if we've been trying too much
@@ -758,58 +758,58 @@ seof:	clr	datauk			; /62/ init re-read only flag
 
 	.save
 	.psect	$pdata
-40$:	.byte	msg$err	,msg$nak,msg$ack,timout	,badchk
+40$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
 50$:	.word	sndx.$					; /62/
 	.word	sndx.e	,seof.n	,seof.y	,sndx$$	,sndx.$	; /62/ badchk = noise
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to SEOF
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
 seof$$:	jmp	sndx$$			; /62/ common code
 
 seof.n:	cmp	r3	,paknum		; /62/ is NAK for this packet?
 	beq	seof$$			; /62/ ya, resend the data
 	dec	r3			; NAK for next packet
-	bge	10$			; is ACK for current packet
+	bge	h10$			; is ACK for current packet
 	mov	#63.	,r3		; if --paknum<0, 63:paknum
-10$:	cmp	r3	,paknum		; well?
-	beq	40$			; /62/ it's an implicit ACK
-	br	20$			; /62/ out of sync, try to fix things
+h10$:	cmp	r3	,paknum		; well?
+	beq	h40$			; /62/ it's an implicit ACK
+	br	h20$			; /62/ out of sync, try to fix things
 
 seof.y:	cmp	r3	,paknum		; ensure ACK is for correct packet
-	beq	40$			; it is
-20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
-	blos	30$			; /62/ not yet
+	beq	h40$			; it is
+h20$:	cmp	numtry	,maxtry		; /62/ it isn't, been here too often?
+	blos	h30$			; /62/ not yet
 	jmp	s$sync			; /62/ ya, say so, send error packet
 
-30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
+h30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
 	blt	seof$$			; /62/ ya, re-send packet
 	jmp	bad$ack			; /62/ listen again, but just once
 
-40$:	clr	datauk			; /62/ stop read_only loop
+h40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; clear the retry count
 	incm64	paknum			; paknum := (paknum+1) mod 64
 	calls	close	,^/#lun.in/	; close the input file
 	clr	inopn			; input file is now closed
 	cmp	index	,#-1		; force a break here from user
-	beq	50$			; yes
+	beq	h50$			; yes
 	clr	r0			; /38/ no errors
 	tst	xmode			; /38/ extended response?
-	bne	50$			; /38/ finish up the transaction
+	bne	h50$			; /38/ finish up the transaction
 	call	getnxt			; get the next input file?
 	tst	r0			; did it work?
-	bne	50$			; no
+	bne	h50$			; no
 	movb	#sta.fil,r1		; yes, set new state to file
 	return
-50$:	movb	#sta.brk,r1		; return(break)
+h50$:	movb	#sta.brk,r1		; return(break)
 	return
 
-	.dsabl	lsb			; /62/
+	;.dsabl	lsb			; /62/
 
 	.end

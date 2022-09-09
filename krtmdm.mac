@@ -28,35 +28,35 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 ;	farther below in this module, to your changes and add a new macro to
 ;	those which put data into the individual fields, immediately below.
 
-	mod.next	==:	 0	; link to next modem in list
-	mod.string	==:	 2	; address of name of modem
-	dial.time	==:	 4	; dial time-out value in secs
-	wake.string	==:	 6	; address of wakeup string
-	wake.rate	==:	10	; ticks delay between sending chars
-	wake.prompt	==:	12	; address of wakeup prompt string
-	dmod.string	==:	14	; address of dial initiate string and
-	dmod.prompt	==:	16	; address of prompt returned for it
-	dial.string	==:	20	; address of dial format string
-	dial.rate	==:	22	; ticks delay between sending chars
-	dial.ack	==:	24	; modem response to confirm number
-	dial.blind	==:	26	; if ^// dial w/o wait for dial tone
-	dial.wait	==:	30	; string for pause format effector
-	dial.confirm	==:	32	; string to confirm number for dialing
-	dial.go		==:	34	; ie, va212 returns "DIALING\n"
-	res.bin		==:	36	; if ^// it's binary responses (DF03)
-	dial.echo	==:	40	; if ^// modem echoes its input
-	mod.comment	==:	42	; addr of brief description of modem
-	res.head	==:	44	; head of the list of result messages
-	dial.xabort	==:	46	; /45/ string to kill call in progress
-	dial.idle	==:	50	; /45/ string puts modem in idle state
-	dial.pulse	==:	52	; /45/ pulse dialing command string
-	dial.nopulse	==:	54	; /45/ tone dialing command string
-	init.once	==:	56	; /BBS/ if ^// modem stays initialized
-	time.settle	==:	60	; /62/ reset settle-time in secs
-	x.result	==:	62	; /62/ "Hayes" style extended mode
-	ph.answer	==:	64	; /62/ enable answer mode string
-	ph.noanswer	==:	66	; /62/ disable answer mode string
-	mod.size	==:	70	; /62/ length of data defined above
+	mod.next	==	 0	; link to next modem in list
+	mod.string	==	 2	; address of name of modem
+	dial.time	==	 4	; dial time-out value in secs
+	wake.string	==	 6	; address of wakeup string
+	wake.rate	==	10	; ticks delay between sending chars
+	wake.prompt	==	12	; address of wakeup prompt string
+	dmod.string	==	14	; address of dial initiate string and
+	dmod.prompt	==	16	; address of prompt returned for it
+	dial.string	==	20	; address of dial format string
+	dial.rate	==	22	; ticks delay between sending chars
+	dial.ack	==	24	; modem response to confirm number
+	dial.blind	==	26	; if ^// dial w/o wait for dial tone
+	dial.wait	==	30	; string for pause format effector
+	dial.confirm	==	32	; string to confirm number for dialing
+	dial.go		==	34	; ie, va212 returns "DIALING\n"
+	res.bin		==	36	; if ^// it's binary responses (DF03)
+	dial.echo	==	40	; if ^// modem echoes its input
+	mod.comment	==	42	; addr of brief description of modem
+	res.head	==	44	; head of the list of result messages
+	dial.xabort	==	46	; /45/ string to kill call in progress
+	dial.idle	==	50	; /45/ string puts modem in idle state
+	dial.pulse	==	52	; /45/ pulse dialing command string
+	dial.nopulse	==	54	; /45/ tone dialing command string
+	init.once	==	56	; /BBS/ if ^// modem stays initialized
+	time.settle	==	60	; /62/ reset settle-time in secs
+	x.result	==	62	; /62/ "Hayes" style extended mode
+	ph.answer	==	64	; /62/ enable answer mode string
+	ph.noanswer	==	66	; /62/ disable answer mode string
+	mod.size	==	70	; /62/ length of data defined above
 
 	.page
 	.sbttl	Macros for individual fields of a modem's data structure
@@ -126,7 +126,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	dial$echo
 
 	.macro	mod$comment	s
-	modstr	^~s~ ,mod.com		; 42  addr of brief modem description
+	modstr	^~s~ ,mod.comment	; 42  addr of brief modem description
 	.endm	mod$comment
 
 	.macro	mod$res	s ,class	; 44  listhead of result messages
@@ -137,10 +137,10 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 ;	.word	response_class		^/0 fail, 0 info, 1 ring, /1 success
 ;	.asciz	"response_string"
 ;
-	.list me
+	.list (me)
 	.save
 	.psect	resdat	,ro,d,lcl,rel,con ; /62/
-	.nlist me
+	.nlist (me)
 	$res1 = .			; save current pc in "resdat"
 	.word	0			; link to next is zero for now..
 	.if  b	^/class/			; if class not specified, then
@@ -149,14 +149,14 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.word	class			; response class
 	.endc
 	.asciz	"s"			; the actual text /BBS/ allow "/"
-	.list me
+	.list (me)
 	.even				; must do
 	.restore
-	.nlist me
+	.nlist (me)
 	.if eq	$res			; is this first time for new type?
 	modval	$res1	,res.head	; yes, stuff the link header
 	.iff				; not the first time
-	.list me
+	.list (me)
 	.save
 	.psect	resdat	,ro,d,lcl,rel,con
 	$respc = .			; save the current pc
@@ -164,7 +164,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.word	$res1			; insert address of new entry
 	. = $respc			; restore current pc
 	.restore
-	.nlist me
+	.nlist (me)
 	.endc
 	$reslast = $res1		; lastlink = current_entry
 	$res = 1			; not the first time anymore
@@ -210,10 +210,10 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.sbttl	Macros to place data in the individual fields
 
 	.macro	modstr	s ,offset	; insert a string in modem's data
-	.list me
+	.list (me)
 	.save
 	.psect	string	,ro,d,lcl,rel,con
-	.nlist me
+	.nlist (me)
 	$$addr	= .
 	$$ = 0
 	  .irpc	ch ,^~s~		; translate "^M" syntax to ".byte 15"
@@ -231,22 +231,22 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	    .endc
 	  .endr
 	.byte	0			; null terminate
-	.list me
+	.list (me)
 	.psect	modinf	,ro,d,lcl,rel,con
 	. = $$current+offset
 	.word	$$addr			; where to find it..
 	.restore
-	.nlist me
+	.nlist (me)
 	.endm	modstr
 
 	.macro	modval	val ,offset	; insert value (word) in modem's data
-	.list me
+	.list (me)
 	.save
 	.psect	modinf	,ro,d,lcl,rel,con
 	. = $$current+offset		; it goes here..
 	.word	val
 	.restore
-	.nlist me
+	.nlist (me)
 	.endm	modval
 
 	.page
@@ -266,24 +266,24 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	$reslast  = 0			; macro counters
 
 	.if nb	^/user/			; if we are doing the "user-defined"
-	.list me			; modem we need to be in a
+	.list (me)			; modem we need to be in a
 	.save				; psect that is never swapped out
 	.globl	lab			; user-defined listhead must be global
 	.psect	usermd	,rw,d,gbl,rel,con ; this psect is forced into the root
-	.nlist me			; by inclusion in KRTSJ and KRTXM
+	.nlist (me)			; by inclusion in KRTSJ and KRTXM
 	.iff
 	$modtail = .			; use this to link to "usermd" as it
 	.endc				; avoids error from differing psects
 	$$current = .			; save listhead for auxiliary macros
 
-	.list me
+	.list (me)
 	.save
 	.psect	string	,ro,d,lcl,rel,con ; switch to string psect
 	$$ = .				; save location of
 	.asciz	"s"			; the modem type string
 	.even
 	.restore
-	.nlist me
+	.nlist (me)
 
 lab:	.word	0		;  0 mod.next	   link to next please
 	.word	$$		;  2 mod.string	   modem type string address
@@ -322,32 +322,34 @@ lab:	.word	0		;  0 mod.next	   link to next please
 	. = $$end			; then go back where we were
 	$$prev = lab			; and save new address for next link
 	.iff				; if this is the user-defined modem..
-	.list me
+	.list (me)
 	.restore			; exit root, come back to this overlay
-	$$$ = .
-	. = $modtail			; /BBS/ back to top of last definition
-	.word	lab			; /62/ insert link to user-defined
-	. = $$$
-	.nlist me
+; this doesn't work as it tries to overwrite previously generated code (link)
+; just comment it out for now and we will come back and get it working later
+;	$$$ = .
+;	. = $modtail			; /BBS/ back to top of last definition
+;	.word	lab			; /62/ insert link to user-defined
+;	. = $$$
+	.nlist (me)
 	.endc	; b ^/user/
 	.endm	define
 
 	.page
 	.sbttl	Modem response classes	; /BBS/
 
-	CON38400  ==:	38400.	; /62/ connect at designated speeds
-	CON19200  ==:	19200.	; that is, when the modem's result message
-	CON9600	  ==:	 9600.	; matches the string associated with one of
-	CON7200	  ==:	 7200.	; these speed specific classes, then force
-	CON4800	  ==:	 4800.	; the DTE speed to it (if possible)..
-	CON2400	  ==:	 2400.	; see the Hayes definition below for an
-	CON1200	  ==:	 1200.	; example of exactly how this is done
-	CON300	  ==:	  300.
-	CONNECT	  ==:	    2	; don't check or change speed
-	RING	  ==:	    1	; a ring was detected
-	INFO	  ==:	    0	; info only   /62/ *** SEE NOTE BELOW ***
-	FAILED	  ==:	   -1	; call failed, modem has already stopped
-	ABORTED	  ==:	   -2	; aborted by program, need to kill modem
+	CON38400  ==	38400.	; /62/ connect at designated speeds
+	CON19200  ==	19200.	; that is, when the modem's result message
+	CON9600	  ==	 9600.	; matches the string associated with one of
+	CON7200	  ==	 7200.	; these speed specific classes, then force
+	CON4800	  ==	 4800.	; the DTE speed to it (if possible)..
+	CON2400	  ==	 2400.	; see the Hayes definition below for an
+	CON1200	  ==	 1200.	; example of exactly how this is done
+	CON300	  ==	  300.
+	CONNECT	  ==	    2	; don't check or change speed
+	RING	  ==	    1	; a ring was detected
+	INFO	  ==	    0	; info only   /62/ *** SEE NOTE BELOW ***
+	FAILED	  ==	   -1	; call failed, modem has already stopped
+	ABORTED	  ==	   -2	; aborted by program, need to kill modem
 
 ; /62/	NOTE:  Since an INFO message is anything undefined, INFO
 ;	       messages have been dumped here to save space.

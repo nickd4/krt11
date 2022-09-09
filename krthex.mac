@@ -134,7 +134,7 @@ handld:	.blkw	1000			; handler loading done here
 inblk:	.word	0			; input file current block number
 inbuff:	.blkw	400			; the input file buffer
 inpnt:	.word	0			; and pointer into it
-jobtyp:	.word	0			; if ^// params passed when pgm was run
+jobtype:.word	0			; if ^// params passed when pgm was run
 outblk:	.word	0			; output file current block number
 outbuf:	.blkw	400			; and same for the output file
 outpnt:	.word	0			; and its pointer

@@ -34,7 +34,7 @@
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.CMKT	,.MRKT	,.PURGE	,.SCCA
 	.mcall	.READW	,.TTINR	,.TTYOUT,.TWAIT
@@ -171,7 +171,7 @@ c$send::clr	wasmore			; init multi-args display flag
 	.page
 	.sbttl	XMODEM a file		; /62/ moved this here too..
 
-c$xmodem::tst	tsxsav			; send only, via TT only
+c$xmodem::tst	tsxsave			; send only, via TT only
 	bne	10$			; must be TSX for this to work
 	mov	#er$tsx	,r0		; say it's not TSX
 	br	60$			; goto error handler

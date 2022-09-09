@@ -53,6 +53,8 @@
 	.page
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
+	.include "krtdef.mac"
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.PURGE	,.SPFUN		; /62/
 
@@ -300,7 +302,7 @@ isitcl:	mov	r0	,r4		; save incoming error
 	bcs	240$			; someone else has it
 	tst	r0			; or, perhaps you do on another line
 	beq	180$			; nope..
-	cmp	r0	,tsxsav		; check against current job # too
+	cmp	r0	,tsxsave	; check against current job # too
 	beq	170$			; ok  (same line #)
 	mov	#er$137	,r0		; not ok, in use by you on another job
 	br	260$			; bail out
@@ -378,7 +380,7 @@ cl.wild:tst	r50dev			; is there now a link device?
 	bcs	10$			; someone else has it
 	tst	r0			; or, perhaps you do on another line?
 	beq	30$			; nope..
-	cmp	r0	,tsxsav		; check against current job # too
+	cmp	r0	,tsxsave	; check against current job # too
 	bne	10$			; it's not this job..
 	mov	sp	,itsmine	; allocate, except if already owned..
 
@@ -637,7 +639,7 @@ c$dismou::mov	sp	,r1		; set dismount flag
 	br	c.mnt			; and use common code
 
 c$mount::clr	r1			; flag to mount
-c.mnt:	tst	tsxsav			; /63/ running under TSX?
+c.mnt:	tst	tsxsave			; /63/ running under TSX?
 	bne	10$			; ya
 	mov	#er$tsx	,r0		; no, load error
 	br	30$			; that's all
@@ -771,7 +773,7 @@ defterm::tst	infomsg			; SET TT NOQ during init?
 	clr	sy.ini			; done with this now
 	return
 
-sho$li::wrtall	#cm1.06			; /63/ "Link device is "
+sho$line::wrtall #cm1.06			; /63/ "Link device is "
 	tstb	ttname			; something besides TT?
 	bne	10$			; ya
 	wrtall	#cm1.07			; /63/ "TT:   "
@@ -782,7 +784,7 @@ sho$li::wrtall	#cm1.06			; /63/ "Link device is "
 	beq	20$			; not this time
 	wrtall	#cm1.08			; /63/ " via Line #"
 	call	L10266			; dump line # to TT
-20$:	tst	tsxsav			; running under TSX?
+20$:	tst	tsxsave			; running under TSX?
 	beq	30$			; no
 	wrtall	#cm1.09			; /63/ "   Priority: "
 	mov	cl.pri	,r0		; pass priority value to L10266

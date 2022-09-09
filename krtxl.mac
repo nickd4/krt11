@@ -78,6 +78,8 @@
 	.page
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
+	.include "krtdef.mac"
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 
 ; /62/	.ABTIO bypassed for V4, also expanded to allow assembly under same
@@ -210,7 +212,7 @@ x.assdev::save	^/r2,r1/			; mods to stop ANY bad name
 	br	60$			; /62/
 50$:	tst	km.lock			; /62/
 	bne	60$			; /62/ KM is an 8-bit device
-	movb	#par$sp	,parity		; XL is a 7-bit handler
+	movb	#par$space,parity	; XL is a 7-bit handler
 60$:	clr	tt$io			; /62/ force I/O thru handler
 	call	x.cantyp		; /62/ flush driver and its buffer
 	clr	r0			; /62/ success
@@ -238,7 +240,7 @@ x.assdev::save	^/r2,r1/			; mods to stop ANY bad name
 ;	input:	  (r5)	= TSX ^W/^B flag, only used by T.TTYINI
 ;	output:	   r0	= is ^//, error code
 
-x.ttyini::tst	tsxsav			; running under TSX?
+x.ttyini::tst	tsxsave			; running under TSX?
 	beq	10$			; /62/ no
 	mov	cl.pri	,setpri+2	; ya, load priority for using handler
 	mov	#setpri	,r0		; and bump it up,
@@ -350,14 +352,14 @@ mapxl:	save	^/r1,r2,r3/		; /BBS/ heavily hacked..
 	.page
 	.sbttl	ALLOCATE a device
 
-170$:	tst	tsxsav			; this only works with TSX
+170$:	tst	tsxsave			; this only works with TSX
 	beq	180$			; can't under RT-11
 	mov	#alloc	,r0		; try to
 	emt	375			; allocate the device
 	bcs	200$			; didn't work
 	tst	r0			; allocated to some other job?
 	beq	220$			; no, it's ok
-	cmp	r0	,tsxsav		; ya, is it this same job?
+	cmp	r0	,tsxsave	; ya, is it this same job?
 	bne	190$			; no, it's some other job
 180$:	clr	r0			; same job = no error
 	br	220$
@@ -388,7 +390,7 @@ x.ttyfin::.twait #rtwork,#wait		; force at least 1 tick wait
 	tst	r0
 	bgt	20$			; ya, don't flush buffer now
 	call	x.cantyp		; flush driver and its buffer
-20$:	tst	tsxsav			; running under TSX?
+20$:	tst	tsxsave			; running under TSX?
 	beq	30$			; no
 	mov	defpri	,setpri+2	; ya, recover start-up priority
 	mov	#setpri	,r0		; and use it to
@@ -416,9 +418,9 @@ x.ttyfin::.twait #rtwork,#wait		; force at least 1 tick wait
 ;	reset the driver, except for the -1 time-out option when
 ;	no action is taken if no data are present.
 
-x.xbin::mov	sp	,rdmode		; don't XON if no data present
+x.xbinread::mov	sp	,rdmode		; don't XON if no data present
 	br	rdcom
-x.binr::clr	rdmode			; try to reset XOFF if no data show up
+x.binread::clr	rdmode			; try to reset XOFF if no data show up
 
 rdcom:	save	^/r2,r3/
 	cmp	xkpoint	,#xkbuff+xksize	; ensure no buffer overflows
@@ -465,7 +467,7 @@ xxread:	mov	(r5)	,r3		; time-out in seconds here
 ;
 ;	output:	  r0	= if ^//, error code
 
-x.binwri::save	^/r1,r2,r3,r4/
+x.binwrite::save	^/r1,r2,r3,r4/
 	mov	2(r5)	,r4		; byte count for the write
 	beq	20$			; /BBS/ no I/O to do..
 	mov	(r5)	,r3		; copy the data to a local buffer
@@ -500,11 +502,11 @@ x.cantyp::save	^/r1,r2/
 10$:	tst	montyp			; /62/ if SJ monitor
 	blt	20$			; /62/ .abtio = .wait so skip it !!
 ; /62/	.abtio	#lun.xk			; reinit the driver
-	MOV	#lun.xk+^/11.*^o400/,R0	; /62/ expanded for assy under V4
-	EMT	^o374			; /62/ even though V4 can't run it
+	MOV	#lun.xk+^/11.*0o400/,R0	; /62/ expanded for assy under V4
+	EMT	0o374			; /62/ even though V4 can't run it
 20$:	call	x.ttxon			; /BBS/ make sure it's read-able
 	mov	#$allsiz,r2		; /BBS/ loop for max possible
-30$:	calls	binrea	,^/#-1/		; try to get something
+30$:	calls	binread	,^/#-1/		; try to get something
 	tst	r0			; did it work?
 	bne	40$			; no, exit
 	sob	r2	,30$		; yes, eat some more characters
@@ -543,7 +545,7 @@ x.ttxon::.spfun	#rtwork,#xc.control,#clrdrv,#0,#0,#1 ; clear the driver
 	.page
 	.sbttl	Drop DTR for 0.5 sec
 
-x.ttyhan::save	^/r1/
+x.ttyhang::save	^/r1/
 	.spfun	#rtwork,#xc.control,#dtrdrv,#0,#0,#1 ;/62/ drop DTR
 	mov	clkflg	,r1		; /62/ number of ticks in one second
 	asr	r1			; /62/ wait 0.5sec here
@@ -557,7 +559,7 @@ x.ttyhan::save	^/r1/
 
 	.page
 	.sbttl	Check status of DTR or DCD  ; /BBS/ added this..
-	.enabl	lsb
+	;.enabl	lsb
 
 ;	I N Q C D			; all handlers
 ;	I N Q D T R			; CL or KM only
@@ -568,39 +570,39 @@ x.ttyhan::save	^/r1/
 
 x.inqcd::save	^/r1/
 	tst	mready			; modem must be on-line
-	beq	30$			; no modem = can't do DCD..
+	beq	$30$			; no modem = can't do DCD..
 	mov	#stsdrv	,r1		; DCD arg
-	call	50$			; goto common code..
+	call	$50$			; goto common code..
 	tst	r0			; did it work
-	blt	40$			; no
+	blt	$40$			; no
 	tst	tsxcl			; ya, which handler is it
-	bne	20$			; CL uses bit 2
+	bne	$20$			; CL uses bit 2
 	asr	r0			; KM or XL uses bit 3, make it 2 here
-	br	20$			; goto common code..
+	br	$20$			; goto common code..
 
 x.inqdtr::save	^/r1/
 	tst	tsxcl			; is this TSX and CL handler?
-	bne	10$			; /62/ ya
+	bne	$10$			; /62/ ya
 	tst	km.lock			; /62/ is it KM?
-	beq	30$			; nope..
-10$:	mov	#clstat	,r1		; DTR argument
-	call	50$			; common code
+	beq	$30$			; nope..
+$10$:	mov	#clstat	,r1		; DTR argument
+	call	$50$			; common code
 	tst	r0			; did it work?
-	blt	40$			; no
-20$:	bic	#^c^/4/	,r0		; ya, hose unneeded bits
-	br	40$
-30$:	mov	#-1	,r0		; DTR status not available
-40$:	unsave	^/r1/
+	blt	$40$			; no
+$20$:	bic	#^c^/4/	,r0		; ya, hose unneeded bits
+	br	$40$
+$30$:	mov	#-1	,r0		; DTR status not available
+$40$:	unsave	^/r1/
 	return
 
-50$:	.spfun	#rtwork,#xc.control,r1,#xcsts,#0,#1 ; /62/ get status
+$50$:	.spfun	#rtwork,#xc.control,r1,#xcsts,#0,#1 ; /62/ get status
 	bcs	60$			; failed..
 	mov	xcsts	,r0		; return the current status
 	return
 60$:	mov	#-1	,r0		; status not available
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	DCD status tester	; /62/ new..
@@ -662,7 +664,7 @@ x.setspd::save	^/r3/
 	.page
 	.sbttl	Fake getting the speed
 
-x.ttsp::tst	tsxcl			; /54/ CL and TSX?
+x.ttspeed::tst	tsxcl			; /54/ CL and TSX?
 	bne	30$			; /62/ ya
 	tst	km.lock			; /62/ KM?
 	beq	10$			; /62/ no

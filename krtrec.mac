@@ -51,7 +51,7 @@
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
 
 	.mcall	.PURGE			; /62/ hose dir search chan on error
 
@@ -108,7 +108,7 @@ c$rec::	call	opentt			; initialize the link device
 
 	.page
 	.sbttl	State controller for receive file processing
-	.enabl	lsb
+	;.enabl	lsb
 
 recsw::	clr	paknum			; packet_number := 0
 rec.sw::movb	@r5	,state		; load passed state
@@ -159,42 +159,42 @@ rec.sw::movb	@r5	,state		; load passed state
 	.word	recs$$	,recs.c	,recs.d	,recs.f	,recs.r	,ccabort ; /62/
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	State routines for RECSW
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
-ccabort:spack	#msg$err,paknum		; /36/ break out the sender
+ccabort:spack	#msg$error,paknum	; /36/ break out the sender
 recs$$:	tst	outopn			; /62/ is an output file open?
-	bge	10$			; /BBS/ no..
+	bge	a10$			; /BBS/ no..
 	mov	incfile	,skipfile	; /BBS/ ya, disposition to file closer
-10$:	mov	sp	,r0		; abort
-	br	20$
+a10$:	mov	sp	,r0		; abort
+	br	a20$
 
 recs.$:	call	recx.$			; /62/ report invalid packet type
-	br	30$			; /62/ then go back and try it again
+	br	a30$			; /62/ then go back and try it again
 
 recs.c:	clr	r0			; complete
-20$:	sec				; force exit from recsw loop
+a20$:	sec				; force exit from recsw loop
 	return
 
 recs.d:	call	rdata			; receive_data
-	br	30$			; /62/ pass state, keep recsw running
+	br	a30$			; /62/ pass state, keep recsw running
 
 recs.f:	call	rfile			; receive_file
-	br	30$			; /62/ pass state, keep recsw running
+	br	a30$			; /62/ pass state, keep recsw running
 
 recs.r:	call	rinit			; receive_init
-30$:	movb	r1	,state		; pass returned state
+a30$:	movb	r1	,state		; pass returned state
 	clc				; keep recsw running
 	return
 
-	.dsabl	lsb			; /62/
+	;.dsabl	lsb			; /62/
 
 	.page
 	.sbttl	Received bad ACK/NAK and error handling
-	.enabl	lsb			; /62/ all new..
+	;.enabl	lsb			; /62/ all new..
 
 recx.e:	calls	prerrp	,^/#packet/	; received error packet, display it
 	br	rabort
@@ -205,21 +205,21 @@ rabort:	movb	#sta.abo,r1		; exit please
 	return
 
 recx$$:	spack	#msg$nak,paknum		; NAK a time-out or bad checksum
-	br	20$
+	br	b20$
 recx.$:	mov	#nojavu	,r3		; ignore an invalid packet type
-	br	10$
+	br	b10$
 deja$vu:spack	#msg$ack,r3		; ACK the last packet again
 deja$$:	mov	#dejavu	,r3		; dupe packet received
-10$:	mov	#pcnt.r	,r1		; packet number
+b10$:	mov	#pcnt.r	,r1		; packet number
 	mov	#spare1	,r0		; where to write ascii output
 	clr	r2			; kill leading zero and spaces
 	call	$cddmg			; convert 32-bit # to ascii
 	clrb	@r0			; make it .asciz
 	calls	printm	,^/#3,r3,#dejatag,#spare1/ ; say what's up
-20$:	movb	state	,r1		; stay in the same state, try again
+b20$:	movb	state	,r1		; stay in the same state, try again
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Receive debugging and logging	; /62/ major revision..
@@ -252,7 +252,7 @@ recdeb:	mov	trace	,r0		; copy of debug status word
 
 	.page
 	.sbttl	Receive file initialization
-	.enabl	lsb
+	;.enabl	lsb
 
 rinit:	inc	numtry			; check for retry count
 	cmp	numtry	,initry		; been here too often?
@@ -266,14 +266,14 @@ rinit:	inc	numtry			; check for retry count
 
 	.save
 	.psect	$pdata
-20$:	.byte	msg$err	,msg$snd,timout	,badchk
+20$:	.byte	msg$error,msg$snd,timout,badchk
 	.byte	0
 	.even
 30$:	.word	recx.$				; /62/
 	.word	recx.e	,rini.s	,recx$$	,recx$$	; /62/
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to RINIT
@@ -288,7 +288,7 @@ rini.s:	calls	rpar	,^/#packet,r2/	; send_init  get other side's init
 
 	.page
 	.sbttl	Receive file header
-	.enabl	lsb
+	;.enabl	lsb
 
 rfile:	inc	numtry			; check for retry count
 	cmp	numtry	,maxtry		; been here too often?
@@ -311,7 +311,7 @@ rfile:	inc	numtry			; check for retry count
 
 	.save
 	.psect	$pdata
-40$:	.byte	msg$bre	,msg$err,msg$fil,msg$snd,msg$tex,msg$eof
+40$:	.byte	msg$break,msg$error,msg$file,msg$snd,msg$text,msg$eof
 	.byte	timout	,badchk
 	.byte	0
 	.even
@@ -320,7 +320,7 @@ rfile:	inc	numtry			; check for retry count
 	.word	recx$$	,recx$$					; /62/
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to RFILE
@@ -450,7 +450,7 @@ rfil.z:	inc	numtry			; end-of-file?
 
 	.page
 	.sbttl	Receive file data
-	.enabl	lsb
+	;.enabl	lsb
 
 ;	R D A T A
 ;
@@ -470,7 +470,7 @@ rdata:	inc	numtry			; abort of retry count is too large
 
 	.save
 	.psect	$pdata
-20$:	.byte	msg$atr	,msg$dat,msg$err,msg$fil,msg$tex,msg$eof
+20$:	.byte	msg$atr	,msg$data,msg$error,msg$file,msg$text,msg$eof
 	.byte	timout	,badchk
 	.byte	0
 	.even
@@ -479,7 +479,7 @@ rdata:	inc	numtry			; abort of retry count is too large
 	.word	recx$$	,recx$$					; /62/
 	.restore
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Process response to RDATA
@@ -604,7 +604,7 @@ rdat.d:	tst	xmode			; do we need to create the file
 	tst	cccnt			; we are local. check for control
 	bne	170$			; c abort for this file please
 	call	chkabo			; check for abort via ^X and ^Z
-	cmpb	r0	,#abt$err&37	; ^E aborts NOW
+	cmpb	r0	,#abt$error&37	; ^E aborts NOW
 	beq	170$			; yes, abort please
 	cmpb	r0	,#abt$all&37	; did the user type a ^Z?
 	beq	130$			; yes
@@ -631,7 +631,7 @@ rdat.d:	tst	xmode			; do we need to create the file
 	movb	#sta.dat,r1		; switch to data state
 	return
 
-170$:	spack	#msg$err,paknum		; break the sender out please
+170$:	spack	#msg$error,paknum	; break the sender out please
 	clr	cccnt			; /36/ clear ^C flag
 180$:	mov	#sta.abo,r1		; abort for some reason
 	return
@@ -664,7 +664,7 @@ rdat.z:	cmp	paknum	,r3		; end-of-file
 	beq	20$			; /BBS/ must be the terminal
 	bgt	40$			; open was aborted via fileprotection
 
-	cmpb	#eof$dis,packet		; /BBS/ real file, other side discard?
+	cmpb	#eof$discard,packet	; /BBS/ real file, other side discard?
 	bne	30$			; /BBS/ no
 	mov	incfile	,skipfile	; /BBS/ ya, keep or dump it as is SET
 	br	30$
@@ -753,7 +753,7 @@ bufemp:	mov	@r5	,r2		; input record address
 	tst	outopn			; is there really something open?
 	bne	70$			; yes, put the data to it
 	clr	r1			; no, direct the output to a terminal
-	tst	tsxsav			; running under TSX?
+	tst	tsxsave			; running under TSX?
 	beq	70$			; no
 	cmpb	@sp	,m.tsxr		; ya, is it TSX lead-in char?
 	beq	80$			; ya, don't output to TT

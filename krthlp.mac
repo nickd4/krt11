@@ -520,7 +520,7 @@ hindex:	save	^/r2,r4,r5/
 	dec	(r5)			; is there room left for the next one?
 	beq	70$			; nope
 	mov	#space	,r0		; load a space
-60$:	call	writ1ch			; dump it to TT
+60$:	call	writ1char	; dump it to TT
 	sob	r2	,60$		; until padded to length of 18. bytes
 	br	80$			; then back for more..
 70$:	wrtall	#fill7			; init a newline to beginning column

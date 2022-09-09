@@ -34,8 +34,8 @@
 ;
 ;	Brian Nelson  01-Dec-83  13:56:12
 
-	.NLIST	BEX
-	.LIST	MEB			; /62/
+	;.NLIST	BEX
+	;.LIST	MEB			; /62/
 
 	KRTINC	=	1		; for .include error checking
 
@@ -52,7 +52,7 @@
 	FF	=  14		; form feed
 	CR	=  15		; carriage return
 	CTRL$N	=  16		; ^N VT-100 line drawing on
-	CTRL$O	=  17		; ^O VT-100 line drawing off
+	CTRL$O	=  17		; 0O VT-100 line drawing off
 	XON	=  'Q&37	; ^Q
 	XOFF	=  'S&37	; ^S
 	ESC	=  33		; escape
@@ -115,10 +115,10 @@
 
 ;	parity options
 	PAR$NO	=: 0		; none
-	PAR$OD	=: 1		; odd
-	PAR$EV	=: 2		; even
-	PAR$MA	=: 3		; mark
-	PAR$SP	=: 4		; space
+	PAR$ODD	=: 1		; odd
+	PAR$EVEN=: 2		; even
+	PAR$MARK=: 3		; mark
+	PAR$SPACE=: 4		; space
 
 ;	file types
 	TERMINAL=: -1		; file to term ala xreply, not to disk
@@ -178,7 +178,7 @@
 ;	order specified.  r5 points to the sp before the call and is saved
 ;	and restored.
 	$$ = 0				; init # of args count
-	  .irp x ,^/arglst/		; count up # of args passed
+	  .irp x ,arglst		; count up # of args passed
 	  $$ = $$+1			; one at a time
 	  .endr				; got it
 	.if eq $$			; no args present?
@@ -196,7 +196,7 @@
 	  $$2 = $$			; extract the args in
 	    .rept	$$		; reverse order so that
 	    $$1 = 0			; we might save a little
-	      .irp x ,^/arglst/		; core (four words)
+	      .irp x ,arglst		; core (four words)
 	      $$1 = $$1+1		; scan the arg list until we come to
 	        .if eq $$2-$$1		; the last one before one we just did
 	        .chksp	x		; check for SP addressing mode
@@ -317,7 +317,7 @@
 	.if  b	^/list/
 	 save	^/r0,r1,r2,r3,r4,r5/
 	.iff
-	.irp	x ,^/list/
+	.irp	x ,list
 	 mov	x	,-(sp)
 	.endr
 	.endc
@@ -390,7 +390,7 @@
 	.if b ^/list/
 	unsave	^/r5,r4,r3,r2,r1,r0/
 	.iff
-	.irp	x ,^/list/
+	.irp	x ,list
 	 mov	(sp)+	,x
 	.endr
 	.endc

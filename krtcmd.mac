@@ -4,7 +4,7 @@
 	.ident	"'RLS'.'VER'"
 
 	.ASECT
-.=110
+	.org	110
 	.rad50	"'RLS'"
 	.word	'VER'.
 	.iif ne	'PAT'.	.word	'PAT'.
@@ -1385,7 +1385,9 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 	.include "krtmac.mac"
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 	.include "krtdef.mac"
-	.iif ndf  MSG$DA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.iif ndf  MSG$DATA  .error	^/; .include for IN:KRTDEF.MAC failed/
+	.include "krtcdf.mac"
+	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
 
 	.mcall	.CMKT	,.PURGE	,.RCTRLO,.TWAIT	; /62/
 
@@ -1664,7 +1666,7 @@ rmtren::call	gettwo			; ensure both arguments are here
 	call	remren			; /62/ attempt the rename operation
 10$:	return
 
-ckremo::tst	remote			; local or remote?  also clears carry
+ckremote::tst	remote			; local or remote?  also clears carry
 	beq	10$			; /63/ 0 means local, carry is clear
 	direrr	#er$not			; /BBS/ not running as a local Kermit
 	sec				; which is not ok
@@ -1941,13 +1943,13 @@ getcm0::save	^/r2,r3,r4/
 	mov	#4	,(sp)		; reset the counter now
 	br	20$			; and start fresh again..
 40$:	mov	#space	,r0		; load a space
-	call	writ1ch			; dump it to TT
+	call	writ1char	; dump it to TT
 	wrtall	r1			; add on the current name
 	add	#$listl*2,r4		; bump to the next entry
 	dec	(sp)			; is there room left for the next one?
 	beq	60$			; nope
 	mov	#space	,r0		; load a space
-50$:	call	writ1ch			; dump it to TT
+50$:	call	writ1char	; dump it to TT
 	sob	r3	,50$		; until padded to length of 18. bytes
 	br	10$			; then back for more
 60$:	.newline
@@ -1997,7 +1999,7 @@ getcm0::save	^/r2,r3,r4/
 	mov	.cmdad(r4),r1		; the command address
 	br	180$
 
-170$:	mov	#cmd$ba	,r0		; bad command
+170$:	mov	#cmd$bad,r0		; bad command
 	dec	@sp			; /39/ command not unique?
 	bne	180$			; /39/ no
 	mov	#cmd$un	,r0		; /39/ yes, say so
@@ -2068,7 +2070,7 @@ nulcmd:	clr	r0			; /45/ no errors
 	.page
 	.sbttl	SHOW VERSION		; /63/ here so server can also call it
 
-sho$ve::calls	get$ve	,^/#spare1/	; separate this from the actual
+sho$version::calls get$ve,^/#spare1/	; separate this from the actual
 	wrtall	#spare1			; version string build so the
 	return				; server can get the same string..
 

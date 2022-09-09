@@ -33,27 +33,27 @@
 	$$TRIP	=  0			; /62/ init trip counter
 
 	.macro	command	list ,name ,min ,address ,arg
-	.list me
+	.list (me)
 	.save
-	.nlist me
+	.nlist (me)
 	.if b ^/name/			; command name supplied this time?
-	.list me
+	.list (me)
 	.psect	cmddsp	,ro,d,lcl,rel,con ; no, at end of list
-	.nlist me
+	.nlist (me)
 	.word	0			; /62/ mark it with a null
-	.list me			; /63/
+	.list (me)			; /63/
 	.psect	cmdtxt	,ro,d,lcl,rel,con ; /63/ save a few bytes by only
 	.even				; /63/ doing this at the end of a list
-	.nlist me			; /63/
+	.nlist (me)			; /63/
 	$$trip	= 0			; /62/ reset trip counter for next cmd
 	.iff	; b ^/name/		; ya, process args into command data
-	.list me
+	.list (me)
 	.psect	cmdtxt	,ro,d,lcl,rel,con
-	.nlist me
+	.nlist (me)
 	$$name	= .
 	.asciz	#name#			; store the command name
 	.psect	cmddsp	,ro,d,lcl,rel,con
-	.nlist me
+	.nlist (me)
 	  .if eq $$trip			; /62/ if first pass label listhead
 'list:					; global flag was not set
 	  $$trip = 1			; /62/ not first time through anymore
@@ -67,7 +67,7 @@
 	  .word	arg			; /63/ ya, stuff in its location
 	  .endc
 	.endc	; b ^/name/
-	.list me
+	.list (me)
 	.restore
-	.nlist me
+	.nlist (me)
 	.endm

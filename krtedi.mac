@@ -40,7 +40,7 @@
 $ceol:	.asciz	^/esc/"[K"	; clear from cursor to end of line
 $cz:	.asciz	"^Z"^/cr/^/lf/	; to echo ^Z
 $left:	.asciz	^/esc/"[D"	; move cursor left one column
-$resto:	.asciz	^/esc/"8"	; restore cursor to previously saved position
+$restore:.asciz	^/esc/"8"	; restore cursor to previously saved position
 $right:	.asciz	^/esc/"[C"	; move cursor right one column
 $rubout:.byte	bs ,space ,bs ,0 ; echo this for a rubout
 $save:	.asciz	^/esc/"7"	; save current cursor position
@@ -808,7 +808,8 @@ toggle:	mov	#in$mode,r0		; copy of insert mode bit
 	sec				; not done yet
 	return
 
-	.page	.sbttl	Save cursor then clear to EOL	; /BBS/ added
+	.page
+	.sbttl	Save cursor then clear to EOL	; /BBS/ added
 
 savclr:	wrtall	#$save			; save cursor position
 	wrtall	#$ceol			; erase to EOL

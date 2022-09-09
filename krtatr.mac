@@ -211,7 +211,7 @@ sn.cdt:	save	^/r4/			; pointer to current position in buff
 	bic	#^c^/37/	,r3		; the date
 	call	i2toa			; write ascii to out buff
 
-	tst	tsxsav			; only do file time under TSX
+	tst	tsxsave			; only do file time under TSX
 	beq	10$			; it's not TSX
 	movb	#space	,(r1)+		; a space delimiter between date,time
 

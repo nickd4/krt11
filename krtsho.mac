@@ -245,7 +245,7 @@ sh.133:	.asciz	"_To: "
 sh.134:	.asciz	"No logical disks are mounted"^/cr/^/lf/
 dkslug:	.asciz	"DK  --> "
 hoslug:	.asciz	"HOME--> "
-lis.ct:	.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
+lis.ctrl:.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 pridev:	.asciz	"LP:"
 raslug:	.asciz	"  ("
 ratag:	.asciz	"Hz)"^/cr/^/lf/
@@ -296,10 +296,10 @@ c$show::tstb	@argbuf			; /BBS/ any arg there?
 	.page
 	.sbttl Command dispatch data table
 
-command	sholst	,ALL		,2	,sho$al
+command	sholst	,ALL		,2	,sho$all
 command	sholst	,ASSIGNS	,2	,sho$df
 command	sholst	,ATTRIBUTES	,2	,sho$at	; /BBS/ wuz missing..
-command	sholst	,BAUD		,2	,sho$li	; /62/
+command	sholst	,BAUD		,2	,sho$line ; /62/
 command	sholst	,BINARY-TYPE	,2	,sho$bt
 command	sholst	,BLOCK-CHECK-TYPE,2	,sho$bl
 command	sholst	,CL:		,2	,sho$cl	; /62/
@@ -312,18 +312,18 @@ command	sholst	,DEFAULT	,3	,sho$df
 command	sholst	,DELAY		,3	,sho$dl
 ;comman	sholst	,DEVICES	,3	,sho$dv	; /BBS/ devlst only!!
 command	sholst	,DIAL		,2	,sho$dp
-command	sholst	,DTR		,2	,sho$li	; /62/
+command	sholst	,DTR		,2	,sho$line ; /62/
 command	sholst	,DUPLEX		,2	,sho$co	; /62/
 command	sholst	,END-OF-LINE	,2	,sho$pa	; /62/
-command	sholst	,EOF		,2	,sho$eo	; /62/
+command	sholst	,EOF		,2	,sho$eof ; /62/
 command	sholst	,ESCAPE		,2	,sho$es
 command	sholst	,FILE-TYPE	,2	,sho$fi
-command	sholst	,FLOW-CONTROL	,2	,sho$li	; /62/
+command	sholst	,FLOW-CONTROL	,2	,sho$line ; /62/
 command	sholst	,HANDSHAKE	,2	,sho$ha
 command	sholst	,HOME		,2	,sho$df	; /62/
 command	sholst	,INCOMPLETE-FILE-DISPOSITION ,1 ,sho$in
 command	sholst	,LD:		,2	,sho$su	; /62/
-command	sholst	,LINE		,2	,sho$li
+command	sholst	,LINE		,2	,sho$line
 command	sholst	,LOCAL-ECHO	,3	,sho$co	; /62/
 command	sholst	,LOGFILE	,3	,sho$de	; /62/
 command	sholst	,LONG-PACKETS	,3	,sho$pk	; /62/
@@ -342,7 +342,7 @@ command	sholst	,SEED		,3	,sho$de	; /62/
 command	sholst	,SEND		,3	,sho$pa	; /62/
 command	sholst	,SERVER		,3	,sho$sv
 command	sholst	,SL		,2	,sho$sl
-command	sholst	,SPEED		,2	,sho$li	; /62/
+command	sholst	,SPEED		,2	,sho$line ; /62/
 command	sholst	,START-OF-PACKET,2	,sho$so
 command	sholst	,SUBMOUNTS	,2	,sho$su
 command	sholst	,TERMINAL	,1	,sho$tt
@@ -350,20 +350,20 @@ command	sholst	,TIME		,2	,sho$ti
 command	sholst	,TIME-OUTS	,5	,sho$to
 command	sholst	,TT:		,2	,sho$tt
 command	sholst	,UPDATE		,1	,sho$up
-command	sholst	,VERSION	,2	,sho$ve
+command	sholst	,VERSION	,2	,sho$version
 command	sholst	,VLSWCH		,2	,sho$vl
 command	sholst
 
 	.page
 	.sbttl	SHOW ALL		; /63/ split to insert SHO MODEM
 
-sho$a0::call	sho$ve			; version
+sho$a0::call	sho$version		; version
 	call	sho$me			; /63/ free memory for fetches
-	call	sho$li			; line
+	call	sho$line	; line
 	.newline			; /63/
 	return
 
-sho$a1::tst	tsxsav			; /63/ running under TSX?
+sho$a1::tst	tsxsave			; /63/ running under TSX?
 	beq	10$			; /63/ no, avoid an error message..
 	mov	tsxcl	,-(sp)		; /63/
 	clr	tsxcl			; /63/ disable sho$cl jump to sho$line
@@ -388,7 +388,7 @@ sho$a1::tst	tsxsav			; /63/ running under TSX?
 	.newline			; /63/
 	call	sho$in			; incomplete-file-disposition
 	.newline			; /63/
-	call	sho$eo			; /63/ action on end of command file
+	call	sho$eof		; /63/ action on end of command file
 	.newline			; /63/
 	call	sho$ha			; /63/ handshaking
 	.newline			; /63/
@@ -459,11 +459,11 @@ sho$de:	clr	r0			; index := 0
 
 	.page
 	.sbttl	SHOW DATE, DAYTIME, DEFAULT, HOME, TIME
-	.enabl	lsb			; /62/
+	;.enabl	lsb			; /62/
 
 sho$da::call	sho.da			; /63/
 	.newline
-	br	20$			; /62/
+	br	a20$			; /62/
 
 sho.da:	calls	ascdat	,^/#errtxt,#-1/	; /62/ get date into a buffer
 	wrtall	#errtxt			; display it
@@ -477,13 +477,13 @@ sho$ti::calls	asctim	,^/#errtxt,#0/	; get time of day into a buffer
 	mov	clkflg	,r0		; /62/ pass line time clock rate
 	call	L10266			; /62/ dump it to terminal
 	wrtall	#ratag			; /62/ "Hz)"^/cr/^/lf/
-	br	20$			; /62/
+	br	a20$			; /62/
 
-c$pwd::	tst	tsxsav			; /63/ running under TSX?
-	beq	10$			; /62/ no, can't do this under RT-11
+c$pwd::	tst	tsxsave			; /63/ running under TSX?
+	beq	a10$			; /62/ no, can't do this under RT-11
 	call	sho$su			; /62/ show submounts
-10$:	call	sho$df			; /63/ display default disk
-20$:	clr	r0			; /62/ for when not called by SHOW
+a10$:	call	sho$df			; /63/ display default disk
+a20$:	clr	r0			; /62/ for when not called by SHOW
 	return
 
 sho$df:	call	sho$xx			; /BBS/ allow separate access
@@ -492,15 +492,15 @@ sho$df:	call	sho$xx			; /BBS/ allow separate access
 sho$xx:	wrtall	#hoslug			; /BBS/ print prefix
 	wrtall	#dkname			; then show HOME dir
 	.newline
-	br	20$			; /62/
+	br	a20$			; /62/
 
 c$home::strcpy	#defdir	,#dkname	; /62/ write home device into default
 sho$yy::wrtall	#dkslug			; /BBS/ print prefix
 	wrtall	#defdir			; then show DK
 	.newline
-	br	20$			; /62/
+	br	a20$			; /62/
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SHOW SUBMOUNTS		; /BBS/ all new routine..
@@ -512,7 +512,7 @@ sho$yy::wrtall	#dkslug			; /BBS/ print prefix
 		NOTHERE	=  2	; not there bit
 		READONLY=  1	; read only bit
 
-sho$su:	tst	tsxsav			; running under TSX?
+sho$su:	tst	tsxsave			; running under TSX?
 	bne	10$			; ya
 	mov	#er$tsx	,r0		; no, can't do this
 	br	20$
@@ -640,32 +640,32 @@ sho$fi:	wrtall	#sh.014			; "FILE-TYPE set to"
 
 	.page
 	.sbttl	 SHOW BLOCK, EOF, INCOMPLETE-FILE-DISPOSITION	; /63/
-	.enabl	lsb						; /63/
+	;.enabl	lsb						; /63/
 
 sho$bl:	wrtall	#sh.001			; /62/ "Block-check-type: "
 	movb	setchkt	,r0		; /62/ get the checksum type please
 	sub	#'1	,r0		; convert to an index for printing
 	asl	r0			; word indexing
 	wrtall	blolst(r0)		; display it
-	br	30$			; /63/
+	br	b30$			; /63/
 
 sho$eof:wrtall	#sh.032			; /63/ "Take file EOF action: "
 	tst	exieof			; is it on?
-	bne	10$			; ya
+	bne	b10$			; ya
 	wrtall	#sh.033			; /63/ "NO"
-10$:	wrtall	#sh.034			; /63/ "EXIT"
-	br	30$			; /63/
+b10$:	wrtall	#sh.034			; /63/ "EXIT"
+	br	b30$			; /63/
 
 sho$in:	wrtall	#sh.002			; /63/ "Incomplete-file-disposition: "
 	tst	incfile			; is it on?
-	bne	20$			; no
+	bne	b20$			; no
 	wrtall	#sh.035			; /63/ "KEEP"
-	br	30$
-20$:	wrtall	#sh.036			; /63/ "discard"
-30$:	.newline
+	br	b30$
+b20$:	wrtall	#sh.036			; /63/ "discard"
+b30$:	.newline
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SHOW ESCAPE		; /BBS/ modified..
@@ -690,7 +690,7 @@ sho$pa:	call	sho$pk			; packets
 
 	.page
 	.sbttl	SHOW PACKET, RETRY, TIME-OUT	; /BBS/ extensively modified
-	.enabl	lsb				; /63/
+	;.enabl	lsb				; /63/
 
 sho$pk:	call	sho$so			; show SOH first
 	wrtall	#sh.037			; /63/ "RECEIVE "
@@ -727,11 +727,11 @@ sho$pk:	call	sho$so			; show SOH first
 	wrtall	#sh.044			; /63/ "LONG-PACKETS"
 	wrtall	#sh.045			; /63/ "set locally to"
 	tst	dolong			; are long-packets enabled?
-	bne	10$			; ya
+	bne	c10$			; ya
 	wrtall	#sh.046			; /63/ "   OFF"
-	br	20$
-10$:	decout	reclng			; display locally set long-packet len
-20$:	.newline
+	br	c20$
+c10$:	decout	reclng			; display locally set long-packet len
+c20$:	.newline
 	wrtall	#sh.044			; /63/ "LONG-PACKETS"
 	wrtall	#sh.048			; /63/ "_received_ LEN"
 	decout	senlng			; received (from other Kermit) length
@@ -739,7 +739,7 @@ sho$pk:	call	sho$so			; show SOH first
 	wrtall	#sh.044			; /63/ "LONG-PACKETS"
 	wrtall	#sh.049			; /63/ "max avail buff"
 	decout	#maxlng			; the maximum possible packet length
-	br	30$			; /63/
+	br	c30$			; /63/
 
 sho$to:	wrtall	#sh.050			; /63/ "TIME-OUT "
 	wrtall	#sh.051			; /63/ " REC  seconds wait"
@@ -753,7 +753,7 @@ sho$to:	wrtall	#sh.050			; /63/ "TIME-OUT "
 	wrtall	#sh.053			; /63/ "_received_ seconds"
 	movb	conpar+p.time,r0	; RECEIVED (from other Kermit)
 	decout	r0			; value
-	br	30$			; /63/
+	br	c30$			; /63/
 
 sho$rt:	wrtall	#sh.054			; /63/ "RETRY "
 	wrtall	#sh.055			; /63/ "initial-connect limit"
@@ -762,16 +762,16 @@ sho$rt:	wrtall	#sh.054			; /63/ "RETRY "
 	wrtall	#sh.054			; /63/ "RETRY "
 	wrtall	#sh.056			; /63/ "max for other packets"
 	decout	maxtry
-	br	30$			; /63/
+	br	c30$			; /63/
 
 tag.it:	wrtall	#sh.057			; /63/ "  ^"  /BBS/ added..
 	mov	2(sp)	,r0		; display a control char
-	movb	lis.ct(r0),r0		; in "^n" notation
+	movb	lis.ctrl(r0),r0		; in "^n" notation
 	call	writ1char
-30$:	.newline
+c30$:	.newline
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	STATUS
@@ -870,7 +870,7 @@ c$stat::sub	#120	,sp		; /43/ allocate a buffer please
 	neg	r0			; /BBS/ need pos number
 	mov	r0	,r2		; /BBS/ copy # of pad chars
 	mov	#space	,r0		; /BBS/ a space
-140$:	call	writ1ch			; /BBS/ dump it to the screen
+140$:	call	writ1char	; /BBS/ dump it to the screen
 	sob	r2	,140$		; /BBS/ pad as needed
 	wrtall	r4			; /43/ dump and exit
 	return
@@ -960,40 +960,40 @@ brate:	mov	charout+2,r1		; /43/ compute effective baud rate
 
 	.page
 	.sbttl	SHOW DELAY, HANDSHAKE, PAUSE, PARITY
-	.enabl	lsb			; /63/
+	;.enabl	lsb			; /63/
 
 sho$dl:	wrtall	#sh.071			; /63/ "DELAY"
 	wrtall	#sh.073			; /63/ " secs before send-"
 	wrtall	#sh.075			; /63/ "init"
 	decout	sendly			; write decimal value to TT
-	br	30$			; /63/
+	br	d30$			; /63/
 
 sho$ha:	movb	handch	,r0		; recover handshake character
-	bne	10$			; got it
+	bne	d10$			; got it
 	wrtall	#sh.076			; /63/ "No handshaking in use"
-	br	30$			; /63/
-10$:	wrtall	#sh.077			; /63/ "Handshake set to "
+	br	d30$			; /63/
+d10$:	wrtall	#sh.077			; /63/ "Handshake set to "
 	cmp	r0	,#space		; /62/ is it some control char?
-	bge	20$			; /62/ no
+	bge	d20$			; /62/ no
 	wrtall	#sh.058			; /63/ " ^"
-	movb	lis.ct(r0),r0		; /62/ make it displayable
-20$:	call	writ1char		; dump the handshake char now
-	br	30$			; /63/
+	movb	lis.ctrl(r0),r0		; /62/ make it displayable
+d20$:	call	writ1char	; dump the handshake char now
+	br	d30$			; /63/
 
 sho$pr:	wrtall	#sh.078			; /63/ "S/W Parity"
 	wrtall	#sh.079			; /63/ " is set "
 	mov	parity	,r0		; recover parity
 	asl	r0			; word indexing for list below
 	wrtall	parlst(r0)		; display what it is
-	br	30$			; /63/
+	br	d30$			; /63/
 
 sho$ps:	wrtall	#sh.072			; /63/ "PAUSE secs before send-"
 	wrtall	#sh.074			; /63/ "pack"
 	decout	pauset			; write decimal value to TT
-30$:	.newline
+d30$:	.newline
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SHOW TERMINAL, CONSOLE
@@ -1037,7 +1037,7 @@ sho$co:	wrtall	#sh.083			; /63/ "Console"
 	br	90$			; /63/
 80$:	wrtall	#sh.092			; /63/ "LONG"
 90$:	.newline			; /63/
-	tst	tsxsav			; /63/ running under TSX?
+	tst	tsxsave			; /63/ running under TSX?
 	beq	100$			; /63/ skip sho$vl if not
 	call	sho$vl			; /63/ show vlswch
 100$:	jmp	sho$es			; /63/ show escape
@@ -1069,7 +1069,7 @@ sho$at:	wrtall	#sh.093			; "Attributes"
 	.page
 	.sbttl	SHOW CL:		; /62/ all new
 
-sho$cl:	tst	tsxsav			; running under TSX?
+sho$cl:	tst	tsxsave			; running under TSX?
 	bne	10$			; ya
 	direrr	#er$tsx			; no, can't do this
 	br	70$
@@ -1215,7 +1215,7 @@ sho$ph:	mov	#pnhead	,r2		; pointer to list of numbers
 	.page
 	.sbttl	SHOW VLSWCH
 
-sho$vl:	tst	tsxsav			; running under TSX?
+sho$vl:	tst	tsxsave			; running under TSX?
 	bne	10$			; ya
 	wrtall	#sh.107			; /63/ "Not available under RT-11"
 	br	30$
@@ -1251,7 +1251,7 @@ sho$sl:	wrtall	#sh.111			; /63/ "SL status: "
 	.page
 	.sbttl	SHOW MEMORY	; /BBS/ all new
 
-sho$me:	tst	tsxsav			; running under TSX?
+sho$me:	tst	tsxsave			; running under TSX?
 	beq	10$			; /62/ no
 	wrtall	#sh.114			; /63/ "TSX keeps handlers resident"
 	br	50$
@@ -1279,29 +1279,29 @@ sho$me:	tst	tsxsav			; running under TSX?
 
 	.page
 	.sbttl	SHOW REPEAT-QUOTING, SERVER, UPDATE	; /BBS/ added
-	.enabl	lsb
+	;.enabl	lsb
 
 sho$up:	wrtall	#sh.120			; /63/ "Packets between updates: "
 	mov	blip	,r0		; the interval in question
 	call	L10266			; write it to TT
-	br	20$			; /63/
+	br	f20$			; /63/
 
 sho$sv:	wrtall	#sh.121			; /63/ "Server time-out: "
 	mov	serwait	,r0		; the time-out value
 	call	L10266			; write it to TT
 	wrtall	#sh.123			; /63/ " seconds"
-	br	20$			; /63/
+	br	f20$			; /63/
 
 sho$rp:	wrtall	#sh.122			; /63/ "Repeated character quoting: "
 	tst	setrpt			; is it on?
-	bne	10$			; ya..
+	bne	f10$			; ya..
 	wrtall	#sh.019			; /63/ "DISABLED"
-	br	20$
-10$:	wrtall	#sh.021			; /63/ "enabled"
-20$:	.newline
+	br	f20$
+f10$:	wrtall	#sh.021			; /63/ "enabled"
+f20$:	.newline
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	SHOW CONTROL-CHARACTER	; /63/ all new..
@@ -1359,51 +1359,51 @@ ct.num:	deccvt	r1 ,#spare1 ,#5		; convert integer to decimal number
 
 	.page
 	.sbttl	COPY, DELETE, PRINT, RENAME 	; /BBS/ heavily hacked..
-	.enabl	lsb
+	;.enabl	lsb
 
 c$copy::upcase	argbuf			; upper case all args
 	call	gettwo			; ensure the "to:" argument is here
 	tst	r0			; did it work out ok?
-	bne	30$			; /63/ nope..
+	bne	g30$			; /63/ nope..
 	upcase	argbuf			; /62/ in case from kybd "To:" prompt
 	br	c.print			; /63/
 
 c$del::	upcase	argbuf			; upper case the argument
 	calls	delete	,^/argbuf/	; try to delete the file
 	tst	r0			; did it work?
-	bne	40$			; /63/ no
+	bne	g40$			; /63/ no
 	tst	infomsg			; SET TT QUIET?
-	beq	30$			; /63/ ya, skip result message
+	beq	g30$			; /63/ ya, skip result message
 	wrtall	#srcnam			; no wildcarding
 	wrtall	#sh.130			; /63/ simplifies things
-	br	20$
+	br	g20$
 
 c$rena::upcase	argbuf			; upper case all args
 	call	gettwo			; ensure a "to:" argument is here
 	tst	r0			; did it work out ok?
-	bne	30$			; /63/ no
+	bne	g30$			; /63/ no
 	upcase	argbuf			; /62/ in case from kybd "To:" prompt
 	calls	rename	,^/cmdbuf,argbuf/ ; do the rename now
 	tst	r0			; did it work?
-	bne	40$			; /63/ no
+	bne	g40$			; /63/ no
 	tst	infomsg			; SET TT QUIET?
-	beq	30$			; /63/ ya, skip result message
+	beq	g30$			; /63/ ya, skip result message
 	wrtall	#srcnam			; no wildcarding
 	wrtall	#sh.129			; /63/ simplifies
-10$:	wrtall	#filnam			; things
-20$:	.newline
+g10$:	wrtall	#filnam			; things
+g20$:	.newline
 	clr	r0			; /63/ no error
-30$:	return
-40$:	direrr	r0			; handle error
+g30$:	return
+g40$:	direrr	r0			; handle error
 	return
 
-c$prin::upcase	argbuf			; upper case all args
+c$print::upcase	argbuf			; upper case all args
 	strcpy	cmdbuf	,argbuf		; /62/ and put input file name here
 	scan	#'.	,cmdbuf		; is there a dot in the name?
 	tst	r0
-	bne	50$			; ya..
+	bne	g50$			; ya..
 	strcat	cmdbuf	,#typdef	; no, add .LST to it
-50$:	strcpy	argbuf	,#pridev	; /63/ make LP: the output device
+g50$:	strcpy	argbuf	,#pridev	; /63/ make LP: the output device
 	.br	c.print			; /63/
 
 c.print:mov	argbuf	,r2		; save a few bytes, use a reg
@@ -1411,33 +1411,33 @@ c.print:mov	argbuf	,r2		; save a few bytes, use a reg
 	clr	rawfil			; enable namcvt
 	calls	namcvt	,^/r2,#spare1/	; extract "file.typ"
 	tstb	spare1			; anything left?
-	bne	60$			; ya, continue
+	bne	g60$			; ya, continue
 	calls	namcvt	,^/cmdbuf,#spare1/ ; no, get input "file.typ"
 	strcat	r2	,#spare1	; concat input_file_name to output_dev
-60$:	mov	(sp)+	,rawfil		; back to where it wuz..
+g60$:	mov	(sp)+	,rawfil		; back to where it wuz..
 	calls	fparse	,^/cmdbuf,#srcnam/ ; /62/ get attrs here as lookup is
 	clr	index			; /62/ in another overlay  init index
 	calls   lookup  ,^/#srcnam,#spare1/ ; /62/ load input file attributes
 	.purge	#lun.sr			; /62/ dump lookup channel
 	calls	copy	,^/cmdbuf,r2/	; do the copy now
 	tst	r0			; did it work?
-	bne	40$			; no
+	bne	g40$			; no
 	tst	infomsg			; SET TT QUIET?
-	beq	30$			; /63/ ya, skip result message
+	beq	g30$			; /63/ ya, skip result message
 	mov	r1	,r0		; print the
 	call	L10266			; block count
 	wrtall	#sh.131			; /63/ and a header
 	dec	r1			; how many blocks were moved?
-	beq	70$			; had to be just one, skip "s"
+	beq	g70$			; had to be just one, skip "s"
 	wrtall	#sh.118			; /63/ not 1, this "s" makes it plural
-70$:	wrtall	#sh.132			; /63/ then do the next part of log
-	jmp	10$			; /63/ message and where it went
+g70$:	wrtall	#sh.132			; /63/ then do the next part of log
+	jmp	g10$			; /63/ message and where it went
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Get second argument for a command
-	.enabl	lsb
+	;.enabl	lsb
 
 ;	input:	argbuf	= command args
 ;	output:	cmdbuf	= first arg
@@ -1475,6 +1475,6 @@ gettwo::save	^/r1,r2/
 40$:	unsave	^/r2,r1/
 	return
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.end

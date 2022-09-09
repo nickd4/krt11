@@ -72,11 +72,11 @@ loaset::mov	#setcmd	,r0		; calling this also loads this overlay
 	command setcmd	,CL:		,2	,set$cl	,std.05
 	command setcmd	,CONSOLE	,2	,set$co	,std.06
 	command setcmd	,CONTROL-CHARACTER,4	,set$ct	,std.07
-	command setcmd	,DEBUG		,3	,set$de	,std.08
+	command setcmd	,DEBUG		,3	,set$debug,std.08
 	command setcmd	,DEFAULT	,3	,c$cwd	,std.09
 	command	setcmd	,DELAY		,3	,set$dl	,std.10
 	command setcmd	,DIAL		,2	,set$di	,std.06
-	command setcmd	,DTR		,2	,set$dt
+	command setcmd	,DTR		,2	,set$dtr
 	command setcmd	,DUPLEX		,2	,set$du	,std.11
 	command	setcmd	,END-OF-LINE	,2	,set$eo	,std.12
 	command setcmd	,EOF		,2	,set$ef	,std.13
@@ -87,11 +87,11 @@ loaset::mov	#setcmd	,r0		; calling this also loads this overlay
 	command setcmd	,HOME		,2	,set$ho	,std.09
 	command setcmd	,INCOMPLETE-FILE-DISPOSITION ,1	,set$in	,std.17
 	command setcmd	,LD:		,2	,set$ld	,std.06
-	command setcmd	,LINE		,2	,set$li	,std.18
+	command setcmd	,LINE		,2	,set$line,std.18
 	command setcmd	,LOCAL-ECHO	,3	,set$lc	,std.01
-	command setcmd	,LOGFILE	,3	,set$lo
+	command setcmd	,LOGFILE	,3	,set$log
 	command setcmd	,LONG-PACKETS	,3	,set$lp	,std.01
-	command setcmd	,MODEM-TYPE	,1	,set$mo	,std.19
+	command setcmd	,MODEM-TYPE	,1	,set$modem,std.19
 	command	setcmd	,NOATTRIBUTES	,3	,st$nat
 	command setcmd	,NODEBUG	,3	,sd$off
 	command	setcmd	,NOLONG-PACKETS	,3	,st$nlp

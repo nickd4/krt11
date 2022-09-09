@@ -14,7 +14,7 @@
 ; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
 ;
 ;	"pic" code dumped
-;	if TSX, line number saved in tsxsav during init, for t.ttxon
+;	if TSX, line number saved in tsxsave during init, for t.ttxon
 ;	store clock rate (50/60 Hz) in clkflg, use elsewhere for timers
 ;	add init for TSX activation char list
 ;	call assdev when PRO-350 tries to automatically assign CL or XC
@@ -108,7 +108,7 @@
 	STATWD	= 366		; /62/ DCL indirect file status word
 		IFACTV	= 400	; /62/ indirect file active bit
 	SYSGEN	= 372		; /BBS/ sysgen features word
-		MARKTIM	= 2000	; SJ timer support is present
+		MARKTIME = 2000	; SJ timer support is present
 	SYSVER	= 276		; the monitor version number
 	TOPMEM	= 50		; location of address of top of memory
 	TS.VER	= -32.		; /BBS/ offset to TSX version number
@@ -127,9 +127,9 @@
 	$.3	= ^/LN$MAX+2/*2		; cmdbuf and argbuf allocations
 	$.4	= ^?^/LN$MAX+2/*LN$CNT?	; SL editor command line buffers
 
-	TOTALL	== ^/ALSIZE+BINLSIZE+$ALLSIZ+$$BUFP+$.1+$.2+$.3+$.4/
+	TOTALL	== ^/ALSIZE+BINLSIZ+$ALLSIZ+$$BUFP+$.1+$.2+$.3+$.4/
 
-	.if eq TOTALL-<^?TOTALL/100?*100> ; 32-word boundary
+	.if eq TOTALL-(^?TOTALL/100?*100) ; 32-word boundary
 	ALLOC	== TOTALL		; landed right on it
 	.iff
 	ALLOC	== ^/TOTALL&177700/+100	; force to next 32-word boundary
@@ -146,18 +146,18 @@ apr7re:	; /62/	.rdbbk	alloc/100	; define symbols and reserve space
 	R.GNAM=:6.
 	R.GBAS=:10.
 	R.GLGH=:12.
-	RS.CRR=:^o100000
-	RS.UNM=:^o40000
-	RS.NAL=:^o20000
-	RS.NEW=:^o10000
-	RS.GBL=:^o4000
-	RS.CGR=:^o2000
-	RS.AGE=:^o1000
-	RS.EGR=:^o400
-	RS.EXI=:^o200
-	RS.CAC=:^o100
-	RS.BAS=:^o40
-	RS.NSM=:^o20
+	RS.CRR=:0o100000
+	RS.UNM=:0o40000
+	RS.NAL=:0o20000
+	RS.NEW=:0o10000
+	RS.GBL=:0o4000
+	RS.CGR=:0o2000
+	RS.AGE=:0o1000
+	RS.EGR=:0o400
+	RS.EXI=:0o200
+	RS.CAC=:0o100
+	RS.BAS=:0o40
+	RS.NSM=:0o20
 	.WORD	0,alloc/100,0,0,0,0
 apr7wi:	; /62/	.wdbbk	7,alloc/100,0,0,alloc/100,ws.map ; for memory region
 	W.NID=:0			; /62/ expanded to assemble under V4
@@ -165,14 +165,14 @@ apr7wi:	; /62/	.wdbbk	7,alloc/100,0,0,alloc/100,ws.map ; for memory region
 	W.NBAS=:2.
 	W.NSIZ=:4.
 	W.NRID=:6.
-	W.NOFF=:^o10
-	W.NLEN=:^o12
-	W.NSTS=:^o14
-	W.NLGH=:^o16
-	WS.CRW=:^o100000
-	WS.UNM=:^o40000
-	WS.ELW=:^o20000
-	WS.MAP=:^o400
+	W.NOFF=:0o10
+	W.NLEN=:0o12
+	W.NSTS=:0o14
+	W.NLGH=:0o16
+	WS.CRW=:0o100000
+	WS.UNM=:0o40000
+	WS.ELW=:0o20000
+	WS.MAP=:0o400
 	.BYTE	0,7
 	.WORD	0,alloc/100,0,0,alloc/100,ws.map
 mapwrk:	.word	0 ,0			; mapping work buffer
@@ -310,9 +310,9 @@ xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover
 	beq	80$			; /62/ if cntxt=0, it's TSX
 ; /62/	.peek	#rtwork	,r1		; /62/ get job state word
 	MOV	#rtwork	,R0		; /62/ expanded for assy under V4
-	MOV	#28.*^o400+1.,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+1.,@R0	; /62/ even though V4 can't run it
 	MOV	r1	,2.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 	bit	#vrun$	,r0		; /62/ running under VBGEXE today?
 	beq	80$			; /62/ nope..
 	mov	sp	,vbgexe		; /62/ ya
@@ -353,16 +353,16 @@ xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover
 					; it's KRTTSX.SAV on RT-11XM or TSX+
 ; /62/	.crrg	#mapwrk	,#apr7re	; we will instead create a region
 	MOV	#mapwrk	,R0		; /62/ expanded to assemble under V4
-	MOV	#30.*^o400+0.,@R0	; /62/ even though it can't run there
+	MOV	#30.*0o400+0.,@R0	; /62/ even though it can't run there
 	MOV	#apr7re	,2.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 	bcs	140$			; didn't work..
 	mov	apr7re+r.gid,apr7wi+w.nrid  ; this will allow future expansion
 ; /62/	.craw	#mapwrk	,#apr7wi	; create address window and map it
 	MOV	#mapwrk	,R0		; /62/ expanded to assemble under V4
-	MOV	#30.*^o400+2.,@R0	; /62/ even though it can't run there
+	MOV	#30.*0o400+2.,@R0	; /62/ even though it can't run there
 	MOV	#apr7wi	,2.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 	bcs	140$			; if failed..
 	mov	#alloc+160000,maxtop	; /BBS/ success, save copy of the top
 	jmp	A200$			; continue
@@ -460,15 +460,15 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	mov	r2	,fetpt		; yes, setup pointers for .fetch now
 	mov	@hilimit,fetptmax	; max address for .fetching
 	tst	vbgexe			; /62/ is VBGEXE running this program?
-	bne	240$			; /62/ ya
+	bne	$240$			; /62/ ya
 	tst	montyp			; if this is XM, then we must
-	ble	240$			; force handlers into lowcore
+	ble	$240$			; force handlers into lowcore
 	mov	#xmflow	,xmfetpt	; ensure APR0 fetching
 	add	#3	,xmfetpt	; ensure
 	bic	#1	,xmfetpt	; .even
 	mov	#xmfetpt,fetpt		; now insert address of pointer
 	mov	#xmftop	,fetptmax	; this is the top of XM .fetch space
-	.br	240$			; /63/
+	.br	$240$			; /63/
 
 	.page
 	.sbttl	Set/get terminal config..   ; /BBS/ moved here
@@ -477,7 +477,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	$TCFIG	= 424			; offset to addr of term config word
 	$SCOPE	= 100000		; and its SET TT SCOPE bit
 
-240$:	bis	#ttmode	,@#jsw		; this pgm runs in single char mode
+$240$:	bis	#ttmode	,@#jsw		; this pgm runs in single char mode
 	.rctrlo				; force read of new jsw..
 	mov	@#jsw	,ttparm		; save jsw
 	mov	sp	,remote		; /62/ assume remote mode
@@ -502,7 +502,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	emt	375			; try to get it
 	bcc	260$			; /62/ got it
 	jmp	350$			; /62/ if failed it's not TSX
-260$:	mov	r0	,tsxsav		; /BBS/ stash TSX line number here
+260$:	mov	r0	,tsxsave	; /BBS/ stash TSX line number here
 
 	movb	r0	,tsxj.l		; /62/ copy to check line status
 	mov	#tsxjob	,r0		; /62/ point to argument block
@@ -510,7 +510,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	bcs	270$			; /62/ something failed..
 	bit	#2	,chkbuf		; /62/ is this a detached job?
 	beq	270$			; /62/ no
-	mov	#-1	,jobtyp		; /62/ ya, flag it
+	mov	#-1	,jobtype	; /62/ ya, flag it
 
 270$:	mov	#tsxon	,r0		; /BBS/ TSX nowait TT input mode
 	emt	375			; /BBS/ enable it
@@ -552,7 +552,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	cmp	vttype	,#vt200		; /BBS/ is it an 8-bit terminal?
 	bne	320$			; /BBS/ nope ..
 	mov	sp	,con8bit	; /BBS/ ya, do this for CONNECT
-320$:	mov	tsxsav	,r0		; /BBS/ recover line number
+320$:	mov	tsxsave	,r0		; /BBS/ recover line number
 	dec	r0			; which line (1=console) is this?
 	bne	340$			; not console
 	.dstat	#rtwork	,#pi.r50	; console, see if this is a PRO
@@ -584,9 +584,9 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 360$:	mov	r0	,r1		; save copy for peek
 ; /62/	.peek	#rtwork	,r1		; got to do it this way for XM!
 	MOV	#rtwork	,R0		; /62/ expanded for assy under V4
-	MOV	#28.*^o400+1.,@R0	; /62/ even though V4 can't run it
+	MOV	#28.*0o400+1.,@R0	; /62/ even though V4 can't run it
 	MOV	r1	,2.(R0)		; /62/
-	EMT	^o375			; /62/
+	EMT	0o375			; /62/
 370$:	mov	r0	,ttpar2		; save it
 	bit	#$scope	,r0		; hard copy terminal?
 	beq	380$			; ya

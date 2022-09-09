@@ -264,7 +264,8 @@
 	dtrdrv	= 206		; set or clear DTR and RTS
 	clset	= 250		; /63/ set some TSX options
 	clrset	= 251		; /63/ reset some TSX options
-	clstat	= 255		; TSX style modem status
+	; moved to krtdef.mac
+	;clstat	= 255		; TSX style modem status
 		cl.dcd	= 2	; /63/ dcd
 		cl.dtr	= 4	; /63/ dtr
 		cl.rts	= 10	; /63/ rts
@@ -580,7 +581,7 @@ cl.char:.if eq	mmg$t
 
 	.page
 	.sbttl	SPFUN dispatching
-	.enabl	lsb
+	;.enabl	lsb
 
 spfun:	cmpb	r5	,#srddrv	; read at least 1 byte?
 	bne	10$			; no
@@ -626,7 +627,7 @@ kilqe:	.word	0			;  input last queue element
 km$err:	bis	#hderr$	,@-(r4)		; set error bit if none of above cause
 km$fin:	.drfin	KM			; knowing's more important than noping
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Set and/or clear flow control
@@ -649,8 +650,9 @@ s.clr:	clr	rxhold			; hose possible received hold
 	.endc	; eq km$pro
 	br	km$fin			; done
 
-	.page	.sbttl	Set or clear DTR and RTS
-	.enabl	lsb
+	.page
+	.sbttl	Set or clear DTR and RTS
+	;.enabl	lsb
 
 s.dtr:	tst	q$wcnt(r4)		; set or clear?
 	bne	x.dtr			; set..
@@ -678,7 +680,7 @@ x.dtr:	.ift
 	.endc	; eq km$pro
 20$:	br	km$fin			; done
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	RT-11 style status
@@ -898,7 +900,7 @@ inttab:	.word	xxint-intdsp		; unknown interrupts
 
 	.page
 	.sbttl	Output (to modem) interrupt service
-	.enabl	lsb
+	;.enabl	lsb
 
 	.if eq km$pro
 	br	abort			; abort entry point
@@ -957,7 +959,7 @@ qchflg:	.word	0			;  ^// if queue is being updated
 	.endc	; eq km$pro
 	rts	pc
 
-	.dsabl	lsb
+	;.dsabl	lsb
 
 	.page
 	.sbttl	Get next output (to modem) character
