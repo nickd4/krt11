@@ -3,6 +3,9 @@
 *.lst
 *.rel
 *.rst
+/bad
+/diff
+/good
 /krt.map
 /krt11.tap
 __temp__

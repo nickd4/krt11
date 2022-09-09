@@ -29,13 +29,13 @@
 	.mcall	.TTYOUT	,.TWAIT
 
 
-	.psect	$pdata
+	.psect	segment_000012_$pdata
 fifteen:.word	0 ,15			; wait fifteen ticks after EOF
 short:	.word	0 ,1			; wait up to 1 tick for remote to echo
 twarea:	.word	0 ,0			; .twait work area
 
 	.page
-	.psect	$$code
+	.psect	segment_000012_$code
 	.sbttl	TRANSMIT		; /BBS/ heavily hacked..
 
 ;	input:	argbuf	= name of file to send

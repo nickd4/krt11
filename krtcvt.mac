@@ -65,10 +65,10 @@
 	.page
 	.sbttl	Local data		; /63/ consolidate here..
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000022_$rwdata	,rw,d,lcl,rel,con
 chkbuf:	.byte	0 ,0 ,0 ,0 ,0 ,0	; /BBS/ buff to pad extents <3 chars
 
-	.psect	$pdata
+	.psect	segment_000022_$pdata
 defchr:	.byte	'X&137			; replace any bad name char with this
 okchr:	.asciz	"0123456789.:ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; /BBS/ allow device
 	.even				; /E64/ just in case
@@ -174,7 +174,7 @@ paction:			; action routines for file name parsing
 	.word	fin		; done, append a dot if needed and exit
 
 	.page
-	.psect	$$code
+	.psect	segment_000022_$code
 	.sbttl	Parse file specification to extract only filnam.typ
 
 ;	input:	 (r5)	address of source file_spec

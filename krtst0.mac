@@ -64,10 +64,10 @@
 	.page
 	.sbttl	Local data
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000011_$rwdata	,rw,d,lcl,rel,con
 savpnt:	.word	0			; save pointer to next arg here
 
-	.psect	$pdata			; /63/ consolidate all data here..
+	.psect	segment_000011_$pdata			; /63/ consolidate all data here..
 log2lp:	.asciz	"KRTLOG.OUT"		; /63/ need a name for later os vers
 logext:	.asciz	".LOG"
 prefix:	.asciz	"Logfile "
@@ -121,7 +121,7 @@ st0.45:	.asciz	" is not a control character"
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000011_$code
 	.sbttl	LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
 	;.enabl	lsb
 

@@ -168,16 +168,16 @@ e$retr:	.asciz	"Retry limit reached"
 e$sync:	.asciz	"Packet serial numbers are out of sync"
 pak.01:	.asciz	"Kermit: "
 pak.02:	.asciz	"<<< RPACK - "
-pak.03:	.asciz	"^/TIMOUT/"
+pak.03:	.asciz	"<TIMOUT>"
 pak.04:	.asciz	"BAD Checksum: RCV,CALC = "
-pak.05:	.asciz	"^/SOH/"
-pak.06:	.ascii	"^/EOL/"
+pak.05:	.asciz	"<SOH>"
+pak.06:	.ascii	"<EOL>"
 pak.07:	.asciz	^/cr/^/lf/
 pak.08:	.asciz	">>> SPACK - "
 	.even
 
 	.page
-	.psect	$$code
+	.psect	_$code
 	.sbttl	Read incoming packet
 
 ;	R P A C K $

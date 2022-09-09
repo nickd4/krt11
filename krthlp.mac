@@ -74,7 +74,7 @@
 	.page
 	.sbttl	Local data
 
-	.psect	$pdata
+	.psect	segment_000007_$pdata
 sub.0:	.word	sub.2 ,sub.3 ,sub.4	; /62/ for nested wildcarded headers
 rtname:	.word	10$ ,20$ ,30$ ,40$ ,0	; /63/ this is the help file path
 10$:	.asciz	"HLP:KRTHLP.HLP"	; /BBS/ try here first
@@ -94,7 +94,7 @@ nohelp:	.asciz	"% Help not found for the requested topic"^/cr/^/lf/ ; /63/
 ptopic:	.asciz	" Select topic, please: " ; /BBS/ for prompting
 	.even
 
-	.psect	$rwdata	,rw,d,lcl,rel,con ; /BBS/
+	.psect	segment_000007_$rwdata	,rw,d,lcl,rel,con ; /BBS/
 backlev:.word	0			; /BBS/ last good topic in case error
 backup:	.word	0			; /BBS/ for nesting in on an error
 hlpbuf:	.blkb	134.			; /63/ read/write buffer for the file
@@ -114,7 +114,7 @@ ttbuff:	.blkb	134.			; /63/ terminal read buffer
 wild:	.word	0			; ^// if topic wildcarded
 
 	.page
-	.psect	$$code
+	.psect	segment_000007_$code
 	.sbttl	BUG, HPRINT
 
 c$phlp::tst	outopn			; /63/ come here to print it too..

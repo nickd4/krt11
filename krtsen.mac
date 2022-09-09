@@ -61,7 +61,7 @@
 	.page
 	.sbttl	Local data
 
-	.psect	$pdata			; /62/ consolidated this stuff here..
+	.psect	segment_000005_$pdata			; /62/ consolidated this stuff here..
 fillst:	.word	10$	,20$	,30$	; /63/
  10$:	.asciz	"ASCII (7-bit)"		; /63/
  20$:	.asciz	"BINARY (8-bit)"	; /63/
@@ -83,11 +83,11 @@ sen.08:	.asciz	" as "			; /63/
 sen.09:	.asciz	" file "
 	.even
 
-	.psect	recpkt	,rw,d,lcl,rel,con
+	.psect	segment_000005_recpkt	,rw,d,lcl,rel,con
 recpkt:	.blkb	maxpak+2		; /62/ added passed length to rpack
 
 	.page
-	.psect	$$code
+	.psect	segment_000005_$code
 	.sbttl	State controller for send file processing
 	;.enabl	lsb
 
@@ -139,7 +139,7 @@ sensw::	movb	@r5	,state		; state at which caller wants to begin
 	return
 
 	.save
-	.psect	$pdata
+	.psect	segment_000005_$pdata
 70$:	.byte	sta.abo	,sta.brk,sta.com,sta.dat,sta.fil,sta.atr,sta.sin
 	.byte	sta.eof	,sta.cca
 	.byte	0
@@ -271,7 +271,7 @@ sattr:	clr	datauk			; /62/ init re-read only flag
 	return
 
 	.save
-	.psect	$pdata
+	.psect	segment_000005_$pdata
 50$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
@@ -336,7 +336,7 @@ sbreak:	clr	datauk			; /62/ init re-read only flag
 	return				; /62/ no, carry cleared by above tst
 
 	.save
-	.psect	$pdata
+	.psect	segment_000005_$pdata
 30$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
@@ -414,7 +414,7 @@ sinit:	movb	#msg$snd,-(sp)		; normal sinit operation
 	return
 
 	.save
-	.psect	$pdata
+	.psect	segment_000005_$pdata
 40$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
@@ -542,7 +542,7 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 	return
 
 	.save
-	.psect	$pdata
+	.psect	segment_000005_$pdata
 100$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
@@ -614,7 +614,7 @@ sdata:	clr	datauk			; /62/ init re-read only flag
 	return				; /62/ no, carry cleared by above tst
 
 	.save
-	.psect	$pdata
+	.psect	segment_000005_$pdata
 30$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even
@@ -757,7 +757,7 @@ seof:	clr	datauk			; /62/ init re-read only flag
 	return
 
 	.save
-	.psect	$pdata
+	.psect	segment_000005_$pdata
 40$:	.byte	msg$error,msg$nak,msg$ack,timout,badchk
 	.byte	0
 	.even

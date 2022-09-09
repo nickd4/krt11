@@ -6,14 +6,14 @@
 ;	moved this into a module of its own as KRTHLP was > 4096. words
 
 	.page
-	.psect	$$code	,ro,i,lcl,rel,con
+	.psect	segment_000014_$code	,ro,i,lcl,rel,con
 	.sbttl	Pass top of index back to caller
 
 loahlp::mov	#hlphead,r0		; calling this also loads this overlay
 	return
 
 	.page
-	.psect	$pdata	,ro,d,lcl,rel,con
+	.psect	segment_000014_$pdata	,ro,d,lcl,rel,con
 	.sbttl	Fake RMS for help text file under RT-11
 
 ;	Note here the "block" and "offset" point to the first line FOLLOWING

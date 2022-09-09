@@ -11,7 +11,7 @@
 ;	Copyright 1985,1986 Change Software, Inc.
 
 	.page
-	.psect	$$code	,ro,i,lcl,rel,con	; /63/ added this to..
+	.psect	segment_000024_$code	,ro,i,lcl,rel,con	; /63/ added this to..
 	.sbttl	Load this overlay and return its location
 
 loamdm::mov	#modinf	,r0		; /63/ return address of top of list
@@ -139,7 +139,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 ;
 	.list (me)
 	.save
-	.psect	resdat	,ro,d,lcl,rel,con ; /62/
+	.psect	segment_000024_resdat	,ro,d,lcl,rel,con ; /62/
 	.nlist (me)
 	$res1 = .			; save current pc in "resdat"
 	.word	0			; link to next is zero for now..
@@ -158,7 +158,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.iff				; not the first time
 	.list (me)
 	.save
-	.psect	resdat	,ro,d,lcl,rel,con
+	.psect	segment_000024_resdat	,ro,d,lcl,rel,con
 	$respc = .			; save the current pc
 	. = $reslast			; back to link word of previous entry
 	.word	$res1			; insert address of new entry
@@ -212,7 +212,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.macro	modstr	s ,offset	; insert a string in modem's data
 	.list (me)
 	.save
-	.psect	string	,ro,d,lcl,rel,con
+	.psect	segment_000024_string	,ro,d,lcl,rel,con
 	.nlist (me)
 	$$addr	= .
 	$$ = 0
@@ -232,7 +232,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	  .endr
 	.byte	0			; null terminate
 	.list (me)
-	.psect	modinf	,ro,d,lcl,rel,con
+	.psect	segment_000024_modinf	,ro,d,lcl,rel,con
 	. = $$current+offset
 	.word	$$addr			; where to find it..
 	.restore
@@ -242,7 +242,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.macro	modval	val ,offset	; insert value (word) in modem's data
 	.list (me)
 	.save
-	.psect	modinf	,ro,d,lcl,rel,con
+	.psect	segment_000024_modinf	,ro,d,lcl,rel,con
 	. = $$current+offset		; it goes here..
 	.word	val
 	.restore
@@ -278,7 +278,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 
 	.list (me)
 	.save
-	.psect	string	,ro,d,lcl,rel,con ; switch to string psect
+	.psect	segment_000024_string	,ro,d,lcl,rel,con ; switch to string psect
 	$$ = .				; save location of
 	.asciz	"s"			; the modem type string
 	.even
@@ -324,12 +324,10 @@ lab:	.word	0		;  0 mod.next	   link to next please
 	.iff				; if this is the user-defined modem..
 	.list (me)
 	.restore			; exit root, come back to this overlay
-; this doesn't work as it tries to overwrite previously generated code (link)
-; just comment it out for now and we will come back and get it working later
-;	$$$ = .
-;	. = $modtail			; /BBS/ back to top of last definition
-;	.word	lab			; /62/ insert link to user-defined
-;	. = $$$
+	$$$ = .
+	. = $modtail			; /BBS/ back to top of last definition
+	.word	lab			; /62/ insert link to user-defined
+	. = $$$
 	.nlist (me)
 	.endc	; b ^/user/
 	.endm	define
@@ -355,7 +353,7 @@ lab:	.word	0		;  0 mod.next	   link to next please
 ;	       messages have been dumped here to save space.
 
 	.page
-	.psect	modinf	,ro,d,lcl,rel,con
+	.psect	segment_000024_modinf	,ro,d,lcl,rel,con
 	.sbttl	Finally, we can define the modems
 
 ; /BBS/ NOTE:  When a response string is a  substring  of  another  response

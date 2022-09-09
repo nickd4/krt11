@@ -61,7 +61,7 @@
 
 	.sbttl	Local data		; /63/ consolidated here..
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000003_$rwdata	,rw,d,lcl,rel,con
 crflag:	.word	0			; /62/ TYPE uses to add LF to lone CR
 itsmine:.word	0			; device is already allocated flag
 tk.0:	.word	T10$ ,T30$ ,T50$ ,T70$ ,0	; addresses of names to try
@@ -77,7 +77,7 @@ tk.1:	.word	T20$ ,T40$ ,T60$ ,T80$ ,0	; put actual file name here
 cl.nam:	.asciz	"CLn:"			; ascii copy of CL name with unit #
 	.even
 
-	.psect	$pdata
+	.psect	segment_000003_$pdata
 parlst:	.word	P00$ ,P10$ ,P20$ ,P30$ ,P40$	; parity display in SHOW LINE
  P00$:	.asciz	"NONE"
  P10$:	.asciz	"ODD"
@@ -112,7 +112,7 @@ typdef:	.asciz	".LST"			; default extent for type
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000003_$code
 	.sbttl	The SET command		; /BBS/ just about all new..
 
 c$set::	upone	argbuf			; upper case just next arg
@@ -659,7 +659,7 @@ c.mnt:	tst	tsxsave			; /63/ running under TSX?
 	.sbttl	The local TYPE command	; /BBS/ heavily hacked..
 
 	.save
-	.psect	$pdata
+	.psect	segment_000003_$pdata
 less:	.asciz	^/cr/^/lf/		; only type these for a binary file
 more:	.asciz	^/bell/^/bs/^/tab/^/cr/^/ff/^/lf/^/ctrl$n/^/ctrl$o/^/esc/ ; ok in text
 	.even

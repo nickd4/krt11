@@ -40,7 +40,7 @@
 	KRTINC	=	1		; for .include error checking
 
 	.page
-	.psect	$$code	,ro,i,lcl,rel,con ; psect ordering..
+	.psect	_$code	,ro,i,lcl,rel,con ; psect ordering..
 	.psect	$pdata	,ro,d,lcl,rel,con
 
 ;	various ascii chars

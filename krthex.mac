@@ -142,7 +142,7 @@ rtwork:	.blkw	10			; read/write work area
 
 	.page
 	.sbttl	Main program loop
-	.psect	$$code	,ro,i,lcl,rel,con
+	.psect	_$code	,ro,i,lcl,rel,con
 
 convert:.csigen	#handld	,#defext ,#0 ,#cmdbuf ; get and process a command
 	bcc	10$			; ok

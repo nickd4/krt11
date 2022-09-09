@@ -1417,7 +1417,7 @@ comment:.byte	scolon ,'! ,0		; /63/ comment delimiters list
 	.even
 
 	.page
-	.psect	$$code
+	.psect	_$code
 	.sbttl	Init the program
 
 kermit::mov	#stack	,sp		; initialize a large stack

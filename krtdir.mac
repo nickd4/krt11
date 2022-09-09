@@ -98,12 +98,12 @@ name2:	.blkb	12			; /62/ disk file name, for matching
 numblks:.word	0			; /BBS/ total blocks of listed files
 numfree:.word	0			; /BBS/ total blocks empty+tent files
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000020_$rwdata	,rw,d,lcl,rel,con
 L310$:	.word	0			; /58/ searched string base address
 L311$:	.word	0			; /58/ string width
 sluggy:	.blkw	41.			; /62/ slug buffer, .csispc, etc, etc.
 
-	.psect	$pdata			; /BBS/ all new..
+	.psect	segment_000020_$pdata			; /BBS/ all new..
 defext:	.word	star ,0 ,0 ,0		; /62/ input default extent is wild
 months:	.ascii "-ERR-Jan-Feb-Mar-Apr-May-Jun-Jul-Aug-Sep-Oct-Nov-Dec-" ; /BBS/
 nodate:	.asciz " No Date "		; /BBS/
@@ -120,7 +120,7 @@ vms:	.asciz	"DECVMSEX"		; /54/ from EXCHANGE under VMS4.x
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000020_$code
 	.sbttl	Wildcarded lookup
 
 ;	L O O K U P			; /62/ merged getnth into this..

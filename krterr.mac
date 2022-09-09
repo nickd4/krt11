@@ -24,7 +24,7 @@
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 
-	.psect	$pdata
+	.psect	segment_000023_$pdata
 	.sbttl	Error codes defined
 
 	; Kermit's main loop handles these five errors
@@ -284,7 +284,7 @@ baderr:	.asciz	"Unknown error  r0 = "
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000023_$code
 	.sbttl	Error message generator	; /BBS/ somewhat changed..
 
 ;	S Y S E R R
@@ -293,7 +293,7 @@ baderr:	.asciz	"Unknown error  r0 = "
 ;	output:	 2(r5)	= buffer for error message text
 
 ;	.save
-;	.psect	$pdata
+;	.psect	segment_000023_$pdata
 ;prefix:.asciz	"?KRTBBS-E-"		; error message header for the bbs
 ;	.even
 ;	.restore

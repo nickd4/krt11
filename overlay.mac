@@ -1,0 +1,125 @@
+	; region addresses and segment/psect order taken from krt/krt.map
+
+region_000001 = 045106
+region_000002 = 050634
+region_000003 = 057344
+region_000004 = 076754
+
+	.bank	segment_000001 (base=region_000001,fsfx=_segment_000001)
+	.area	segment_000001_$code (rel,con,bank=segment_000001)
+	.area	segment_000001_$pdata (rel,con,bank=segment_000001)
+	.area	segment_000001_$rwdata (rel,con,bank=segment_000001)
+
+	.bank	segment_000002 (base=region_000001,fsfx=_segment_000002)
+	.area	segment_000002_$code (rel,con,bank=segment_000002)
+	.area	segment_000002_$pdata (rel,con,bank=segment_000002)
+	.area	segment_000002_xcrw (rel,con,bank=segment_000002)
+
+	.bank	segment_000003 (base=region_000002,fsfx=_segment_000003)
+	.area	segment_000003_$code (rel,con,bank=segment_000003)
+	.area	segment_000003_$pdata (rel,con,bank=segment_000003)
+	.area	segment_000003_$rwdata (rel,con,bank=segment_000003)
+
+	.bank	segment_000004 (base=region_000002,fsfx=_segment_000004)
+	.area	segment_000004_$code (rel,con,bank=segment_000004)
+	.area	segment_000004_$pdata (rel,con,bank=segment_000004)
+	.area	segment_000004_mapwin (rel,con,bank=segment_000004)
+	.area	segment_000004_$rwdata (rel,con,bank=segment_000004)
+
+	.bank	segment_000005 (base=region_000002,fsfx=_segment_000005)
+	.area	segment_000005_$code (rel,con,bank=segment_000005)
+	.area	segment_000005_$pdata (rel,con,bank=segment_000005)
+	.area	segment_000005_recpkt (rel,con,bank=segment_000005)
+
+	.bank	segment_000006 (base=region_000002,fsfx=_segment_000006)
+	.area	segment_000006_$code (rel,con,bank=segment_000006)
+	.area	segment_000006_$pdata (rel,con,bank=segment_000006)
+
+	.bank	segment_000007 (base=region_000002,fsfx=_segment_000007)
+	.area	segment_000007_$code (rel,con,bank=segment_000007)
+	.area	segment_000007_$pdata (rel,con,bank=segment_000007)
+	.area	segment_000007_$rwdata (rel,con,bank=segment_000007)
+
+	.bank	segment_000010 (base=region_000003,fsfx=_segment_000010)
+	.area	segment_000010_$code (rel,con,bank=segment_000010)
+	.area	segment_000010_$pdata (rel,con,bank=segment_000010)
+	.area	segment_000010_$rwdata (rel,con,bank=segment_000010)
+
+	.bank	segment_000011 (base=region_000003,fsfx=_segment_000011)
+	.area	segment_000011_$code (rel,con,bank=segment_000011)
+	.area	segment_000011_$pdata (rel,con,bank=segment_000011)
+	.area	segment_000011_$rwdata (rel,con,bank=segment_000011)
+	.area	segment_000011_cmdtxt (rel,con,bank=segment_000011)
+	.area	segment_000011_cmddsp (rel,con,bank=segment_000011)
+	.area	segment_000011_xmodat (rel,con,bank=segment_000011)
+
+	.bank	segment_000012 (base=region_000003,fsfx=_segment_000012)
+	.area	segment_000012_$code (rel,con,bank=segment_000012)
+	.area	segment_000012_$pdata (rel,con,bank=segment_000012)
+	.area	segment_000012_cmdtxt (rel,con,bank=segment_000012)
+	.area	segment_000012_cmddsp (rel,con,bank=segment_000012)
+	.area	segment_000012_$rwdata (rel,con,bank=segment_000012)
+	.area	segment_000012_condat (rel,con,bank=segment_000012)
+
+	.bank	segment_000013 (base=region_000003,fsfx=_segment_000013)
+	.area	segment_000013_$code (rel,con,bank=segment_000013)
+	.area	segment_000013_$pdata (rel,con,bank=segment_000013)
+	.area	segment_000013_$rwdata (rel,con,bank=segment_000013)
+	.area	segment_000013_cmdtxt (rel,con,bank=segment_000013)
+	.area	segment_000013_cmddsp (rel,con,bank=segment_000013)
+
+	.bank	segment_000014 (base=region_000003,fsfx=_segment_000014)
+	.area	segment_000014_$code (rel,con,bank=segment_000014)
+	.area	segment_000014_$pdata (rel,con,bank=segment_000014)
+
+	.bank	segment_000015 (base=region_000003,fsfx=_segment_000015)
+	.area	segment_000015_$code (rel,con,bank=segment_000015)
+	.area	segment_000015_$pdata (rel,con,bank=segment_000015)
+	.area	segment_000015_$rwdata (rel,con,bank=segment_000015)
+	.area	segment_000015_genval (rel,con,bank=segment_000015)
+	.area	segment_000015_gendsp (rel,con,bank=segment_000015)
+	.area	segment_000015_$addr (rel,con,bank=segment_000015)
+	.area	segment_000015_$addr1 (rel,con,bank=segment_000015)
+	.area	segment_000015_$type (rel,con,bank=segment_000015)
+	.area	segment_000015_$size (rel,con,bank=segment_000015)
+	.area	segment_000015_$name (rel,con,bank=segment_000015)
+
+	.bank	segment_000016 (base=region_000004,fsfx=_segment_000016)
+	.area	segment_000016_$code (rel,con,bank=segment_000016)
+	.area	segment_000016_$pdata (rel,con,bank=segment_000016)
+
+	.bank	segment_000017 (base=region_000004,fsfx=_segment_000017)
+	.area	segment_000017_$code (rel,con,bank=segment_000017)
+	.area	segment_000017_$pdata (rel,con,bank=segment_000017)
+	.area	segment_000017_$rwdata (rel,con,bank=segment_000017)
+	.area	segment_000017_cmdtxt (rel,con,bank=segment_000017)
+	.area	segment_000017_cmddsp (rel,con,bank=segment_000017)
+
+	.bank	segment_000020 (base=region_000004,fsfx=_segment_000020)
+	.area	segment_000020_$code (rel,con,bank=segment_000020)
+	.area	segment_000020_$pdata (rel,con,bank=segment_000020)
+	.area	segment_000020_$rwdata (rel,con,bank=segment_000020)
+
+	.bank	segment_000021 (base=region_000004,fsfx=_segment_000021)
+	.area	segment_000021_$code (rel,con,bank=segment_000021)
+	.area	segment_000021_$pdata (rel,con,bank=segment_000021)
+	.area	segment_000021_cmdtxt (rel,con,bank=segment_000021)
+	.area	segment_000021_cmddsp (rel,con,bank=segment_000021)
+
+	.bank	segment_000022 (base=region_000004,fsfx=_segment_000022)
+	.area	segment_000022_$code (rel,con,bank=segment_000022)
+	.area	segment_000022_$pdata (rel,con,bank=segment_000022)
+	.area	segment_000022_$rwdata (rel,con,bank=segment_000022)
+	; for some reason the syslib psects are placed in segment 000022
+	.area	sys$i (rel,con,bank=segment_000022)
+	.area	sys$s (rel,con,bank=segment_000022)
+
+	.bank	segment_000023 (base=region_000004,fsfx=_segment_000023)
+	.area	segment_000023_$code (rel,con,bank=segment_000023)
+	.area	segment_000023_$pdata (rel,con,bank=segment_000023)
+
+	.bank	segment_000024 (base=region_000004,fsfx=_segment_000024)
+	.area	segment_000024_$code (rel,con,bank=segment_000024)
+	.area	segment_000024_modinf (rel,con,bank=segment_000024)
+	.area	segment_000024_string (rel,con,bank=segment_000024)
+	.area	segment_000024_resdat (rel,con,bank=segment_000024)

@@ -34,7 +34,7 @@
 	.page
 	.sbttl	Local data		; /63/ consolidate data here..
 
-	.psect	$pdata
+	.psect	segment_000021_$pdata
 com.01:	.asciz	"File: "
 com.02:	.asciz	"From: "
 com.03:	.asciz	"Number: "
@@ -46,7 +46,7 @@ com.08:	.asciz	"Username Password: "
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000021_$code
 	.sbttl	Define the main_loop commands
 
 loacmd::mov	#cmdlst	,r0		; calling this also loads this overlay

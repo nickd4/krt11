@@ -15,6 +15,7 @@
 	.endm
 
 	.macro	.limit
+	.blkb	4 ; just for the time being
 	.endm
 
 	.macro	call name

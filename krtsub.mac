@@ -48,7 +48,7 @@ radchr:	.ascii	" ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789"
 	.even
 
 	.page
-	.psect	$$code
+	.psect	_$code
 	.sbttl	BASIC+ CVT$$ function	; /62/ unused functions pulled..
 
 ;	calls	cvt$$	,^/addr(input),len(input),val(cvt_bit_pattern)/

@@ -118,7 +118,7 @@
 
 	.macro	des  type ,offset ,title
 	.save				; /63/
-	.psect	$pdata			; /63/
+	.psect	segment_000010_$pdata			; /63/
 	.if  b	^/type/
 	.byte	0	,0
 	.even				; /63/ do this here, once is enough..
@@ -175,7 +175,7 @@ deslist:				; /63/ insert the label for the list
 	.page
 	.sbttl	Local data
 
-	.psect	$pdata			; /63/ consolidate all data here
+	.psect	segment_000010_$pdata			; /63/ consolidate all data here
 abort:	.asciz	"% Aborted from keyboard"
 bells:	.byte	bell ,bell ,0		; two bells when CONNECTing
 defmsg:	.asciz	"% Timed out"
@@ -207,13 +207,13 @@ prefix:	.asciz	\ = "\			; /62/ prefix for format effector data
 tripsp:	.asciz	\"   \			; /62/ a " followed by three blanks
 	.even
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000010_$rwdata	,rw,d,lcl,rel,con
 buffer:	.blkb	84.			; /BBS/ general purpose buffer
 mute:	.word	0			; /BBS/ use to mute output to TT
 retries:.word	0			; /BBS/ redial this many times..
 
 	.page
-	.psect	$$code
+	.psect	segment_000010_$code
 	.sbttl	SET MODEM-TYPE		; /BBS/ almost 100% new..
 
 set$modem::strcpy #spare1,#modem	; save copy of what's there now

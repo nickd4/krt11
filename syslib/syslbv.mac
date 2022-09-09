@@ -5,4 +5,4 @@ $sysv$	==	20
 	.area	sys$s (rel,con)
 $syslb::.word	000000				; 000000
 $lock::	.byte	001				; 000002
-$crash:	.byte	000				; 000003
+$crash::.byte	000				; 000003

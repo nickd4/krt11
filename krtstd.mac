@@ -27,7 +27,7 @@
 	.iif ndf  KRTCDF  .error	^/; .include for IN:KRTCDF.MAC failed/
 
 	.page
-	.psect	$pdata
+	.psect	segment_000017_$pdata
 	.sbttl	Local data		; /63/ consolidate data here..
 
 std.01:	.asciz	"On, Off? "
@@ -59,7 +59,7 @@ std.26:	.asciz	"Local or Remote? "
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000017_$code
 	.sbttl	Define the SET commands
 
 loaset::mov	#setcmd	,r0		; calling this also loads this overlay

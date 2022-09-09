@@ -30,20 +30,20 @@
 	.macro	entry	name ,type ,size
 	.save
 	.if  b	^/name/
-	.psect	$addr
+	.psect	segment_000015_$addr
 	.word	0
 	.iff
 	;.dsabl	lc
-	.psect	$name	,ro,d,lcl,rel,con
+	.psect	segment_000015_$name	,ro,d,lcl,rel,con
 	$$ = .
 	.asciz	#name#
-	.psect	$addr
+	.psect	segment_000015_$addr
 	.word	$$
-	.psect	$addr1
+	.psect	segment_000015_$addr1
 	.word	name
-	.psect	$type
+	.psect	segment_000015_$type
 	.word	type
-	.psect	$size
+	.psect	segment_000015_$size
 	.word	size
 	;.enabl	lc
 	.endc
@@ -53,7 +53,7 @@
 	.page
 	.sbttl	Local data			; /63/ consolidated here..
 
-	.psect	$pdata
+	.psect	segment_000015_$pdata
 deb.01:	.word	pbyte ,pint
 deb.02:	.word	deb.03 ,deb.04
 deb.03:	.asciz	^/tab/"Byte data, size"	; /BBS/ added tabs
@@ -67,7 +67,7 @@ deb.10:	.asciz	")   "			; /BBS/ added spaces for formatting
 octpad:	.asciz	"    "			; /BBS/ dummy octal number element
 	.even
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000015_$rwdata	,rw,d,lcl,rel,con
 togo:	.word	0			; /BBS/ number of bytes
 ascbuf:	.blkb	24			; /BBS/ ascii buffer for byte dump
 	.even
@@ -75,15 +75,15 @@ ascbuf:	.blkb	24			; /BBS/ ascii buffer for byte dump
 	.page
 	.sbttl	Symbol name data table
 
-	.psect	$addr	,ro,d,lcl,rel,con
+	.psect	segment_000015_$addr	,ro,d,lcl,rel,con
 texadr:
-	.psect	$addr1	,ro,d,lcl,rel,con
+	.psect	segment_000015_$addr1	,ro,d,lcl,rel,con
 virtad:
-	.psect	$type	,ro,d,lcl,rel,con
+	.psect	segment_000015_$type	,ro,d,lcl,rel,con
 symtyp:
-	.psect	$size	,ro,d,lcl,rel,con
+	.psect	segment_000015_$size	,ro,d,lcl,rel,con
 symsiz:
-	.psect	$$code
+	.psect	segment_000015_$code
 
 	entry	^/$image/, int, 1
 	entry	^/$limit/, int, 2

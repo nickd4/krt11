@@ -66,7 +66,7 @@
 	.page
 	.sbttl	Local buffers
 
-	.psect	condat	,rw,d,lcl,rel,con
+	.psect	segment_000012_condat	,rw,d,lcl,rel,con
 brkwrk:	.word	0 ,0 ,0 ,0		; /62/ break mark time work area
 cancel:	.word	0 ,0 ,0 ,0		; .cmkt work area
 crflag:	.word	0			; if ^// last char was a CR
@@ -108,7 +108,7 @@ sthead:	.word	stproc	,0		; check XL status
 	.word	0			; terminate table
 hdsize	=	tthead - xkhead		; each entry is this long
 
-	.psect	$pdata			; /63/ consolidate local data here..
+	.psect	segment_000012_$pdata			; /63/ consolidate local data here..
 ;		marktime intervals
 ststime:.word	0 ,0			; /62/ init puts 0.5 sec in ticks here
 ttwait:	.word	0 ,3			; poll TT for input every 3 ticks
@@ -142,7 +142,7 @@ lis.ctrl:.asciz	"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000012_$code
 	.sbttl	Initialization
 
 doconn::call	opentt			; /63/ open the link device
@@ -422,7 +422,7 @@ concmd:	call	strip0			; /62/ strip parity, upcase if alpha
 	jmp	@C20$(r0)		; /62/ dispatch to the correct routine
 
 	.save
-	.psect	$pdata			; /62/ pull lower case stuff..
+	.psect	segment_000012_$pdata			; /62/ pull lower case stuff..
 C10$:	.byte	'/	,'?	,'B&137	,'C&137	,'H&137	,'I&137
 	.byte	'Q&137	,'R&137	,'S&137	,'X&137	,'Z&137	,'^	,177
 	.byte	0

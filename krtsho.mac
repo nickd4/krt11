@@ -66,7 +66,7 @@
 	.page
 	.sbttl	Local data		; /63/ consolidated all data here..
 
-	.psect	$pdata
+	.psect	segment_000013_$pdata
 attlst:	.word	at.cdt	,at.xle	,at.len	,at.pro	,at.sys	,at.inf	,at.typ	,0
 atthdr:	.word	10$	,20$	,30$	,40$	,50$	,60$	,70$
  10$:	.asciz	" Date"
@@ -252,7 +252,7 @@ ratag:	.asciz	"Hz)"^/cr/^/lf/
 typdef:	.asciz	".LST"
 	.even
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000013_$rwdata	,rw,d,lcl,rel,con
 ld$stat:.byte	4 ,135			; get status of
 ld$num:	.byte	0 ,0			; this LD unit
 	.word	ld$buf			; and put it here
@@ -267,7 +267,7 @@ ld$name:.asciz	"DU5:JAYSEN.DSK  R/O  [not available]" ; TO LEFT OF "[" CHAR!!
 	.even
 
 	.page
-	.psect	$$code
+	.psect	segment_000013_$code
 	.sbttl	SHOW command processor
 
 c$show::tstb	@argbuf			; /BBS/ any arg there?

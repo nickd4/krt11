@@ -53,9 +53,9 @@
 	.nlist (me)
 	.if nb ^/baseval/
 	.list (me)
-	.psect	genval	,ro,d,lcl,rel,con
+	.psect	segment_000015_genval	,ro,d,lcl,rel,con
 baseval:
-	.psect	gendsp	,ro,d,lcl,rel,con
+	.psect	segment_000015_gendsp	,ro,d,lcl,rel,con
 basedsp:
 	; if default is blank, substitute .word 0 (MACRO-11 doesn't need this)
 	.if b ^/default/
@@ -66,7 +66,7 @@ basedsp:
 	.nlist (me)
 	.iff
 	.list (me)
-	.psect	genval	,ro,d,lcl,rel,con
+	.psect	segment_000015_genval	,ro,d,lcl,rel,con
 	.nlist (me)
 	  .if b  ^/val/
 	  .byte	 0
@@ -74,7 +74,7 @@ basedsp:
 	  .iff
 	  .byte	 val
 	  .list	 (me)
-	  .psect gendsp	,ro,d,lcl,rel,con
+	  .psect segment_000015_gendsp	,ro,d,lcl,rel,con
 	  .nlist (me)
 	  .word	 dsp
 	  .endc
@@ -87,7 +87,7 @@ basedsp:
 	.page
 	.sbttl	Local data
 
-	.psect	$pdata			; /62/ consolidated this stuff here..
+	.psect	segment_000015_$pdata			; /62/ consolidated this stuff here..
 delmsg:	.asciz	" deleted"
 exitxt:	.asciz	^/cr/^/lf/"%KRTSER-I-Server stopped"^/cr/^/lf/
 	.blkb	ln$max			; /63/ buffer to prepend version data
@@ -137,12 +137,12 @@ serwn2:	.asciz	" times to stop the server from this terminal"^/cr/^/lf/^/cr/^/lf
 typdef:	.asciz	".LST"
 	.even
 
-	.psect	$rwdata	,rw,d,lcl,rel,con
+	.psect	segment_000015_$rwdata	,rw,d,lcl,rel,con
 rem.d0:	.blkb	4
 rem.d1:	.blkb	4
 
 	.page
-	.psect	$$code
+	.psect	segment_000015_$code
 	.sbttl	Call the server
 
 c$serv::tstb	@argbuf			; if no arg, do normal server
@@ -761,7 +761,7 @@ xit:	clr	xmode			; no extended reply stuff now
 	jmp	clostt			; /62/ close the link for now
 
 	.save
-	.psect	$pdata
+	.psect	segment_000015_$pdata
 remrsp:	.byte	msg$error,msg$nak,msg$snd,msg$ack,msg$text,timout,badchk
 	.byte	0
 	.even
