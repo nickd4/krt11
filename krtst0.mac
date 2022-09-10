@@ -109,16 +109,16 @@ st0.29:	.asciz	"Init modem to dial string: "
 st0.30:	.asciz	"Name Phone-Number: "
 st0.31:	.asciz	"Extended Mode: "
 st0.32:	.asciz	"Numbers or ALL: "
-st0.33:	.asciz	"No LOGFILE is open"^/cr/^/lf/
+st0.33:	.asciz	"No LOGFILE is open"(cr)(lf)
 st0.34:	.asciz	" opened, "
 st0.35:	.asciz	" block"
 st0.36:	.asciz	"s"
-st0.37:	.asciz	"BINARY-MODE (fixed 512, no carriage control) enabled"^/cr/^/lf/
-st0.38:	.asciz	" closed"^/cr/^/lf/
-st0.39:	.asciz	" is already open"^/cr/^/lf/
-st0.40:	.asciz	"?SET$DEBUG-W-Bad option"^/cr/^/lf/
-st0.41:	.asciz	"You must SET DEBUG as desired to write to this file"^/cr/^/lf/
-st0.42:	.asciz	"Caution: Binary files will require 8-bit prefixing"^/cr/^/lf/
+st0.37:	.asciz	"BINARY-MODE (fixed 512, no carriage control) enabled"(cr)(lf)
+st0.38:	.asciz	" closed"(cr)(lf)
+st0.39:	.asciz	" is already open"(cr)(lf)
+st0.40:	.asciz	"?SET$DEBUG-W-Bad option"(cr)(lf)
+st0.41:	.asciz	"You must SET DEBUG as desired to write to this file"(cr)(lf)
+st0.42:	.asciz	"Caution: Binary files will require 8-bit prefixing"(cr)(lf)
 st0.43:	.asciz	" requires hardware flow control"
 st0.44:	.asciz	" must always be quoted"
 st0.45:	.asciz	" is not a control character"
@@ -129,7 +129,7 @@ st0.45:	.asciz	" is not a control character"
 	.sbttl	LOGFILE, SET LOGFILE	; /BBS/ heavily modified..
 	;.enabl	lsb
 
-	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.LCUC ! C.TSPA ; arg processing
+	CVTARG	= C.CRLF | C.LSPA | C.SSPA | C.LCUC | C.TSPA ; arg processing
 
 c$logf::call	set$log			; try to open the logfile
 	tst	r0			; did that work?
@@ -190,13 +190,13 @@ set$log::tstb	@argbuf			; any arg(s) supplied?
 	call	incsts			; /62/ flag error
 120$:	clr	savpnt			; re-init this right away..
 	mov	trace	,r0		; copy of log status word
-	bic	#^/log$rp!log$de!log$op/,r0 ; /62/ hose non-relevant bits
+	bic	#(log$rp|log$de|log$op),r0 ; /62/ hose non-relevant bits
 	bne	60$			; /63/ some disk mode is already set
 	wrtall	#st0.41			; /63/ "You must SET DEBUG .."
 	br	60$			; /63/ done
 
 	; /BBS/ shared code, so set$debug can call this much of it too..
-L1$:	bic	#log$al!log$io,trace	; /62/ clear all disk debug bits now
+L1$:	bic	#log$al|log$io,trace	; /62/ clear all disk debug bits now
 	upcase	argpnt			; ensure file name is upper case
 	calls	fparse	,^/argpnt,#spare1/ ; /63/ parse the file name please
 	tst	r0			; did the $parse work?
@@ -336,7 +336,7 @@ sd$off::bit	#log$op	,trace		; is there a logfile open?
 	wrtall	#prefix			; /41/ call it Logfile now
 	wrtall	#logfil			; /BBS/ include the actual file name
 	wrtall	#st0.38			; /63/ " closed"^/cr/<lf>
-a10$:	bic	#log$al!log$io,trace	; /BBS/ clear all disk debug bits now
+a10$:	bic	#log$al|log$io,trace	; /BBS/ clear all disk debug bits now
 a20$:	clr	r0			; success
 a30$:	return
 
@@ -390,7 +390,7 @@ rawchk:	bit	#log$io	,trace		; raw I/O debugging?  (clears carry)
 sd$raw:	call	sdopen			; logfile open?
 	bcs	a30$			; no
 	mov	trace	,r0		; copy of debugging status word
-	bic	#^/log$rp!log$op/,r0	; hose RPACK and disk file open bits
+	bic	#(log$rp|log$op),r0	; hose RPACK and disk file open bits
 	beq	a90$			; no other disk_based option is on
 	mov	#er$raw	,r0		; /BBS/ can't do raw I/O w/other opts
 	br	a30$
@@ -1093,7 +1093,7 @@ ct.num:	mov	#spare1	,r0		; handy buffer for current arg
 30$:	calls	l$val	,^/#spare1/	; try to recover a number
 	tst	r0			; well?
 	bne	ct.bad			; no, bad value
-	bit	#^c^/377/,r1		; if > 377
+	bit	#~(377),r1		; if > 377
 	bne	ct.bad			; it's a bad number
 	incb	r1			; wrap 377 to 0, others ch=ch+1
 	cmp	r1	,#41		; was char 37..0,377 (now 40..0)?

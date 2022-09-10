@@ -41,16 +41,16 @@
 	.sbttl	Local data
 
 	.psect	$pdata
-$ceol:	.asciz	^/esc/"[K"	; clear from cursor to end of line
-$cz:	.asciz	"^Z"^/cr/^/lf/	; to echo ^Z
-$left:	.asciz	^/esc/"[D"	; move cursor left one column
-$restore:.asciz	^/esc/"8"	; restore cursor to previously saved position
-$right:	.asciz	^/esc/"[C"	; move cursor right one column
+$ceol:	.asciz	(esc)"[K"	; clear from cursor to end of line
+$cz:	.asciz	"^Z"(cr)(lf)	; to echo ^Z
+$left:	.asciz	(esc)"[D"	; move cursor left one column
+$restore:.asciz	(esc)"8"	; restore cursor to previously saved position
+$right:	.asciz	(esc)"[C"	; move cursor right one column
 $rubout:.byte	bs ,space ,bs ,0 ; echo this for a rubout
-$save:	.asciz	^/esc/"7"	; save current cursor position
+$save:	.asciz	(esc)"7"	; save current cursor position
 $setvt:	.byte	esc ,'= ,0	; enable VT-100 keypad
 delimit:.byte	40 ,54 ,56 ,57 ,72 ,75 ,133 ,0	; word delimiters (tab unused)
-edi.01:	.asciz	"?KRTEDI-W-Can't overlay HELP from here"^/cr/^/lf/ ; /63/
+edi.01:	.asciz	"?KRTEDI-W-Can't overlay HELP from here"(cr)(lf) ; /63/
 edi.02:	.asciz	"SL F"		; /63/ display SL Function keys topic
 edi.03:	.asciz	"SL K"		; /63/ or do KED version if KED mode is on
 	.even
@@ -149,8 +149,8 @@ esclst:	.byte	'A&137	,'B&137	,'C&137	,'D&137	,'S&137	,'P&137	,'Q&137
 escdsp:	.word	beep
 	.word	prev	,next	,right	,left	,pf$4	,pf$1	,pf$2
 
-k.lst:	.byte	'A&137	,'B&137	,'C&137	,'D&137	,'p!40	,'r!40	,'M&137
-	.byte	'q!40	,'s!40	,'t!40	,'u!40	,'S&137	,'m!40	,'l!40
+k.lst:	.byte	'A&137	,'B&137	,'C&137	,'D&137	,'p|40	,'r|40	,'M&137
+	.byte	'q|40	,'s|40	,'t|40	,'u|40	,'S&137	,'m|40	,'l|40
 	.byte	'P&137	,'Q&137
 	.byte	0
 	.even
@@ -248,7 +248,7 @@ pfxlst:	.byte	'S&137	,'P&137
 pfxdsp:	.word	beep
 	.word	.pf$4	,pf$1
 
-kx.lst:	.byte	'S&137	,'m!40	,'l!40	,'P&137
+kx.lst:	.byte	'S&137	,'m|40	,'l|40	,'P&137
 	.byte	0
 	.even
 kx.dsp:	.word	beep
@@ -419,7 +419,7 @@ ctrlc:	call	sol			; move to start of line, clear edipos
 eof:	call	eol			; do this first
 	wrtall	#$cz			; echo ^Z
 	mov	#cmd$ex	,r0		; flag ^Z exit
-cz.fin:	bic	#^/up$mode!dn$mode!up$end!fw$mode/,edists  ; clear flags
+cz.fin:	bic	#(up$mode|dn$mode|up$end|fw$mode),edists  ; clear flags
 	clr	r1			; byte_count=0, also clears carry
 	return
 
@@ -481,7 +481,7 @@ done:	emt	340			; eat possible LF after CR
 	mov	r2	,edicmd		; save it
 
 110$:	mov	edilen	,r1		; return line length
-	bic	#^/up$mode!dn$mode!up$end!fw$mode/,edists  ; clear flags
+	bic	#(up$mode|dn$mode|up$end|fw$mode),edists  ; clear flags
 	clr	r0			; no error, also clears carry
 	return
 

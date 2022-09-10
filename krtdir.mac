@@ -112,7 +112,7 @@ defext:	.word	star ,0 ,0 ,0		; /62/ input default extent is wild
 months:	.ascii "-ERR-Jan-Feb-Mar-Apr-May-Jun-Jul-Aug-Sep-Oct-Nov-Dec-" ; /BBS/
 nodate:	.asciz " No Date "		; /BBS/
 blocks:	.asciz	" Block"		; /62/ # of blocks for summary
-dcrlf:	.asciz	^/cr/^/lf/		; a new line
+dcrlf:	.asciz	(cr)(lf)		; a new line
 files:	.asciz	" File"			; /62/ tag line at end of dir list
 free:	.asciz	" Free block"		; /62/ free space..
 plural:	.asciz	"s"			; /63/ this allow easier translation..
@@ -696,12 +696,12 @@ ascdat::save	^/r0,r1,r2,r3/
 20$:	mov	r0	,r3		; copy the date to get day of month
 	ash	#3	,r3		; /62/ shift left 3 places
 	swab	r3			; then swap bytes to get
-	bic	#^c^/37/	,r3		; the date, at last
+	bic	#~(37)	,r3		; the date, at last
 	call	i2toa			; /BBS/ write ascii to out buff
 
 	mov	r0	,r3		; get the date once again please
 	swab	r3			; get the month to bits 5..2
-	bic	#^c^/74/	,r3		; /62/ hose yrs/days, leave at *4
+	bic	#~(74)	,r3		; /62/ hose yrs/days, leave at *4
 	cmp	r3	,#12.*4		; /62/ a legal month?
 	ble	30$			; /62/ most likely..
 	clr	r3			; /62/ no, force "-ERR-"
@@ -712,7 +712,7 @@ ascdat::save	^/r0,r1,r2,r3/
 	bne	40$			; /BBS/ at a time
 
 	mov	r0	,r3		; copy the date
-	bic	#^c^/37/	,r3		; hose all but the year
+	bic	#~(37)	,r3		; hose all but the year
 
 	.if ne dofour			; /62/ display all four years digits
 	add	#1972.	,r3		; plus the bias please
@@ -720,7 +720,7 @@ ascdat::save	^/r0,r1,r2,r3/
 	add	#72.	,r3		; plus the bias please
 	.iftf				; /63/ common code ahead..
 
-	bic	#^c^/140000/,r0		; /BBS/ extend max year w/two hi bits
+	bic	#~(140000),r0		; /BBS/ extend max year w/two hi bits
 	swab	r0			; /BBS/ two hi bits now are bits 7,6
 	asr	r0			; /BBS/ shift to bits 6,5 (true value)
 	add	r0	,r3		; /BBS/ add to total years

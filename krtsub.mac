@@ -119,9 +119,9 @@ cvt$$::	save	^/r1,r2,r3,r4,r5/
 
 60$:	bit	#c.lcuc	,pat(r4)	; how about converting lower
 	beq	70$			; case to upper case?
-	cmpb	r3	,#'z!40		; try against a lower case "z"
+	cmpb	r3	,#'z|40		; try against a lower case "z"
 	bhi	70$			; it's higher than that
-	cmpb	r3	,#'a!40		; if less than a lower z, try
+	cmpb	r3	,#'a|40		; if less than a lower z, try
 	blo	70$			; against a lower case "a"
 	 bicb	#40	,r3		; char is in range, translate
 
@@ -478,7 +478,7 @@ l$otoa::save	^/r0,r1,r2/		; /62/ all new..
 	return
 
 10$:	mov	r0	,-(sp)		; copy of the number
-	bic	#^c^/7/	,(sp)		; mask for lower 3 bits
+	bic	#~(7)	,(sp)		; mask for lower 3 bits
 	add	#60	,(sp)		; make result an ascii digit
 	ror	r0			; rotate next group of 3 bits into low
 	asr	r0			; order bits of r0..
@@ -601,9 +601,9 @@ upcase::save	^/r1,r0/
 	clr	r1			; stop at null, do the whole string
 $10$:	cmpb	(r0)	,r1		; hit the delimiter yet?
 	blos	30$			; yes, exit
-	cmpb	(r0)	,#'a!40		; a small letter?
+	cmpb	(r0)	,#'a|40		; a small letter?
 	blo	20$			; no
-	cmpb	(r0)	,#'z!40		; a small letter?
+	cmpb	(r0)	,#'z|40		; a small letter?
 	bhi	20$			; no
 	bicb	#40	,(r0)		; yes, make it upper case
 20$:	inc	r0			; bump pointer to next char

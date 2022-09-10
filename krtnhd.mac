@@ -76,34 +76,34 @@
 	.macro	ash	amount,reg	; arithmetic shift
 	.ntype	lab0	,amount
 	poo = lab0
-	pee = ^/lab0/
+	pee = (lab0)
 	
 	.ntype	$$$0	,amount
 	poo = $$$0
-	pee = ^/$$$0/
+	pee = ($$$0)
 	blah = 27 - $$$0
-	bleh = ^/27 - $$$0/
-	.if ne ^/27 - $$$0/
+	bleh = (27 - $$$0)
+	.if ne (27 - $$$0)
 	.error       ^/; must be auto pc for ASH macro/
 	.endc
 	
-	.iif ne ^/27-$$$0/ .error       ^/; must be auto pc for ASH macro/
+	.iif ne (27-$$$0) .error       (; must be auto pc for ASH macro)
 	$$type	= 1			; assume left shift
 	$$size	= 0			; how many ASLs or ASRs to generate
 	  .irpc	$a ,^/amount/		; parse the first argument
 	  $c	= ''$a			; get the character as a literal
-	  .iif eq ^/$c - '-/ $$type = -1	; if a minus sign then assume right
-	  .iif eq ^/$c - './ .error     ^/; only use octal in ASH macro please/
-	  .iif eq ^/$c - '^/ .error     ^/; only use octal in ASH macro please/
+	  .iif eq ($c - '-) $$type = -1	; if a minus sign then assume right
+	  .iif eq ($c - '.) .error     (; only use octal in ASH macro please)
+	  .iif eq ($c - '^) .error     (; only use octal in ASH macro please)
 	  $c	= $c - '0		; check for a digit now
 	    .if ge $c			; perhaps a digit
 	      .if le $c-7		; got a digit
-	      $$size = ^/$$size*10/+$c	; add into accumulator
+	      $$size = ($$size*10)+$c	; add into accumulator
 	      .endc
 	    .endc
 	  .endr
 	.rept	$$size
-	.iif gt ^/$$type/  asl	reg
-	.iif lt ^/$$type/  asr	reg
+	.iif gt ($$type)  asl	reg
+	.iif lt ($$type)  asr	reg
 	.endr
 	.endm

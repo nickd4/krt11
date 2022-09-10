@@ -93,21 +93,21 @@ basedsp:
 
 	.psect	$pdata			; /62/ consolidated this stuff here..
 delmsg:	.asciz	" deleted"
-exitxt:	.asciz	^/cr/^/lf/"%KRTSER-I-Server stopped"^/cr/^/lf/
+exitxt:	.asciz	(cr)(lf)"%KRTSER-I-Server stopped"(cr)(lf)
 	.blkb	ln$max			; /63/ buffer to prepend version data
-htxt:	.ascii	^/cr/^/lf/"       Server REMOTE commands:"^/cr/^/lf/^/cr/^/lf/
-	.ascii	"       BYE     Stop server and logout"^/cr/^/lf/
-	.ascii	"REMOTE COPY    Copy a file to another"^/cr/^/lf/
-	.ascii	"REMOTE CWD     Change server working directory"^/cr/^/lf/
-	.ascii	"REMOTE DELETE  Delete specified file"^/cr/^/lf/
-	.ascii	"REMOTE DIR     Display a directory"^/cr/^/lf/
-	.ascii	"       FINISH  Stop server leaving Kermit running"^/cr/^/lf/
-	.ascii	"       GET     Get file(s) from server"^/cr/^/lf/
-	.ascii	"REMOTE HELP    Display this help text"^/cr/^/lf/
-	.ascii	"REMOTE RENAME  Rename a file"^/cr/^/lf/
-	.ascii	"       SEND    Send file(s) to server"^/cr/^/lf/
-	.ascii	"REMOTE SPACE   Show available disk space"^/cr/^/lf/
-	.asciz	"REMOTE TYPE    Type specified file"^/cr/^/lf/
+htxt:	.ascii	(cr)(lf)"       Server REMOTE commands:"(cr)(lf)(cr)(lf)
+	.ascii	"       BYE     Stop server and logout"(cr)(lf)
+	.ascii	"REMOTE COPY    Copy a file to another"(cr)(lf)
+	.ascii	"REMOTE CWD     Change server working directory"(cr)(lf)
+	.ascii	"REMOTE DELETE  Delete specified file"(cr)(lf)
+	.ascii	"REMOTE DIR     Display a directory"(cr)(lf)
+	.ascii	"       FINISH  Stop server leaving Kermit running"(cr)(lf)
+	.ascii	"       GET     Get file(s) from server"(cr)(lf)
+	.ascii	"REMOTE HELP    Display this help text"(cr)(lf)
+	.ascii	"REMOTE RENAME  Rename a file"(cr)(lf)
+	.ascii	"       SEND    Send file(s) to server"(cr)(lf)
+	.ascii	"REMOTE SPACE   Show available disk space"(cr)(lf)
+	.asciz	"REMOTE TYPE    Type specified file"(cr)(lf)
 ;	.asciz	"REMOTE WHO     Show active BBS lines"^/cr/<lf>
 invarg:	.asciz	"?KRTSER-E-Invalid argument(s)"
 notimp:	.asciz	"?KRTSER-W-Unimplemented command"
@@ -119,25 +119,25 @@ rem.05:	.asciz	" checksum failed"
 rem.06:	.asciz	" was NAKed"
 rem.07:	.asciz	" timed out"
 rem.08:	.asciz	"1 file renamed"	; /BBS/
-rem.ak:	.asciz	"Remote ACK:"^/cr/^/lf/
-ser.01:	.asciz	^/bell/"Get completed"
-ser.02:	.asciz	^/bell/"Get failed"
+rem.ak:	.asciz	"Remote ACK:"(cr)(lf)
+ser.01:	.asciz	(bell)"Get completed"
+ser.02:	.asciz	(bell)"Get failed"
 ser.03:	.asciz	'Processing file name "'
 ser.04:	.asciz	'"'
 ser.05:	.asciz	" block(s) copied to "	; /BBS/
 ser.06:	.asciz	"DK  --> "
 serpre:	.asciz	"%KRTSER-I-Server starting"
-sertxt:	.ascii	".  Return to your local machine by typing"^/cr/^/lf/
+sertxt:	.ascii	".  Return to your local machine by typing"(cr)(lf)
 	.ascii	"its escape sequence for closing the connection,"
-	.ascii	" then issue further"^/cr/^/lf/
+	.ascii	" then issue further"(cr)(lf)
 	.ascii	"commands from there.  To shut down the server,"
-	.ascii	" use the BYE command"^/cr/^/lf/
+	.ascii	" use the BYE command"(cr)(lf)
 	.asciz	"to logout, or the FINISH command and then reconnect."
 serwn0:	.asciz	"Connecting to "
 serspd:	.asciz	"  DTE speed: "
 serspx:	.asciz	"N/A"
-serwn1:	.asciz	^/cr/^/lf/^/cr/^/lf/^/bell/^/bell/"?KRTSER-W-Type ^C "
-serwn2:	.asciz	" times to stop the server from this terminal"^/cr/^/lf/^/cr/^/lf/
+serwn1:	.asciz	(cr)(lf)(cr)(lf)(bell)(bell)"?KRTSER-W-Type ^C "
+serwn2:	.asciz	" times to stop the server from this terminal"(cr)(lf)(cr)(lf)
 typdef:	.asciz	".LST"
 	.even
 
@@ -727,7 +727,7 @@ doremo:	call	seropn			; initialize the link
 	clr	numtry			; clear the retry counter please
 ;;	mov	sp	,logini		; /62/ force result msgs to a newline
 
-	sub	#^/ln$max*2/,sp		; /62/ allocate a buffer please
+	sub	#(ln$max*2),sp		; /62/ allocate a buffer please
 	mov	sp	,r2		; point to it
 	movb	@r5	,(r2)+		; /63/ the generic command to execute
 	mov	4(r5)	,r1		; get the first command argument
@@ -744,7 +744,7 @@ doremo:	call	seropn			; initialize the link
 	copyz	6(r5)	,r2 ,#ln$max	; /63/ copy the second arg over now
 20$:	mov	sp	,r0		; point back to the command buffer
 	calls	buffil	,^/r0,cmdbuf/	; /63/ encoding the data as normal
-	add	#^/ln$max*2/,sp		; /62/ pop the local buffer
+	add	#(ln$max*2),sp		; /62/ pop the local buffer
 
 getres:	strlen	cmdbuf			; /63/ get this way in case of retry
 	spack	#msg$generic,paknum,r0,cmdbuf ; /63/ send the command over please

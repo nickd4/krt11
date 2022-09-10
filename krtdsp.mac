@@ -229,11 +229,11 @@ xl.dump::tst	r50dev			; /BBS/ newer better way to bomb it
 	cmp	rt11ver	,#5		; /62/ is this RT-11 V5 or above?
 	blt	20$			; /62/ no, V4 can't abort I/O..
 ; /62/	.abtio	#lun.xk			; /62/ ya, dump any lingering data
-	MOV	#lun.xk+^/11.*0o400/,R0	; /62/ expanded for assy under V4
+	MOV	#lun.xk+(11.*0o400),R0	; /62/ expanded for assy under V4
 	EMT	0o374			; /62/ even though V4 can't run it
 	.close	#lun.xk			; /62/ close its chan
 ; /62/	.abtio	#xc.control		; /62/ hose control chan
-	MOV	#xc.control+^/11.*0o400/,R0 ; /62/ expanded for assy under V4
+	MOV	#xc.control+(11.*0o400),R0 ; /62/ expanded for assy under V4
 	EMT	0o374			; /62/ even though V4 can't run it
 	.close	#xc.control		; /62/ close it
 	clr	xcdone			; /62/ handler read no longer pending
@@ -397,7 +397,7 @@ readxk::tst	xcdone			; is there a read already queued?
 	.sbttl	Get input from a printing terminal
 
 kbread::save	^/r2/			; /BBS/ rewritten a bit..
-	bic	#^/10000!100/,@#jsw	; ditch single char input and nowait
+	bic	#(10000|100),@#jsw	; ditch single char input and nowait
 	.rctrlo				; force read of new jsw
 	tst	tsxsave			; running under TSX?
 	beq	10$			; nope..
@@ -436,7 +436,7 @@ kbread::save	^/r2/			; /BBS/ rewritten a bit..
 	sub	@r5	,r1		; the length
 	clr	r0			; no error..
 60$:	unsave	^/r2/
-	bis	#^/10000!100/,@#jsw	; restore single char & nowait input
+	bis	#(10000|100),@#jsw	; restore single char & nowait input
 	save	^/r0/			; /62/ save error code
 	.rctrlo				; force read of new jsw
 	unsave	^/r0/			; /62/ restore error code

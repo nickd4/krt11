@@ -236,8 +236,8 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	    $$ = 100			; char is a ^, set flag for next char
 	    .iff
 	      .if ne $$			; if not a ^ but last char flag is set
-		.if  ge  ^/ch1!40/-^/'a!40/ ; ensure alpha chars are upper case
-		.iif le ^?^/ch1!40/-^/'z!40/? ch1 = ch1&137 ; so char-100 works!
+		.if  ge  (ch1|40)-('a|40) ; ensure alpha chars are upper case
+		.iif le ((ch1|40)-('z|40)) ch1 = ch1&137 ; so char-100 works|
 		.endc
 	      .endc
 	    .byte ch1-$$		; char-100 = control char of same name
@@ -379,7 +379,7 @@ $$ph.noanswer	=	sentinel; 66 ph.noanswer   disable auto-answer string
 	.wordn	$$ph.answer	; 64 ph.answer	   enable auto-answer string
 	.wordn	$$ph.noanswer	; 66 ph.noanswer   disable auto-answer string
 	$$end	= .
-	.iif ne	 ^?^/$$end-$$current/-mod.size? .error ^/; 's define size error/
+	.iif ne	 (($$end-$$current)-mod.size) .error (; 's define size error)
 
 	.if  ne $$first
 	  $$first = 0			; no previous link (doing first modem)

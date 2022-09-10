@@ -121,27 +121,27 @@ xktime:	.word	0 ,2			; wait to clear stuffed output buffer
 con.01:	.asciz	"Connecting to "
 con.02:	.asciz	"  DTE speed: "		; "DTE" as path speed may be different
 con.03:	.asciz	"N/A"
-con.04:	.asciz	^/cr/^/lf/"Type ^"
-con.05:	.asciz	"C to return to your local machine"^/cr/^/lf/
+con.04:	.asciz	(cr)(lf)"Type ^"
+con.05:	.asciz	"C to return to your local machine"(cr)(lf)
 con.06:	.asciz	"%KRTCON-W-Carrier "
-con.07:	.asciz	"lost"^/cr/^/lf/
-con.08:	.asciz	"detected"^/cr/^/lf/
+con.07:	.asciz	"lost"(cr)(lf)
+con.08:	.asciz	"detected"(cr)(lf)
 con.09:	.asciz	"Logfile is "
 con.10:	.asciz	", cur/max blk: "
 con.11:	.asciz	"/"
 con.12:	.asciz	"No LOGFILE is open"
-hlptxt:	.ascii	^/cr/^/lf/
-	.ascii	"B	Send a break"^/cr/^/lf/
-	.ascii	"C	Connect back to the local Kermit-11"^/cr/^/lf/
-	.ascii	"I	Drop DTR for 0.5sec (hang up) then restore it"^/cr/^/lf/
-	.ascii	"Q	Suspend CONSOLE logging"^/cr/^/lf/
-	.ascii	"R	Resume CONSOLE logging"^/cr/^/lf/
-	.ascii	"S	CONSOLE logging status"^/cr/^/lf/
-	.ascii	"X	Flow control reset"^/cr/^/lf/
-	.ascii	"Z	Zap (100% hose & try to unhang) the handler"^/cr/^/lf/
+hlptxt:	.ascii	(cr)(lf)
+	.ascii	"B	Send a break"(cr)(lf)
+	.ascii	"C	Connect back to the local Kermit-11"(cr)(lf)
+	.ascii	"I	Drop DTR for 0.5sec (hang up) then restore it"(cr)(lf)
+	.ascii	"Q	Suspend CONSOLE logging"(cr)(lf)
+	.ascii	"R	Resume CONSOLE logging"(cr)(lf)
+	.ascii	"S	CONSOLE logging status"(cr)(lf)
+	.ascii	"X	Flow control reset"(cr)(lf)
+	.ascii	"Z	Zap (100% hose & try to unhang) the handler"(cr)(lf)
 	.ascii	'^x	Send control char "x" using A..Z[\]~? '
-	.ascii	"prefixed with a carat"^/cr/^/lf/	; /63/ added for clarity
-	.asciz	"RUBOUT	Send a break"^/cr/^/lf/^/cr/^/lf/
+	.ascii	"prefixed with a carat"(cr)(lf)	; /63/ added for clarity
+	.asciz	"RUBOUT	Send a break"(cr)(lf)(cr)(lf)
 lis.ctrl:.asciz	"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 	.even
 
@@ -181,7 +181,7 @@ doconn::call	opentt			; /63/ open the link device
 	clr	r4			; init TT input buffer
 	tst	milnet			; MILNET mode on?
 	beq	50$			; no
-	mov	#xon+^/xon*400/,r4	; ya, stuff a couple XONs for remote
+	mov	#xon+(xon*400),r4	; ya, stuff a couple XONs for remote
 
 50$:	.spfun	#rtwork,#xc.control,#stsdrv,#xcsts,#0,#1 ; /62/ get status
 
@@ -273,7 +273,7 @@ ttproc:	tst	done			; finished?
 
 	tst	con8bit			; SET CON 8?
 	bne	20$			; ya
-	bic	#^c^/177/,r0		; no, strip any parity present
+	bic	#~(177),r0		; no, strip any parity present
 20$:	cmpb	r0	,conesc		; escape sequence?
 	bne	60$			; no, dump character as is
 	mov	#5	,r1		; ya, wait up to five seconds
@@ -286,7 +286,7 @@ ttproc:	tst	done			; finished?
 	br	130$			; exit as we did not get anything
 40$:	tst	con8bit			; SET CON 8?
 	bne	50$			; ya
-	bic	#^c^/177/,r0		; strip junk from the character
+	bic	#~(177),r0		; strip junk from the character
 50$:	cmpb	r0	,conesc		; another escape character?
 	beq	60$			; yes, dump that character as is
 	call	concmd			; console command processor
@@ -349,7 +349,7 @@ xkproc:	clr	r0			; avoid sign extension
 	beq	30$			; ya, don't type this to TT
 20$:	.ttoutr				; dump the char
 	bcs	50$			; buffer full, go wait a bit
-30$:	bit	#^/log$co!log$on/,trace	; /63/ logging enabled?
+30$:	bit	#(log$co|log$on),trace	; /63/ logging enabled?
 	beq	40$			; no
 	mov	#lun.lo	,r1		; log file chan, char is still in r0
 	call	putcr0			; that's it folks
@@ -401,8 +401,8 @@ stproc:	mov	xcsts	,r2		; /62/ save prior status
 	bne	10$			; CL uses bit 2
 	asr	r1			; KM, XC and XL use bit 3
 	asr	r2			; make it 2 here
-10$:	bic	#^c^/4/	,r2		; recover the carrier
-	bic	#^c^/4/	,r1		; detect bits
+10$:	bic	#~(4)	,r2		; recover the carrier
+	bic	#~(4)	,r1		; detect bits
 	cmp	r1	,r2		; any change?
 	beq	30$			; no
 	beep				; ya, make a small noise
@@ -527,10 +527,10 @@ con.ctrl:mov	#5	,r1		; wait five seconds
 	.page
 	.sbttl	Strip parity and upcase	; /62/ moved this here, now shared..
 
-strip0:	bic	#^c^/177/,r0		; strip parity
-	cmp	r0	,#'a!40		; convert
+strip0:	bic	#~(177),r0		; strip parity
+	cmp	r0	,#'a|40		; convert
 	blo	10$			; char
-	cmp	r0	,#'z!40		; to
+	cmp	r0	,#'z|40		; to
 	bhi	10$			; upper
 	bic	#40	,r0		; case
 10$:	return

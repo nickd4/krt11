@@ -86,14 +86,14 @@ xtime:	.word	0 ,30.			; wait 0.5sec when finished or abort
 
 	.psect	$pdata			; /63/ consolidate here..
 $beep2:	.byte	bell ,bell ,0		; two bells
-sen.10:	.asciz	^/bell/"Send completed"	; /62/
-sen.11:	.asciz	^/bell/"Send failed"
+sen.10:	.asciz	(bell)"Send completed"	; /62/
+sen.11:	.asciz	(bell)"Send failed"
 sen.12:	.asciz	'Processing file name "'
 sen.13:	.asciz	'"'
 xmo.01:	.asciz	"File open: "		; tell user about the file
 xmo.02:	.asciz	"["			; size in RT-11 blocks goes here
 xmo.03:	.asciz	"], "			; format the display
-xmo.04:	.ascii	" Xmodem (128 byte) blocks"^/cr/^/lf/	; tag file size
+xmo.04:	.ascii	" Xmodem (128 byte) blocks"(cr)(lf)	; tag file size
 	.asciz	"Awaiting ready signal (^X aborts).."	; ready to rip..
 xmo.05:	.asciz	"File transfer completed"
 	.even

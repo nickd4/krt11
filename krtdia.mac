@@ -185,23 +185,23 @@ bells:	.byte	bell ,bell ,0		; two bells when CONNECTing
 defmsg:	.asciz	"% Timed out"
 dia.01:	.asciz	"Toggling DTR.."	; /63/ moved message macro data here
 dia.02:	.asciz	"Re-initting modem.."
-dia.03:	.asciz	" modem is on-line"^/cr/^/lf/
+dia.03:	.asciz	" modem is on-line"(cr)(lf)
 dia.04:	.asciz	"Try #"
-dia.05:	.asciz	":"^/cr/^/lf/
-dia.06:	.asciz	"The known modem types are:"^/cr/^/lf/
-dia.07:	.asciz	"% No answer"^/cr/^/lf/
+dia.05:	.asciz	":"(cr)(lf)
+dia.06:	.asciz	"The known modem types are:"(cr)(lf)
+dia.07:	.asciz	"% No answer"(cr)(lf)
 dia.08:	.asciz	"Yes"
 dia.09:	.asciz	"No"
 dia.10:	.asciz	"Dial time-out secs: "
 dia.11:	.asciz	"Settle-time ticks:  "
 dia.12:	.asciz	'%X = "X'
 dia.13:	.asciz	"Binary-responses:   "
-dia.14:	.asciz	"Result strings:"^/cr/^/lf/
+dia.14:	.asciz	"Result strings:"(cr)(lf)
 dia.15:	.asciz	"Success"
-dia.16:	.asciz	"Rings+1"^/cr/^/lf/
-dia.17:	.asciz	"Failure"^/cr/^/lf/
+dia.16:	.asciz	"Rings+1"(cr)(lf)
+dia.17:	.asciz	"Failure"(cr)(lf)
 dia.18:	.asciz	"Link "
-dia.19:	.asciz	" disconnected"^/cr/^/lf/
+dia.19:	.asciz	" disconnected"(cr)(lf)
 msg$dte:.asciz	",  DTE is forced to "	; /63/ tag messages that alter speed
 msg$fmt:.asciz	"Format effectors:   "	; /62/
 nodprompt:.asciz "% No dial$prompt"
@@ -617,7 +617,7 @@ getatn:	save	^/r1,r2,r3,r4/
 	beq	70$			; yes
 	cmpb	(r3)	,#'%		; look for a format effector
 	bne	50$			; ya, not no..
-	cmpb	1(r3)	,#'x!40		; "%X" to set Hayes extended mode?
+	cmpb	1(r3)	,#'x|40		; "%X" to set Hayes extended mode?
 	beq	20$			; yes
 	cmpb	1(r3)	,#'X&137	; check both cases
 	bne	50$			; not formatting, copy char over
@@ -660,7 +660,7 @@ getatn:	save	^/r1,r2,r3,r4/
 	ttgetc	#-1			; then look for its echo
 	tst	r0			; anything there?
 	bne	130$			; no
-	bicb	#^c^/177/,r1		; remove parity always
+	bicb	#~(177),r1		; remove parity always
 	cmpb	r1	,#cr		; is it a return?
 	beq	130$			; ya, don't echo it
 	cmpb	r1	,#lf		; is it a line feed?
@@ -738,7 +738,7 @@ dodial:	save	^/r2,r3,r4/
 	ttgetc	#-1			; ya, wait one tick for echo
 	tst	r0			; get anything?
 	bne	60$			; no
-	bicb	#^c^/177/,r1		; remove parity always
+	bicb	#~(177),r1		; remove parity always
 	movb	r1	,r0		; copy the char
 	br	50$			; and go dump same to the screen
 40$:	calls	suspend	,^/#0,#1/	; /62/ match above ttgetc 1 tick lag
@@ -845,7 +845,7 @@ getsts:	save	^/r5/
 
 50$:	tstb	r1			; never suffer embedded nulls
 	beq	20$			; a null, skip it
-	bicb	#^c^/177/,r1		; ensure a real seven bit character
+	bicb	#~(177),r1		; ensure a real seven bit character
 	movb	r1	,(r3)+		; copy the byte over
 	clrb	(r3)			; ensure we stay .asciz
 	tst	res.bin(r4)		; exit loop on single character I/O?
@@ -949,18 +949,18 @@ fmtstr:	save	^/r3/
 	bne	120$			; no
 
 	mov	argbuf	,r0		; assume phone number insertion
-	cmpb	1(r2)	,#'s!40		; %S formatting?
+	cmpb	1(r2)	,#'s|40		; %S formatting?
 	beq	100$			; yes
 	cmpb	1(r2)	,#'S&137	; check both cases
 	beq	100$			; yes
 
 	mov	dial.wait(r4),r0	; no, assume pause string formatting
-	cmpb	1(r2)	,#'p!40		; %P for pause string?
+	cmpb	1(r2)	,#'p|40		; %P for pause string?
 	beq	100$			; yes
 	cmpb	1(r2)	,#'P&137	; check both cases
 	beq	100$			; yes
 
-	cmpb	1(r2)	,#'x!40		; /BBS/ "%X" for Hayes extended mode?
+	cmpb	1(r2)	,#'x|40		; /BBS/ "%X" for Hayes extended mode?
 	beq	20$			; /BBS/ yes
 	cmpb	1(r2)	,#'X&137	; /BBS/ check both cases
 	bne	40$			; /BBS/ no
@@ -975,7 +975,7 @@ fmtstr:	save	^/r3/
 
 40$:	cmpb	1(r2)	,#'M&137	; /54/ mode (ie PULSE, TONE)?
 	beq	50$			; /54/ found it
-	cmpb	1(r2)	,#'m!40		; /54/ try lower case also..
+	cmpb	1(r2)	,#'m|40		; /54/ try lower case also..
 	bne	60$			; /54/ nope
 50$:	mov	dial.pulse(r4),r0	; /54/ assume PULSE dialing
 	tst	pulse			; /54/ ever SET PHONE PULSE or TONE?
@@ -986,7 +986,7 @@ fmtstr:	save	^/r3/
 
 60$:	cmpb	1(r2)	,#'B&137	; /54/ SET PHONE BLIND?
 	beq	70$			; /54/ ya..
-	cmpb	1(r2)	,#'b!40		; /54/ no, perhaps lower case?
+	cmpb	1(r2)	,#'b|40		; /54/ no, perhaps lower case?
 	bne	80$			; /62/ nope
 70$:	tst	blind			; /54/ ever do the SET PHONE BLIND?
 	beq	110$			; /54/ no, ignore string
@@ -995,7 +995,7 @@ fmtstr:	save	^/r3/
 
 80$:	cmpb	1(r2)	,#'A&137	; /62/ auto-answer format effector?
 	beq	90$			; /62/ ya
-	cmpb	1(r2)	,#'a!40		; /62/ try lower case also..
+	cmpb	1(r2)	,#'a|40		; /62/ try lower case also..
 	bne	120$			; /62/ no, copy data then
 90$:	mov	ph.noanswer(r4),r0	; /62/ default to not answering phone
 	tst	answer			; /62/ did user SET PHONE ANSWER?
@@ -1044,7 +1044,7 @@ waitfor:save	^/r2,r3,r4/		; this decrements stack pointer 6
 	calls	xbinread	,^/#-1/		; this actually waits one tick
 	tst	r0			; success?
 	bne	20$			; no
-	bicb	#^c^/177/,r1		; remove parity always
+	bicb	#~(177),r1		; remove parity always
 	cmpb	r1	,#cr		; is it a return?
 	beq	40$			; ya, don't echo it
 	cmpb	r1	,#lf		; is it a line feed?

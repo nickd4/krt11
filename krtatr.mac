@@ -138,9 +138,9 @@ sn.pro:					;	bit_0	=  read
 	asl	r0			; word indexing
 	tst	prot.a(r0)		; is it protected?
 	bne	10$			; ya
-	mov	#^/1!2!4!10!20!40/,r0	; no, set bits 0 thru 5
+	mov	#(1|2|4|10|20|40),r0	; no, set bits 0 thru 5
 	br	20$			; continue
-10$:	mov	#^/1!4!40/,r0		; protected, set bits 0,2,5 only
+10$:	mov	#(1|4|40),r0		; protected, set bits 0,2,5 only
 20$:	add	#40	,r0		; tochar r0
 	movb	r0	,(r4)+		; put it into packet
 sn.end:	clrb	@r4			; .asciz
@@ -193,10 +193,10 @@ sn.cdt:	save	^/r4/			; pointer to current position in buff
 	mov	#curatr	,r1		; the result address
 
 	mov	r0	,r3		; copy the date to extract
-	bic	#^c^/37/	,r3		; the year
+	bic	#~(37)	,r3		; the year
 	add	#1972.	,r3		; plus the bias please
 	mov	r0	,r2		; copy the date
-	bic	#^c^/140000/,r2		; extend max year w/two hi bits
+	bic	#~(140000),r2		; extend max year w/two hi bits
 	swab	r2			; two hi bits now are bits 7,6
 	asr	r2			; shift to bits 6,5 (true value)
 	add	r2	,r3		; add to total years
@@ -206,13 +206,13 @@ sn.cdt:	save	^/r4/			; pointer to current position in buff
 	swab	r3			; get the month to bits 7..2
 	asr	r3			; now bits 6..1
 	asr	r3			; now bits 5..0
-	bic	#^c^/37/	,r3		; hose everything else
+	bic	#~(37)	,r3		; hose everything else
 	call	i2toa			; write ascii to out buff
 
 	mov	r0	,r3		; copy to extract day of month
 	ash	#3	,r3		; /62/ shift left 3 places
 	swab	r3			; then swap bytes to get
-	bic	#^c^/37/	,r3		; the date
+	bic	#~(37)	,r3		; the date
 	call	i2toa			; write ascii to out buff
 
 	tst	tsxsave			; only do file time under TSX
@@ -445,9 +445,9 @@ rx.cdt:	clr	-(sp)			; init 2 digit year flag
 	.gtim	#rtwork	,#xblock	; ensure clock rollover..
 	.date				; ya, which century is it now?
 	mov	r0	,r3		; copy the date
-	bic	#^c^/37/	,r3		; the year
+	bic	#~(37)	,r3		; the year
 	add	#1972.	,r3		; plus the bias
-	bic	#^c^/140000/,r0		; extend max year w/two hi bits
+	bic	#~(140000),r0		; extend max year w/two hi bits
 	swab	r0			; two hi bits now are bits 7,6
 	asr	r0			; shift to bits 6,5 (true value)
 	add	r0	,r3		; now it's the total years
@@ -463,10 +463,10 @@ rx.cdt:	clr	-(sp)			; init 2 digit year flag
 	br	80$			; and continue..
 
 70$:	mov	(sp)	,r0		; copy to..
-	bic	#^c^/100!40/,r0		; ..extract bits 6,5
+	bic	#~(100|40),r0		; ..extract bits 6,5
 	asl	r0			; shift them to bits 7,6
 	swab	r0			; now they are the two hi bits
-	bic	#^c^/37/	,(sp)		; hose possible hi bits in here
+	bic	#~(37)	,(sp)		; hose possible hi bits in here
 	add	(sp)	,r1		; and add it into the date word
 	bis	r0	,r1		; then insert year extension bits
 
@@ -481,7 +481,7 @@ rx.cdt:	clr	-(sp)			; init 2 digit year flag
 
 	mov	r1	,r3		; now do time..  copy pointer
 	call	gnum			; convert hours to integer
-	mul	#^/60.*20./,r1		; and to 3-sec intervals
+	mul	#(60.*20.),r1		; and to 3-sec intervals
 	mov	r1	,-(sp)		; save them
 	inc	r3			; bump past colon
 	call	gnum			; convert mins to integer
@@ -522,7 +522,7 @@ gnum:	clr	r1			; the answer  ; return the next number
 
 rx.pro:	mov	#lun.ou	,r1		; assume output file
 	asl	r1			; word indexing
-	bicb	#^/1!4!40!100!200/,curatr ; hose bits 0,2,5 and unused bits 6,7
+	bicb	#(1|4|40|100|200),curatr ; hose bits 0,2,5 and unused bits 6,7
 	beq	10$
 	clr	prot.a(r1)		; it's read-write
 	br	20$

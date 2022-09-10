@@ -108,16 +108,16 @@ lmsg:	.asciz	"doesn't support or has disabled long packets"
 warn8msg: .asciz "Eight-bit quoting forced on"
 
 $delim:	.asciz	"/"			; /63/ display format stuff
-$sendh:	.ascii	^/cr/^/esc/"[2K"
+$sendh:	.ascii	(cr)(esc)"[2K"
 	.asciz	"Packets sent:            Naks:            Time-outs: "
-$rech:	.ascii	^/cr/^/esc/"[2K"
+$rech:	.ascii	(cr)(esc)"[2K"
 	.asciz	"Packets received:            Naks:            Time-outs: "
-$pos0:	.asciz	^/cr/^/esc/"[15C"		; /BBS/ cursor to column 15.
-$pos1:	.asciz	^/cr/^/esc/"[19C"		; /BBS/ col 19.
-npos:	.asciz	^/cr/^/esc/"[36C"		; /BBS/ col 36.
-npox:	.asciz	^/cr/^/esc/"[32C"		; /BBS/ col 32.
-dpos:	.asciz	^/cr/^/esc/"[58C"		; /BBS/ col 58.
-dpox:	.asciz	^/cr/^/esc/"[54C"		; /BBS/ col 54.
+$pos0:	.asciz	(cr)(esc)"[15C"		; /BBS/ cursor to column 15.
+$pos1:	.asciz	(cr)(esc)"[19C"		; /BBS/ col 19.
+npos:	.asciz	(cr)(esc)"[36C"		; /BBS/ col 36.
+npox:	.asciz	(cr)(esc)"[32C"		; /BBS/ col 32.
+dpos:	.asciz	(cr)(esc)"[58C"		; /BBS/ col 58.
+dpox:	.asciz	(cr)(esc)"[54C"		; /BBS/ col 54.
 	.even
 
 	.page
@@ -130,7 +130,7 @@ kerini::mov	#rwdata	,r0		; first of all, clear all read/write
 	sob	r1	,10$		;  do data[i] := 0
 
 	mov	sp	,doauto		; default to checking file attributes
-	mov	#^/at.all!at.on/	,doattr	; /63/ and doing all file attributes
+	mov	#(at.all|at.on)	,doattr	; /63/ and doing all file attributes
 	mov	sp	,setrpt		; assume we will do repeat counts
 	mov	sp	,dolong		; /62/ we want long packets if doable
 	mov	#myrtmo	,rectim		; /62/ default receive time-out
@@ -154,7 +154,7 @@ kerini::mov	#rwdata	,r0		; first of all, clear all read/write
 	mov	#defdly	,sendly		; init the delay for send command
 
 	mov	#ctlflgs,r0		; /63/ ctrl char processing list top
-	mov	#^/1.+32.+1.+32./,r1	; /63/ list is this many bytes long
+	mov	#(1.+32.+1.+32.),r1	; /63/ list is this many bytes long
 20$:	incb	(r0)+			; /63/ init each one as must quote
 	sob	r1	,20$		; /63/
 
@@ -728,7 +728,7 @@ recdsp:	.word	rectty	,rectty	,recvt1	,recvt1	,recvt1
 rectty:	mov	#pcnt.r	,r1		; /43/ pass address in r1
 	call	numout			; write the number to the terminal
 	wrtall	#$delim			; a "/" delimiter
-	mov	#pcnt.s+(4*^?^/'N&137/-100?),r1 ; /43/ 32. bits this time
+	mov	#pcnt.s+(4*(('N&137)-100)),r1 ; /43/ 32. bits this time
 	cmp	2(r1)	,pcnt.n+2	; /43/ unlikely that the NAK
 	beq	10$			; /43/ count would ever be > 65535.
 	mov	2(r1)	,pcnt.n+2	; /43/ use low order 16 bits
@@ -750,14 +750,14 @@ recvt1:	tst	logini			; need the header?
 20$:	wrtall	#$pos1			; position the cursor
 	mov	#pcnt.r	,r1		; /43/ received packet count
 	call	numout			; dump it
-	mov	#pcnt.s+(4*^?^/'N&137/-100?),r1 ; /43/ get the sent NAK count
+	mov	#pcnt.s+(4*(('N&137)-100)),r1 ; /43/ get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; /43/ really need to update NAKs?
 	beq	30$			; no
 	mov	2(r1)	,pcnt.n+2	; /43/ stuff low order 16 bits
 	wrtall	#npos			; /62/ put cursor where NAK count goes
 	call	numout			; print the NAK count
 30$:	; /BBS/ dotmo moved here
-	mov	#pcnt.r+(4*^?^/'T&137/-100?),r1 ; /44/ get time-out count
+	mov	#pcnt.r+(4*(('T&137)-100)),r1 ; /44/ get time-out count
 	cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
 	beq	40$			; /44/ no, just exit
 	mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter
@@ -791,7 +791,7 @@ sendsp:	.word	sentty	,sentty	,senvt1	,senvt1	,senvt1
 sentty:	mov	#pcnt.s	,r1		; /43/ 32. bits now
 	call	numout			; write the number to the terminal
 	wrtall	#$delim			; a "/" delimiter
-	mov	#pcnt.r+(4*^?^/'N&137/-100?),r1 ; get the sent NAK count
+	mov	#pcnt.r+(4*(('N&137)-100)),r1 ; get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; any change in count?
 	beq	10$			; no
 	mov	2(r1)	,pcnt.n+2	; ya, update it
@@ -813,14 +813,14 @@ senvt1:	tst	logini			; need the header?
 20$:	wrtall	#$pos0			; /BBS/ position the cursor
 	mov	#pcnt.s	,r1		; /43/ 32. bits now
 	call	numout			; write number on terminal
-	mov	#pcnt.r+(4*^?^/'N&137/-100?),r1 ; get the sent NAK count
+	mov	#pcnt.r+(4*(('N&137)-100)),r1 ; get the sent NAK count
 	cmp	2(r1)	,pcnt.n+2	; any change in count?
 	beq	30$			; no
 	mov	2(r1)	,pcnt.n+2	; ya, update it
 	wrtall	#npox			; /62/ for shortened send logging
 	call	numout			; write number on terminal
 30$:	; /BBS/ dotmo moved here
-	mov	#pcnt.r+(4*^?^/'T&137/-100?),r1 ; /44/ get time-out count
+	mov	#pcnt.r+(4*(('T&137)-100)),r1 ; /44/ get time-out count
 	cmp	2(r1)	,pcnt.t+2	; /44/ has time-out count changed?
 	beq	40$			; /44/ no, just exit
 	mov	2(r1)	,pcnt.t+2	; /44/ yes, update counter

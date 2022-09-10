@@ -212,7 +212,7 @@ b20$:	inc	numtry			; this is another retry
 	.sbttl	Send debugging and logging	; /62/ major revision..
 
 sendeb:	mov	trace	,r0		; copy of debug status word
-	bic	#^c^/log$pa!log$de/,r0	; need to do this?
+	bic	#~(log$pa|log$de),r0	; need to do this?
 	beq	30$			; nope
 	save	^/r1,r2/
 	sub	#100.	,sp		; allocate a small buffer

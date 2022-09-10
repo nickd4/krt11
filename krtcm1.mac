@@ -88,11 +88,11 @@ parlst:	.word	P00$ ,P10$ ,P20$ ,P30$ ,P40$	; parity display in SHOW LINE
  P20$:	.asciz	"EVEN"
  P30$:	.asciz	"MARK"
  P40$:	.asciz	"SPACE"
-cm1.01:	.asciz	" closed"^/cr/^/lf/	; shared string: TAKE, defterm
-cm1.02:	.asciz	" opened"^/cr/^/lf/
-cm1.03:	.asciz	" Files copied:"^/cr/^/lf/
-cm1.04:	.asciz	"?TYPE-W-Binary file filter enabled"^/cr/^/lf/
-cm1.05:	.asciz	" to TT:"^/cr/^/lf/
+cm1.01:	.asciz	" closed"(cr)(lf)	; shared string: TAKE, defterm
+cm1.02:	.asciz	" opened"(cr)(lf)
+cm1.03:	.asciz	" Files copied:"(cr)(lf)
+cm1.04:	.asciz	"?TYPE-W-Binary file filter enabled"(cr)(lf)
+cm1.05:	.asciz	" to TT:"(cr)(lf)
 cm1.06:	.asciz	"Link device is "
 cm1.07:	.asciz	"TT:   "
 cm1.08:	.asciz	" via Line #"
@@ -664,8 +664,8 @@ c.mnt:	tst	tsxsave			; /63/ running under TSX?
 
 	.save
 	.psect	$pdata
-less:	.asciz	^/cr/^/lf/		; only type these for a binary file
-more:	.asciz	^/bell/^/bs/^/tab/^/cr/^/ff/^/lf/^/ctrl$n/^/ctrl$o/^/esc/ ; ok in text
+less:	.asciz	(cr)(lf)		; only type these for a binary file
+more:	.asciz	(bell)(bs)(tab)(cr)(ff)(lf)(ctrl$n)(ctrl$o)(esc) ; ok in text
 	.even
 	.restore
 

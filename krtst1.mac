@@ -89,16 +89,16 @@ st1.11:	.asciz	"Your max authorized priority is "
 st1.12:	.asciz	"DK  --> "		 ; /63/
 st1.13:	.asciz	"Explicit or Implicit? " ; /63/
 st1.14:	.asciz	"You may need to SET BLO "
-st1.15:	.asciz	" on the other Kermit"^/cr/^/lf/
-st1.16:	.asciz	"ASCII text mode set"^/cr/^/lf/
-st1.17:	.asciz	"Binary mode set"^/cr/^/lf/
-st1.18:	.asciz	"DEC-Multinational mode set"^/cr/^/lf/
-st1.19:	.asciz	"Auto ASCII/Binary mode set"^/cr/^/lf/
-st1.20:	.asciz	"Caution: Binary files will require 8-bit prefixing"^/cr/^/lf/
-st1.21:	.asciz	" appended to BINARY-TYPE list"^/cr/^/lf/
+st1.15:	.asciz	" on the other Kermit"(cr)(lf)
+st1.16:	.asciz	"ASCII text mode set"(cr)(lf)
+st1.17:	.asciz	"Binary mode set"(cr)(lf)
+st1.18:	.asciz	"DEC-Multinational mode set"(cr)(lf)
+st1.19:	.asciz	"Auto ASCII/Binary mode set"(cr)(lf)
+st1.20:	.asciz	"Caution: Binary files will require 8-bit prefixing"(cr)(lf)
+st1.21:	.asciz	" appended to BINARY-TYPE list"(cr)(lf)
 st1.22:	.asciz	"Packet length truncated to buffer maximum of "
-st1.23:	.asciz	". bytes"^/cr/^/lf/
-st1.24:	.asciz	"Remember to SET BLO 3 for long-packets"^/cr/^/lf/
+st1.23:	.asciz	". bytes"(cr)(lf)
+st1.24:	.asciz	"Remember to SET BLO 3 for long-packets"(cr)(lf)
 	.even
 
 	.page
@@ -999,32 +999,32 @@ i30$:	return
 	.sbttl	Clear a VT-100's screen	; /62/ moved this here..
 	;.enabl	lsb
 
-c$cls::	movb	#'l!40	,nrm.rev	; set for normal video
+c$cls::	movb	#'l|40	,nrm.rev	; set for normal video
 	br	j10$
-c$clx::	movb	#'h!40	,nrm.rev	; set for reverse video
+c$clx::	movb	#'h|40	,nrm.rev	; set for reverse video
 j10$:	wrtall	#clstxt			; clean up the screen
 	clr	r0			; /62/
 	return
 
 	.save
 	.psect	$rwdata	,rw,d,lcl,rel,con
-clstxt:	.ascii	^/esc/"<"	; ANSI mode from VT-52
-	.ascii	^/esc/"[?1l"	; reset cursor key application mode
-	.ascii	^/esc/"[?3l"	; reset to 80 cols
-	.ascii	^/esc/"[?4l"	; reset to jump scroll
-	.ascii	^/esc/"[?5"	; prefix for normal/reverse video
+clstxt:	.ascii	(esc)"<"	; ANSI mode from VT-52
+	.ascii	(esc)"[?1l"	; reset cursor key application mode
+	.ascii	(esc)"[?3l"	; reset to 80 cols
+	.ascii	(esc)"[?4l"	; reset to jump scroll
+	.ascii	(esc)"[?5"	; prefix for normal/reverse video
 nrm.rev:.byte	0		; set to normal/reverse screen as desired
-	.ascii	^/esc/"[?6l"	; reset to cursor origin mode
-	.ascii	^/esc/"[?7h"	; set auto wraparound mode
-	.ascii	^/esc/"[?8h"	; set auto repeat mode
-	.ascii	^/esc/"(B"	; designate ASCII character set as G0
-	.ascii	^/ctrl$o/	; reset to normal text from graphics..
-	.ascii	^/esc/"[1;24r"	; reset scrolling region to entire screen
-	.ascii	^/esc/"[J"	; erase from cursor to end (here, everything)
-	.ascii	^/esc/"[m"	; reset all attributes to normal
-	.ascii	^/esc/"[q"	; turn off all leds
-	.ascii	^/esc/"[v"	; make cursor visible
-	.ascii	^/esc/">"	; restore keypad numeric mode
+	.ascii	(esc)"[?6l"	; reset to cursor origin mode
+	.ascii	(esc)"[?7h"	; set auto wraparound mode
+	.ascii	(esc)"[?8h"	; set auto repeat mode
+	.ascii	(esc)"(B"	; designate ASCII character set as G0
+	.ascii	(ctrl$o)	; reset to normal text from graphics..
+	.ascii	(esc)"[1;24r"	; reset scrolling region to entire screen
+	.ascii	(esc)"[J"	; erase from cursor to end (here, everything)
+	.ascii	(esc)"[m"	; reset all attributes to normal
+	.ascii	(esc)"[q"	; turn off all leds
+	.ascii	(esc)"[v"	; make cursor visible
+	.ascii	(esc)">"	; restore keypad numeric mode
 	.byte	0		; terminator
 	.even
 	.restore

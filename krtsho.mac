@@ -116,7 +116,7 @@ sh.001:	.asciz	"Block-check-type: "
 sh.002:	.asciz	"Incomplete-file-disposition: "
 sh.003:	.asciz	"RANDOM error generation:"
 sh.004:	.asciz	"  SEED = "
-sh.005:	.asciz	"."^/cr/^/lf/
+sh.005:	.asciz	"."(cr)(lf)
 sh.006:	.ascii	" "
 sh.007:	.asciz	"ENABLED"
 sh.008:	.asciz	" disabled"
@@ -170,9 +170,9 @@ sh.055:	.asciz	"initial-connect limit"
 sh.056:	.asciz	"max for other packets"
 sh.057:	.ascii	" "
 sh.058:	.asciz	" ^"
-sh.059:	.ascii	" ----------------- Packet Stats -----------------"^/cr/^/lf/
-	.asciz	"Type  Last Sent   Last Rec    Prev Sent   Prev Rec"^/cr/^/lf/
-sh.060:	.asciz	" --- Last Transaction ---"^/cr/^/lf/
+sh.059:	.ascii	" ----------------- Packet Stats -----------------"(cr)(lf)
+	.asciz	"Type  Last Sent   Last Rec    Prev Sent   Prev Rec"(cr)(lf)
+sh.060:	.asciz	" --- Last Transaction ---"(cr)(lf)
 sh.061:	.asciz	"ALL"
 sh.062:	.asciz	"Bytes "
 sh.063:	.asciz	"sent:    "
@@ -180,7 +180,7 @@ sh.064:	.asciz	"received:"
 sh.065:	.asciz	"For data bytes:"
 sh.066:	.asciz	"Time to transfer: "
 sh.067:	.asciz	"Physical data rate: "
-sh.068:	.asciz	" chars/second"^/cr/^/lf/
+sh.068:	.asciz	" chars/second"(cr)(lf)
 sh.069:	.asciz	"File transfer rate: "
 sh.070:	.asciz	"Chars per read:     "
 sh.071:	.asciz	"DELAY"
@@ -217,7 +217,7 @@ sh.101:	.asciz	"  "
 sh.102:	.asciz	"BINARY-TYPE file extents: "
 sh.103:	.asciz	" *"
 sh.104:	.asciz	"Accessable devices:"
-sh.105:	.asciz	"No phone numbers defined"^/cr/^/lf/	; /63/ for SHOW ALL
+sh.105:	.asciz	"No phone numbers defined"(cr)(lf)	; /63/ for SHOW ALL
 sh.106:	.asciz	"Last number dialed:  "
 sh.107:	.asciz	"Not available under RT-11"
 sh.108:	.asciz	"VLSWCH (^W,^B) during CONNECT"
@@ -238,7 +238,7 @@ sh.122:	.asciz	"Repeated character quoting: "
 sh.123:	.asciz	" seconds"
 sh.124:	.asciz	"control quote = "
 sh.125:	.asciz	" ("
-sh.126:	.asciz	"), applied to (0 = unprefixed, 1 = prefixed):"^/cr/^/lf/
+sh.126:	.asciz	"), applied to (0 = unprefixed, 1 = prefixed):"(cr)(lf)
 sh.127:	.asciz	": "
 sh.128:	.asciz	"         "	; 9 spaces
 sh.129:	.asciz	" renamed to "
@@ -246,13 +246,13 @@ sh.130:	.asciz	" deleted"
 sh.131:	.asciz	" block"
 sh.132:	.asciz	" copied to "
 sh.133:	.asciz	"_To: "
-sh.134:	.asciz	"No logical disks are mounted"^/cr/^/lf/
+sh.134:	.asciz	"No logical disks are mounted"(cr)(lf)
 dkslug:	.asciz	"DK  --> "
 hoslug:	.asciz	"HOME--> "
 lis.ctrl:.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
 pridev:	.asciz	"LP:"
 raslug:	.asciz	"  ("
-ratag:	.asciz	"Hz)"^/cr/^/lf/
+ratag:	.asciz	"Hz)"(cr)(lf)
 typdef:	.asciz	".LST"
 	.even
 
@@ -265,7 +265,7 @@ txflag:	.word	0			; /BBS/ if <>, sending
 C2:	.word	0			; hours
 C3:	.word	0			; mins
 C4:	.word	0			; secs
-conn:	.asciz	"     :00"^/cr/^/lf/	; write converted time here
+conn:	.asciz	"     :00"(cr)(lf)	; write converted time here
 ld$data:.ascii	"LD0 --> "		; WARNING: DON'T MODIFY LD$NAME STRING
 ld$name:.asciz	"DU5:JAYSEN.DSK  R/O  [not available]" ; TO LEFT OF "[" CHAR!!
 	.even
@@ -535,7 +535,7 @@ sho$su:	tst	tsxsave			; running under TSX?
 	beq	90$			; next
 	mov	r4	,r0		; copy unit number to
 	add	#'0	,r0		; convert to ascii character
-	movb	r0	,^/ld$data+2/	; stick into display buffer
+	movb	r0	,(ld$data+2)	; stick into display buffer
 
 ;	input:	r2	= buffer for the result
 ;		r3	= current directory entry pointer
@@ -1106,7 +1106,7 @@ sho$cl:	tst	tsxsave			; running under TSX?
 sho$so:	wrtall	#sh.037			; /63/ "RECEIVE "
 	wrtall	#sh.100			; /63/ "start of packet SOH  "
 	mov	recsop	,-(sp)		; recover SOH char to a tiny buffer
-	bic	#^c^/177/,@sp		; hose parity
+	bic	#~(177),@sp		; hose parity
 	mov	sp	,r0		; point to where it is on stack
 	call	unfmts			; convert to "\000" format
 	wrtall	r0			; display that
@@ -1115,7 +1115,7 @@ sho$so:	wrtall	#sh.037			; /63/ "RECEIVE "
 	wrtall	#sh.101			; /63/ "  "
 	wrtall	#sh.100			; /63/ "start of packet SOH  "
 	mov	sensop	,@sp		; recover SOH char
-	bic	#^c^/177/,@sp		; hose parity
+	bic	#~(177),@sp		; hose parity
 	mov	sp	,r0		; point to where it is on stack
 	call	unfmts			; convert to "\000" format
 	wrtall	r0			; display that
@@ -1448,7 +1448,7 @@ g70$:	wrtall	#sh.132			; /63/ then do the next part of log
 ;		argbuf	= second arg
 ;		 r0	= if <>, error code
 
-	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.TSPA ; /62/ don't upper case
+	CVTARG	= C.CRLF | C.LSPA | C.SSPA | C.TSPA ; /62/ don't upper case
 
 gettwo::save	^/r1,r2/
 	mov	argbuf	,r2		; point to the argument buffer

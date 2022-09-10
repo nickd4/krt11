@@ -125,18 +125,18 @@
 	BINLSIZ	= 40*4			; binary types list buffer size
 ;	$ALLSIZ is the packet buffer length, and lives in KRTMAC.MAC
 	MAXSIZ	==   1000		; individual file buffer size
-	$$BUFP	= ^?^/MAXSIZ+2/*4?	; 4 file buffers: in, out, log, take
+	$$BUFP	= ((MAXSIZ+2)*4)	; 4 file buffers: in, out, log, take
 	$.1	= 82.+200+60		; /62/ dirnam + dirbfr + phnum buffers
-	$.2	= ^/34*2*2/*2		; totp.r and totp.s stats buffers
-	$.3	= ^/LN$MAX+2/*2		; cmdbuf and argbuf allocations
-	$.4	= ^?^/LN$MAX+2/*LN$CNT?	; SL editor command line buffers
+	$.2	= (34*2*2)*2		; totp.r and totp.s stats buffers
+	$.3	= (LN$MAX+2)*2		; cmdbuf and argbuf allocations
+	$.4	= ((LN$MAX+2)*LN$CNT)	; SL editor command line buffers
 
-	TOTALL	== ^/ALSIZE+BINLSIZ+$ALLSIZ+$$BUFP+$.1+$.2+$.3+$.4/
+	TOTALL	== (ALSIZE+BINLSIZ+$ALLSIZ+$$BUFP+$.1+$.2+$.3+$.4)
 
-	.if eq TOTALL-(^?TOTALL/100?*100) ; 32-word boundary
+	.if eq TOTALL-((TOTALL/100)*100) ; 32-word boundary
 	ALLOC	== TOTALL		; landed right on it
 	.iff
-	ALLOC	== ^/TOTALL&177700/+100	; force to next 32-word boundary
+	ALLOC	== (TOTALL&177700)+100	; force to next 32-word boundary
 	.endc
 
 	.page
@@ -219,28 +219,28 @@ cl0text:.asciz	"CL0:"			; asciz names
 cl1text:.asciz	"CL1:"			; for TSX
 fatal:	.asciz	"?KRTOSI-F-"
 noxcmt:	.ascii	"This system lacks KM, XC and XL drivers.  "	; /62/
-	.ascii	"TT must be used for transfers."^/cr/^/lf/
+	.ascii	"TT must be used for transfers."(cr)(lf)
 	.ascii	"Packet length has been set to 60. bytes "
-	.asciz	"to avoid overflowing the console port."^/cr/^/lf/
-nolog:	.ascii	"Packet stats display disabled for FRUNed Kermit."^/cr/^/lf/
-	.asciz	"Use SET UPDATE to enable stats during transfers."^/cr/^/lf/
-osi.01:	.asciz	"RT-11SJ must be SYSGENNED with timer support"^/cr/^/lf/
-osi.02:	.asciz	"Line Time Clock is not running"^/cr/^/lf/
-osi.03:	.asciz	"CPU has no EIS support, rebuild KRT with KRTASM.NON"^/cr/^/lf/
+	.asciz	"to avoid overflowing the console port."(cr)(lf)
+nolog:	.ascii	"Packet stats display disabled for FRUNed Kermit."(cr)(lf)
+	.asciz	"Use SET UPDATE to enable stats during transfers."(cr)(lf)
+osi.01:	.asciz	"RT-11SJ must be SYSGENNED with timer support"(cr)(lf)
+osi.02:	.asciz	"Line Time Clock is not running"(cr)(lf)
+osi.03:	.asciz	"CPU has no EIS support, rebuild KRT with KRTASM.NON"(cr)(lf)
 osi.04:	.asciz	"HIMEM in TSGEN.MAC must be at least "
-osi.05:	.asciz	". bytes"^/cr/^/lf/
+osi.05:	.asciz	". bytes"(cr)(lf)
 osi.06:	.asciz	"CRRG/CRAW error #"
-osi.07:	.ascii	"Insufficient space available for buffer allocation"^/cr/^/lf/
+osi.07:	.ascii	"Insufficient space available for buffer allocation"(cr)(lf)
 	.asciz	"TOTALL = "
 osi.08:	.asciz	",  MAXTOP-HILIMIT = "
-osi.09:	.ascii	"Program high limit exceeds top of memory"^/cr/^/lf/
+osi.09:	.ascii	"Program high limit exceeds top of memory"(cr)(lf)
 	.asciz	"HILIMIT = "
 osi.10:	.asciz	",  MAXTOP = "
-osi.11:	.asciz	^/cr/^/lf/"You are "
-osi.12:	.asciz	" from happiness.."^/cr/^/lf/
+osi.11:	.asciz	(cr)(lf)"You are "
+osi.12:	.asciz	" from happiness.."(cr)(lf)
 osi.13:	.asciz	". word"
 osi.14: .asciz	"s"			; /63/ not 1, so make it plural
-osi.15:	.asciz	" free to load handlers"^/cr/^/lf/
+osi.15:	.asciz	" free to load handlers"(cr)(lf)
 	.even
 
 	.page
@@ -477,7 +477,7 @@ A200$:	mov	@r2	,r0		; /62/ save top to clear when done
 	.page
 	.sbttl	Set/get terminal config..   ; /BBS/ moved here
 
-	TTMODE	= 20 ! 100 ! 10000 ! 40000  ; nosl ,nowait ,spec ,lc
+	TTMODE	= 20 | 100 | 10000 | 40000  ; nosl ,nowait ,spec ,lc
 	$TCFIG	= 424			; offset to addr of term config word
 	$SCOPE	= 100000		; and its SET TT SCOPE bit
 

@@ -58,7 +58,7 @@ conesc:: .blkw	1		; escape character for CONNECT
 conmsg:: .blkw	1		; /BBS/ flag to hold CONNECT sign-on
 conpar:: .blkb	20		; other Kermit's sinit parameters
 csi.fake::.blkw	1		; /62/ if <> use fake CSI comma parser
-ctlflgs::.blkb	^/1.+32.+1.+32./	; /63/ DEL&200 ,NUL..US ,DEL ,<NUL..US>&200
+ctlflgs::.blkb	(1.+32.+1.+32.)	; /63/ DEL&200 ,NUL..US ,DEL ,<NUL..US>&200
 datauk:: .blkw	1		; /62/ data unknown loop counter
 defpri:: .blkw	1		; /BBS/ TSX priority when Kermit was started
 diatmo:: .blkw	1		; /46/ SET DIAL TIME-OUT
@@ -163,9 +163,9 @@ sl.ked:: .blkw	1		; /BBS/ make <> for SL's KED mode
 sl.on::	 .blkw	1		; /BBS/ make <> to turn on SL
 snd8bit::.blkw	1		; local do 8-bit prefixing flag
 spare0:: .blkb	32.		; /63/ temp buffer, for small stuff..
- SP0SIZ	 ==	^/.-spare0/	; /63/ size of above spare0 buffer
+ SP0SIZ	 ==	(.-spare0)	; /63/ size of above spare0 buffer
 spare1:: .blkb	256.		; /BBS/ temp buffer, max SVID filespec
- SP1SIZ	 ==	^/.-spare1/	; /63/ size of above spare1 buffer
+ SP1SIZ	 ==	(.-spare1)	; /63/ size of above spare1 buffer
 sparsz:: .blkw	1		; size of our sinit packet
 state::	 .blkw	1		; current recsw or sensw state
 summary::.blkw	1		; /BBS/ if <> do dir summary only
@@ -203,8 +203,8 @@ xprint::.word	0		; /62/ if <> dump TT to LP, here for safety..
 prompt::.asciz	"KRT> "		; /63/ say this is a special version
 	.even			; /62/ prompt buffer = 32. bytes total
 	.blkb	26.		; /62/ if stack overflows, make it obvious!
-stklim::.blkw	400+^?$allsiz/2?	; /62/ the stack, allowing for max long packet
+stklim::.blkw	400+($allsiz/2)	; /62/ the stack, allowing for max long packet
 stack::	.word	0		; stack starts here..
-STKSIZ	== ^/.-stklim/		; /62/ for debugger display
+STKSIZ	== (.-stklim)		; /62/ for debugger display
 
 	.end

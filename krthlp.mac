@@ -73,7 +73,7 @@
 
 	.mcall	.RCTRLO
 
-	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.LCUC ! C.TSPA ; arg processing
+	CVTARG	= C.CRLF | C.LSPA | C.SSPA | C.LCUC | C.TSPA ; arg processing
 
 	.page
 	.sbttl	Local data
@@ -85,16 +85,16 @@ rtname:	.word	10$ ,20$ ,30$ ,40$ ,0	; /63/ this is the help file path
 20$:	.asciz	"KRT:KRTHLP.HLP"	; /BBS/ then here, etc..
 30$:	.asciz	"SY:KRTHLP.HLP"
 40$:	.asciz	"DK:KRTHLP.HLP"
-addinf:	.ascii	"    Additional information is available on:"^/cr/^/lf/ ; /63/
+addinf:	.ascii	"    Additional information is available on:"(cr)(lf) ; /63/
  fill7:	.byte	cr ,lf ,40 ,40 ,40 ,40 ,40 ,40 ; /BBS/ a newline and 7 blanks
  fill:	.byte	40 ,0			; or just one blank, for formatting
 bugtxt:	.asciz	"Upgrades"		; /62/ for the BUG command
 dbldash:.asciz	" --"			; /BBS/ a space and a double dash..
 errhdr:	.asciz	"?KRTHLP-W-"		; /63/
-errmis:	.asciz	"Can't find KRTHLP.HLP on HLP, KRT, SY or DK"^/cr/^/lf/
-errver:	.asciz	" is an incorrect version"^/cr/^/lf/
+errmis:	.asciz	"Can't find KRTHLP.HLP on HLP, KRT, SY or DK"(cr)(lf)
+errver:	.asciz	" is an incorrect version"(cr)(lf)
 hlp2lp:	.asciz	"LP:KRTHLP.OUT"		; /62/ where HPRINT sends a file
-nohelp:	.asciz	"% Help not found for the requested topic"^/cr/^/lf/ ; /63/
+nohelp:	.asciz	"% Help not found for the requested topic"(cr)(lf) ; /63/
 ptopic:	.asciz	" Select topic, please: " ; /BBS/ for prompting
 	.even
 
@@ -307,9 +307,9 @@ hfind:	save	^/r2,r3,r4,r5/
 	tstb	(r1)			; /BBS/ end of the line yet?
 	beq	70$			; yes
 	movb	(r1)+	,r0		; /BBS/ no, get next byte
-	cmpb	r0	,#'a!40		; is this a lower case letter?
+	cmpb	r0	,#'a|40		; is this a lower case letter?
 	blo	30$			; nope
-	cmpb	r0	,#'z!40		; maybe, if a "z" or below
+	cmpb	r0	,#'z|40		; maybe, if a "z" or below
 	bhi	30$			; no
 	bicb	#40	,r0		; ya, convert to upper case
 30$:	cmpb	(r3)	,#'_		; /63/ did user type an underscore?
@@ -493,7 +493,7 @@ hindex:	save	^/r2,r4,r5/
 	clr	-(sp)			; allocate
 	clr	-(sp)			; some buffers
 	mov	sp	,r5		; and a pointer to them
-	movb	2+^/5*2/(sp),2(r5)	; /BBS/ get the passed topic level
+	movb	2+(5*2)(sp),2(r5)	; /BBS/ get the passed topic level
 	cmpb	2(r5)	,#'1		; is this the main menu today?
 	bhi	10$			; no, don't reposition the file
 	clrb	hlpbuf			; flag nothing's there

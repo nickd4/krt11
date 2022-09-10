@@ -15,7 +15,7 @@
 	.psect	$pdata
 sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 	.iif ne	'PAT'.	.ascii	"-'PAT'" ; /62/ from blowing up SHOW VERSION
-	.asciz	"  Last edit: 'LASTED'"^/cr/^/lf/	; max string length = ln$max
+	.asciz	"  Last edit: 'LASTED'"(cr)(lf)	; max string length = ln$max
 	.even
 	.endm	krt.id
 
@@ -1402,7 +1402,7 @@ fifteen:.word	0 ,15			; /62/ 15 ticks for .twait
 ;nosub:	.byte	0 ,152			; /BBS/ disable subprocess access
 ;	.word	'H
 ;	.word	0
-caratc:	.asciz	"^C"^/cr/^/lf/		; /62/ something to echo
+caratc:	.asciz	"^C"(cr)(lf)		; /62/ something to echo
 cmd.01:	.ascii	"Kermit-11 for "	; for SHOW VERSION
 	.if df	NONEIS			; include which
 	.ascii	"NON"			; instruction set
@@ -1412,9 +1412,9 @@ cmd.02:	.asciz	"XB,XM,ZB,ZM"
 cmd.03:	.asciz	"FB,SB,SJ"
 cmd.04:	.asciz	"/TSX-Plus  "
 cmd.05:	.asciz	" failed at line #"	; error message
-cmd.06:	.asciz	':'^/cr/^/lf/'  "'	; line number tag & top of next line
-cmd.07:	.asciz	'"'^/cr/^/lf/'  '		; end of line & top of following line
-cmd.08:	.asciz	" closed"^/cr/^/lf/	; take file is closed
+cmd.06:	.asciz	':'(cr)(lf)'  "'	; line number tag & top of next line
+cmd.07:	.asciz	'"'(cr)(lf)'  '		; end of line & top of following line
+cmd.08:	.asciz	" closed"(cr)(lf)	; take file is closed
 cmdch:	.asciz	"_ABCDEFGHIJKLMNOPQRSTUVWXYZ-@0123456789." ; /63/ legal chars
 comment:.byte	scolon ,'! ,0		; /63/ comment delimiters list
 	.even
@@ -1755,7 +1755,7 @@ chk.tt::strcpy	#errtxt	,(r5)		; /63/ make a temp copy of file name
 ;		 r0	= -1 (cmd$bad) for invalid command
 ;			  -2 (cmd$ex)  for exit
 
-	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.TSPA ; /BBS/ don't upper case
+	CVTARG	= C.CRLF | C.LSPA | C.SSPA | C.TSPA ; /BBS/ don't upper case
 
 	; offsets into command dispatch data table
 	.NAME	=	0	; command name

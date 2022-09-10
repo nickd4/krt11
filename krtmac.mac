@@ -101,7 +101,7 @@
 	AT.TYP	=: 40		; file type
 	AT.XLE	=: 100		; exact length in bytes
 	AT.ON	=: 100000	; /63/ do attribute processing
-	AT.ALL	=: AT.CDT!AT.INF!AT.LEN!AT.PRO!AT.SYS!AT.TYP!AT.XLE
+	AT.ALL	=: AT.CDT|AT.INF|AT.LEN|AT.PRO|AT.SYS|AT.TYP|AT.XLE
 
 ;	bits in trace (debug status word)
 	LOG$PA	= 1		; log all packets
@@ -111,7 +111,7 @@
 	LOG$DE	= 20		; /62/ debugging to TT
 	LOG$ON	= 40000		; /63/ set to write to disk, clear to suspend
 	LOG$OP	= 100000	; logfile is open
-	LOG$AL	= LOG$PA!LOG$CO	; /62/ ALL
+	LOG$AL	= LOG$PA|LOG$CO	; /62/ ALL
 
 ;	parity options
 	PAR$NO	=: 0		; none
@@ -154,7 +154,7 @@
 	LN$MAX	=    132.	; /63/ max command line length
 	MAXLNG	=   1920.	; /63/ use max long-packet buff size
 	.endc
-	$ALLSIZ	= ^/MAXLNG+14/&177776 ; /62/ make it this for safety
+	$ALLSIZ	= (MAXLNG+14)&177776 ; /62/ make it this for safety
 
 	.page
 	.sbttl	Utility macros
@@ -169,7 +169,7 @@
 
 	.macro	.chksp	arg
 	.ntype	$$5	,arg
-	.iif eq ^?^/$$5&7/-6? .error arg ^/; Illegal use of SP (r6) in call/
+	.iif eq (($$5&7)-6) .error arg (; Illegal use of SP (r6) in call)
 	.endm	.chksp
 
 	.macro	calls	name	,arglst
@@ -208,8 +208,8 @@
 	    .endr
 	  mov	sp	,r5		; set up the argument list pointer
 	  jsr	pc	,name		; and go to the routine
-	  .iif eq ^/$$-2/  cmp	(sp)+	,(sp)+	; two args
-	  .iif gt ^/$$-2/  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
+	  .iif eq ($$-2)  cmp	(sp)+	,(sp)+	; two args
+	  .iif gt ($$-2)  add	#$$*2	,sp	; gen "add 2*argnum ,sp"
 	  mov	(sp)+	,r5		; /63/ restore r5
 	  .endc
 	.endc
@@ -263,16 +263,16 @@
 
 	.macro	incm64	val
 	inc	val
-	bic	#^c^/77/	,val		; /62/ faster
+	bic	#~(77)	,val		; /62/ faster
 	.endm	incm64
 
 	.macro	indexm	reg		; check for auto increment/decrement
 	.ntype	$$$0	,reg		; modes for macros that can't have..
 	.if  ne	$$$0-27			; always allow pc autoincrement
-	$$$0 =	^/$$$0&177770//10	; ..these modes in their arg list
+	$$$0 =	($$$0&177770)/10	; ..these modes in their arg list
 	.ift				; get the mode into 0..7
 	  .if  ge $$$0-2		; if mode >=2 and mode <=5 then error
-	  .iif ge ^/5-$$$0/ .error      ^?; Can't use auto inc/dec mode here?
+	  .iif ge (5-$$$0) .error      ^?; Can't use auto inc/dec mode here?
 	  .endc
 	.endc
 	.endm	indexm

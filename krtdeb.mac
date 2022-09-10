@@ -91,9 +91,9 @@
 	.psect	$pdata
 deb.01:	.word	pbyte ,pint
 deb.02:	.word	deb.03 ,deb.04
-deb.03:	.asciz	^/tab/"Byte data, size"	; /BBS/ added tabs
-deb.04:	.asciz	^/tab/"Word data, size"
-deb.05:	.asciz	^/tab/"  Starting address: "
+deb.03:	.asciz	(tab)"Byte data, size"	; /BBS/ added tabs
+deb.04:	.asciz	(tab)"Word data, size"
+deb.05:	.asciz	(tab)"  Starting address: "
 deb.06:	.asciz	"?KRTDEB-E-"			; /62/
 deb.07:	.asciz	"Symbol not in internal STB"	; /62/
 deb.08:	.asciz	"Bad octal value"		; /62/
@@ -321,7 +321,7 @@ pbyte:	sub	#20	,sp		; a buffer to use today
 	bisb	(r5)+	,r4		; without sign extension
 	clrb	(r1)			; /BBS/ prep to ..
 	bisb	r4	,(r1)		; /BBS/ ..copy sans sign extension
-	bicb	#^c^/177/,(r1)		; /BBS/ hose hi bit
+	bicb	#~(177),(r1)		; /BBS/ hose hi bit
 	cmpb	(r1)	,#space		; /BBS/ printable?
 	blt	30$			; /BBS/ no
 	cmpb	(r1)	,#177		; /BBS printable?
@@ -331,16 +331,16 @@ pbyte:	sub	#20	,sp		; a buffer to use today
 40$:	tstb	(r1)+			; /BBS/ save char, bump to next byte
 50$:	mov	r4	,r0		; copy it
 	ash	#-6	,r0		; get the high two bits now
-	bic	#^c^/3/	,r0		; mask the lower bits please
+	bic	#~(3)	,r0		; mask the lower bits please
 	add	#'0	,r0		; convert
 	movb	r0	,(r2)+		; and copy
 	mov	r4	,r0		; copy it
 	ash	#-3	,r0		; get the high two bits now
-	bic	#^c^/7/	,r0		; mask the lower bits please
+	bic	#~(7)	,r0		; mask the lower bits please
 	add	#'0	,r0		; convert
 	movb	r0	,(r2)+		; and copy
 	mov	r4	,r0		; copy it
-	bic	#^c^/7/	,r0		; mask the lower bits please
+	bic	#~(7)	,r0		; mask the lower bits please
 	add	#'0	,r0		; convert
 	movb	r0	,(r2)+		; and copy
 	movb	#space	,(r2)+		; /BBS/ a trailing space

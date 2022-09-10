@@ -71,9 +71,9 @@ dejavu:	.asciz	"Duplicate packet received" ; /63/
 dejatag:.asciz	", paknum: "
 get2lp:	.asciz	"KRTGET.OUT"		; /63/ need a name to output to LP
 nojavu:	.asciz	"Ignoring invalid response" ; /63/
-rec.01:	.asciz 	"Remote server response:"^/cr/^/lf/^/cr/^/lf/ ; /63/
-rec.02:	.asciz	^/bell/"Receive completed"
-rec.03:	.asciz	^/bell/"Receive failed"
+rec.01:	.asciz 	"Remote server response:"(cr)(lf)(cr)(lf) ; /63/
+rec.02:	.asciz	(bell)"Receive completed"
+rec.03:	.asciz	(bell)"Receive failed"
 rec.04:	.byte	abt$cur	,0
 rec.05:	.byte	abt$all	,0
 rec.06:	.asciz	"Created "
@@ -229,7 +229,7 @@ b20$:	movb	state	,r1		; stay in the same state, try again
 	.sbttl	Receive debugging and logging	; /62/ major revision..
 
 recdeb:	mov	trace	,r0		; copy of debug status word
-	bic	#^c^/log$pa!log$de/,r0	; need to do this?
+	bic	#~(log$pa|log$de),r0	; need to do this?
 	beq	30$			; nope
 	save	^/r1,r2/
 	sub	#100.	,sp		; allocate a small buffer
@@ -600,7 +600,7 @@ rdat.d:	tst	xmode			; do we need to create the file
 100$:	tst	xmode			; /62/ amidst an extended reply?
 	beq	110$			; /62/ no
 	mov	trace	,r1		; /62/ copy of debug status word
-	bic	#^c^/log$de!log$rp/,r1	; /62/ hose all except TT options
+	bic	#~(log$de|log$rp),r1	; /62/ hose all except TT options
 	beq	110$			; /62/ not now debugging to terminal
 	.newline			; /62/ using TT, put next in the clear
 110$:	tst	remote			; are we a local Kermit today?
@@ -715,7 +715,7 @@ bufemp:	mov	@r5	,r2		; input record address
 	bne	20$			; no
 	movb	(r2)+	,r4		; /63/ yes, get next character
 	dec	r3			; chcount--
-	bic	#^c^/177/,r4		; hose possible parity and sxt bits
+	bic	#~(177),r4		; hose possible parity and sxt bits
 	unchar	r4	,r4		; decode it into a number
 	clr	r0			; now prime with the next character
 	bisb	(r2)+	,r0		; so we can check for other types of
@@ -740,7 +740,7 @@ bufemp:	mov	@r5	,r2		; input record address
 	bisb	(r2)+	,r0		; must be one you know
 	dec	r3			; chcount := pred(chcount)
 	mov	r0	,r1		; /63/ copy to check against quote ch
-	bic	#^c^/177/,r1		; must avoid sxt here, drop bits 7..15
+	bic	#~(177),r1		; must avoid sxt here, drop bits 7..15
 	cmpb	r1	,conpar+p.qctl	; if ch <> myquote
 	beq	40$			;  then
 	cmpb	r1	,#77		;   if   (ch & 177) >= ctl(del)

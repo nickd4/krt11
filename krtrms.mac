@@ -743,7 +743,7 @@ close::	save	^/r4,r2/			; use r4, for calling clr.at
 	beq	50$			; no date was passed
 ; /62/	.sfdat	#rtwork	,#lun.at,#r50out,date.a(r4) ; set the date
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#lun.at+^/34.*0o400/,@R0	; /62/ even though V4 can't run it
+	MOV	#lun.at+(34.*0o400),@R0	; /62/ even though V4 can't run it
 	MOV	#r50out	,2.(R0)		; /62/
 	MOV	date.a(r4),4.(R0)	; /62/
 	EMT	0o375			; /62/
@@ -756,7 +756,7 @@ close::	save	^/r4,r2/			; use r4, for calling clr.at
 	beq	60$			; nope..
 ; /62/	.fprot	#rtwork	,#lun.at,#r50out,#1 ; ya, set the protection
 	MOV	#rtwork	,R0		; /62/ expanded to assemble under V4
-	MOV	#lun.at+^/35.*0o400/,@R0	; /62/ even though V4 can't run it
+	MOV	#lun.at+(35.*0o400),@R0	; /62/ even though V4 can't run it
 	MOV	#r50out	,2.(R0)		; /62/
 	MOVB	#1	,4.(R0)		; /62/
 	EMT	0o375			; /62/

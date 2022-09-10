@@ -153,7 +153,7 @@ chtype:	; for aslink, avoid overlap in the output ihx file (holes are zeroed)
 	chtype	'\	,4	; /BBS/ end of a pc directory
 	chtype	']	,3	; end of a directory
 	chtype			; /63/ end of this list
-	 $ch =	'a!40		; don't forget lower case letters
+	 $ch =	'a|40		; don't forget lower case letters
 	 .rept	32
 	 chtype	$ch	,7
 	 $ch =	$ch+1		; do a through z
@@ -208,7 +208,7 @@ namcvt::save	^/r1,r2,r3,r4/
 	beq	20$			; yes, exit then
 	clr	r3			; get the next ch please
 	bisb	(r2)+	,r3		; simple
-	bic	#^c^/177/,r3		; ensure in range 0..127
+	bic	#~(177),r3		; ensure in range 0..127
 	dec	r1			; use previous state to get the
 	mul	#10	,r1		; index into the state table  line
 	movb	chtype(r3),r0		; /BBS/                       column

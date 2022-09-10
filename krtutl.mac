@@ -67,7 +67,7 @@ timemt:	.byte	5			; /62/ number of arguments
 	.word	ticks			; /62/ ticks
 
 	.psect	$pdata
-pepmsg:	.asciz	"Error message from remote:"^/cr/^/lf/  ; /63/
+pepmsg:	.asciz	"Error message from remote:"(cr)(lf)  ; /63/
 sta.0:	.byte	STA.CCA	,STA.ABO,STA.BRK,STA.COM,STA.DAT,STA.FIL
 	.byte	STA.ATR	,STA.INI,STA.RIN,STA.SIN,STA.TYP,STA.EOF
 	.byte	0
@@ -91,8 +91,8 @@ sta.1:	.word	10$
 sta.2:	.asciz	"TOD "			; "Time Of Day" header for log entry
 sta.3:	.asciz	"  "
 sta.4:	.asciz	"Hz   Elapsed-Time: "
-sta.5:	.ascii	^/cr/^/lf/		; two newlines from here
-sta.6:	.asciz	^/cr/^/lf/
+sta.5:	.ascii	(cr)(lf)		; two newlines from here
+sta.6:	.asciz	(cr)(lf)
 sta.7:	.asciz	" = STA."
 	.even
 
@@ -431,7 +431,7 @@ bufunp::save	^/r2,r3,r4,r5/
 	mov	2(r5)	,r4		; resultant string
 
 10$:	movb	(r2)+	,r0		; /63/ get next ch in convenient place
-	bic	#^c^/177/,r0		; /53/ always seven bit data
+	bic	#~(177),r0		; /53/ always seven bit data
 	beq	50$			; /63/ all done
 	mov	#1	,r5		; /53/ assume character not repeated
 	tst	dorpt			; /53/ repeat processing off?
@@ -439,19 +439,19 @@ bufunp::save	^/r2,r3,r4,r5/
 	cmpb	r0	,rptquo		; /53/ is this a repeated char?
 	bne	30$			; /53/ no, normal processing
 	movb	(r2)+	,r5		; /63/ yes, get the repeat count
-	bic	#^c^/177/,r5		; /53/ always seven bit data
+	bic	#~(177),r5		; /53/ always seven bit data
 	unchar	r5	,r5		; /53/ get the value
 	tst	r5			; /53/ good data
 	bgt	20$			; /53/ yes
 	mov	#1	,r5		; /53/ no, fix it
 20$:	movb	(r2)+	,r0		; /63/ now get the real data
-	bic	#^c^/177/,r0		; /53/ always seven bit data
+	bic	#~(177),r0		; /53/ always seven bit data
 30$:	cmpb	r0	,senpar+p.qctl	; is this a quoted character?
 	bne	40$			; no
 	clr	r0			; yes, get the next character
 	bisb	(r2)+	,r0		; must be one you know  avoid sxt here
 	mov	r0	,r1		; /63/ copy to compare
-	bic	#^c^/177/,r1		; lower 7 bits against the quote char
+	bic	#~(177),r1		; lower 7 bits against the quote char
 	cmpb	r1	,senpar+p.qctl	; if ch <> myquote
 	beq	40$			;  then
 	ctl	r0	,r0		;   ch := ctl(ch)

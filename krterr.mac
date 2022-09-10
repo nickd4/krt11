@@ -310,9 +310,9 @@ syserr::save	^/r0,r1,r2/
 	mov	#prompt	,r0		; point to prompt
 10$:	movb	(r0)+	,(r2)+		; copy the prompt into err msg
 	beq	20$			; that's it..
-	cmpb	-1(r2)	,#'z!40		; try against a lower case "z"
+	cmpb	-1(r2)	,#'z|40		; try against a lower case "z"
 	bhi	10$			; it's higher..
-	cmpb	-1(r2)	,#'a!40		; try against a lower case "a"
+	cmpb	-1(r2)	,#'a|40		; try against a lower case "a"
 	blo	10$			; it's lower..
 	 bicb	#40	,-1(r2)		; char is in range, translate
 	br	10$			; next one..
