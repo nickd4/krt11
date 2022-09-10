@@ -31,11 +31,11 @@
 	.iif ndf  KRTINC  .error	^/; .include for IN:KRTMAC.MAC failed/
 
 	; bits used in edists (the editor status word)
-	IN$MODE	=	1	; if ^// insert mode is on (default)
+	IN$MODE	=	1	; if <> insert mode is on (default)
 	UP$MODE	=	2	; down arrow wuz last, going up the list
 	DN$MODE	=	4	; up arrow wuz last, going down the list
 	UP$END	=	10	; up arrow has just dumped edicmd #0
-	FW$MODE	=	20	; if ^//, advance mode (default=backup=0)
+	FW$MODE	=	20	; if <>, advance mode (default=backup=0)
 
 	.page
 	.sbttl	Local data
@@ -62,7 +62,7 @@ edi.03:	.asciz	"SL K"		; /63/ or do KED version if KED mode is on
 ;	 (r5)	= the prompt string
 ;	2(r5)	= buffer in which to return input string
 ;	  r1	= length of string returned in 2(r5)
-;	  r0	= if ^//, the error code
+;	  r0	= if <>, the error code
 
 kbredi::save	^/r2,r3,r4/
 	tst	sl.on			; is SL on?

@@ -82,11 +82,11 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;
 ;  KRTKM  - add SPFUNs to support Xmodem compatibly with the TSX CL handler:
 ;
-;		CLSET	^/250/	Set CL options (binin and binout only)
-;		CLRSET	^/251/	Clear CL options (binin and binout only)
-;		CLIPND	^/261/	Get number of input chars pending
-;		CLWBYT	^/263/	Write with byte count
-;		CLCHAR	^/266/	Get CL characteristics (options flags only)
+;		CLSET	<250>	Set CL options (binin and binout only)
+;		CLRSET	<251>	Clear CL options (binin and binout only)
+;		CLIPND	<261>	Get number of input chars pending
+;		CLWBYT	<263>	Write with byte count
+;		CLCHAR	<266>	Get CL characteristics (options flags only)
 ;
 ;	    added .br macro for clarity.
 ;
@@ -407,7 +407,7 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;	    of dispatching I/O with "%." prefixing routine names..
 ;
 ;	    xmode flag used to clean up xreply display by suppressing packet
-;	    log display when either side's blo ^//1 forces a send file init
+;	    log display when either side's blo <>1 forces a send file init
 ;
 ;	    send file asfile error handling improved, get file asfile now
 ;	    shares some of the above code.  one may GET/SEND [DEV:]FILE DEV:
@@ -673,7 +673,7 @@ sho.ve:	.ascii	"'RLS'.'VER'"	; /62/ added to keep the parity memory vector
 ;	    fixed non-init'd repeat count reg bug in bufunpack
 ;
 ;  KRTREC - rfil.x: put "Remote server response:" here so it displays even
-;	    when blo ^//1.  also set image=binary here so typing 8-bit
+;	    when blo <>1.  also set image=binary here so typing 8-bit
 ;	    files doesn't die on checksum error when clrpar hoses hi bits
 ;
 ;	    rfil.f: check asname here (instead of rfil.d), also fixed so
@@ -1556,7 +1556,7 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 ;	movb	#':	,(r0)+		; /BBS/ tag it with a colon
 ;	clrb	@r0			; /BBS/ reterminate
 
-;80$:	calls	fparse	,^/cmdbuf,#errtxt/ ; /BBS/ this lets "LD" become "LD0"
+;80$:	calls	fparse	,<cmdbuf,#errtxt> ; /BBS/ this lets "LD" become "LD0"
 ;	tst	r0			; /BBS ..is it an authorized dev?
 ;	bne	90$			; /BBS/ nope..
 ;	tst	(sp)+			; /BBS/ dump now meaningless error reg
@@ -1851,9 +1851,9 @@ readcmd::mov	r2	,-(sp)
 	wrtall	#cmd.05			; /63/ " failed at line #"
 	mov	exstal	,r0		; load line number
 	call	L10266			; dump it to TT
-	wrtall	#cmd.06			; /63/ ':'^/cr/^/lf/'  "'
+	wrtall	#cmd.06			; /63/ ':'^/cr/<lf>'  "'
 	wrtall	@r5			; append the offending string
-	wrtall	#cmd.07			; /63/ '"'^/cr/^/lf/'  '
+	wrtall	#cmd.07			; /63/ '"'^/cr/<lf>'  '
 110$:	wrtall	#errtxt			; now dump the error message
 	call	incsts			; /62/ flag the error here too..
 	.newline
@@ -1865,7 +1865,7 @@ readcmd::mov	r2	,-(sp)
 130$:	tst	infomsg			; really print the message?
 	beq	140$			; no
 	wrtall	#indnam			; use file name
-	wrtall	#cmd.08			; /63/ " closed"^/cr/^/lf/
+	wrtall	#cmd.08			; /63/ " closed"^/cr/<lf>
 140$:	calls	close	,^/#lun.ta/	; close the file on any errors
 	clr	tk.err			; /62/ reset the take file error flag
 	clr	cmdlun			; /62/ next command is comming from TT

@@ -24,7 +24,7 @@
 ; /BBS/	 1-Dec-91  Billy Youdelman  V03.61
 ;
 ;	rfil.x: put "Remote server response:" here so it displays even
-;	when blo ^//1.  also set image=binary here so typing 8-bit
+;	when blo <>1.  also set image=binary here so typing 8-bit
 ;	files doesn't die on checksum error when clrpar hoses hi bits
 ;
 ;	rfil.f: check asname here (instead of rfil.d), also fixed so
@@ -691,7 +691,7 @@ rdat.z:	cmp	paknum	,r3		; end-of-file
 ;
 ;	input:	  (r5)	= buffer address
 ;		 2(r5)	= length
-;	output:	   r0	= if ^//, error code
+;	output:	   r0	= if <>, error code
 ;
 ; /63/	NOTE:  This routine can, as it now exists, can process all unprefixed
 ;	control chars as C-Kermit 5A(189) might emit if given the command SET
@@ -741,7 +741,7 @@ bufemp:	mov	@r5	,r2		; input record address
 	dec	r3			; chcount := pred(chcount)
 	mov	r0	,r1		; /63/ copy to check against quote ch
 	bic	#^c^/177/,r1		; must avoid sxt here, drop bits 7..15
-	cmpb	r1	,conpar+p.qctl	; if ch ^// myquote
+	cmpb	r1	,conpar+p.qctl	; if ch <> myquote
 	beq	40$			;  then
 	cmpb	r1	,#77		;   if   (ch & 177) >= ctl(del)
 	blo	40$			;    and (ch & 177) <= ctl(del)+40

@@ -23,7 +23,7 @@ loahlp::mov	#hlphead,r0		; calling this also loads this overlay
 ;	Note here the "block" and "offset" point to the first line FOLLOWING
 ;	the topic/subtopic line in the help text file (KRTHLP.HLP).  In other
 ;	words, these data point to the first byte of the help text itself for
-;	the indicated topic or subtopic, which is directly AFTER the ^/cr/^/lf/
+;	the indicated topic or subtopic, which is directly AFTER the ^/cr/<lf>
 ;	tag on the topic/subtopic line.
 
 hident::.asciz	"V03.63 27-Sep-1997"

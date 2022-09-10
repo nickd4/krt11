@@ -73,11 +73,11 @@
 	.psect	condat	,rw,d,lcl,rel,con
 brkwrk:	.word	0 ,0 ,0 ,0		; /62/ break mark time work area
 cancel:	.word	0 ,0 ,0 ,0		; .cmkt work area
-crflag:	.word	0			; if ^// last char was a CR
-done:	.word	0			; set this ^// to exit scheduler
-iopending:.word	0			; if ^// XL write completion is pending
+crflag:	.word	0			; if <> last char was a CR
+done:	.word	0			; set this <> to exit scheduler
+iopending:.word	0			; if <> XL write completion is pending
 rmbuff:	.word	0			; one word buffer for writes to XL
-rt.v51:	.word	0			; if ^// XL is from RT-11 V5.1
+rt.v51:	.word	0			; if <> XL is from RT-11 V5.1
 scca:	.word	0 ,0 ,0			; trap ^C here
 short:	.word	0 ,1			; wait one tick
 stsmark:.word	0 ,0 ,0 ,0		; status watcher mark time work area
@@ -101,7 +101,7 @@ xkwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; writes to handler work area
 ;	r5	= pointer to CURRENT task's entry in table
 
 	TASKADDR = 0			; task's starting address
-	STATE	 = 2			; if ^// run this task next time thru
+	STATE	 = 2			; if <> run this task next time thru
 
 ;	       taskaddr	,state		; /62/ rmhead MUST follow tthead in
 tlist:					; /62/ this table, see note in rmproc
@@ -169,12 +169,12 @@ doconn::call	opentt			; /63/ open the link device
 	wrtall	#con.03			; /63/ "N/A"
 	br	30$			; continue
 20$:	call	L10266			; write speed in r0 as dec num to TT
-30$:	wrtall	#con.04			; /63/ ^/cr/^/lf/"Type ^"
+30$:	wrtall	#con.04			; /63/ ^/cr/<lf>"Type ^"
 	mov	conesc	,r0		; get esc char
 	dec	r0			; lis.ctrl here has no null entry
 	movb	lis.ctrl(r0),r0		; make it printable
 	call	writ1char	; write it to TT
-	wrtall	#con.05			; /63/ "C to return .."^/cr/^/lf/
+	wrtall	#con.05			; /63/ "C to return .."^/cr/<lf>
 40$:	clr	conmsg			; reset sign-on bypass flag
 	mov	sp	,logini		; /62/ force logerr msg into the clear
 

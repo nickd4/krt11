@@ -273,7 +273,7 @@ c$hang::call	set.dtr			; toggle DTR
 	bne	dia.er			; /63/ no
 	wrtall	#dia.18			; "Link "
 	wrtall	#ttname			; include the device name
-	wrtall	#dia.19			; " disconnected"^/cr/^/lf/
+	wrtall	#dia.19			; " disconnected"^/cr/<lf>
 	return
 
 dia.er:	direrr	r0			; /63/ dump error message
@@ -301,7 +301,7 @@ set.mo:	mov	linksts	,r2		; save link open/closed status
 	tst	infomsg			; SET TT QUIET?
 	beq	20$			; ya..
 	wrtall	#modem			; no, display name of modem
-	wrtall	#dia.03			; /63/ " modem is on-line"^/cr/^/lf/
+	wrtall	#dia.03			; /63/ " modem is on-line"^/cr/<lf>
 					; note r0 still =0 here, from above..
 20$:	mov	r0	,-(sp)		; save error
 	mov	r2	,linksts	; restore link status
@@ -424,7 +424,7 @@ b80$:	tst	cccnt			; abort?
 	wrtall	#dia.04			; /63/ "Try #"
 	mov	retries	,r0		; copy for integer to ascii conv
 	call	L10266			; print integer as decimal numb
-	wrtall	#dia.05			; /63/ ":"^/cr/^/lf/
+	wrtall	#dia.05			; /63/ ":"^/cr/<lf>
 
 b90$:	call	dodial			; actually try to dial the number now
 	tst	r0			; returns 1 for success, 0 if failed
@@ -512,7 +512,7 @@ findmodem:save	^/r3/
 	tst	infomsg			; SET TT QUIET?
 	beq	80$			; ya, skip list of possibilities
 
-40$:	wrtall	#dia.06			; /63/ "..known modem types.."^/cr/^/lf/
+40$:	wrtall	#dia.06			; /63/ "..known modem types.."^/cr/<lf>
 	call	thunk_loamdm			; /63/ load predefined modems' data
 	mov	r0	,r3		; /63/ get address of head of list
 50$:	wrtall	mod.string(r3)		; now print the list of modems
@@ -593,13 +593,13 @@ findnumber:save	^/r3,r2/			; /45/ Added 20-Feb-86 13:00:50 BDN
 ;	we will dump the string,  wait for the  acknowledgment  and
 ;	loop until we are sure there are no more data.  For example
 ;	the VA212 will send back an  INVALID  COMMAND\n* string for
-;	for the ^E and one also for the ^/CR/.  We could, of course,
+;	for the ^E and one also for the <CR>.  We could, of course,
 ;	first send the modem its idle command,  but there are times
 ;	when that may be undesirable,  like when the modem is being
 ;	accessed via some sort of LAN or PABX.
 ;
 ;	input:	modtyp	= address of modem descriptor
-;	return:	  r0	= if ^//, the error code
+;	return:	  r0	= if <>, the error code
 
 getatn:	save	^/r1,r2,r3,r4/
 	clr	-(sp)			; init "msg rec'd" flag
@@ -811,7 +811,7 @@ dodial:	save	^/r2,r3,r4/
 	LOCSIZ	=	4		; size of the above
 
 ;	passed:	  r4	= pointer to modem's data structure
-;	return:	  r0	= if ^//, the error code
+;	return:	  r0	= if <>, the error code
 
 getsts:	save	^/r5/
 	mov	diatmo	,r3		; /62/ # secs to wait for response
@@ -928,7 +928,7 @@ getsts:	save	^/r5/
 80$:	clr	@r5			; turn ring into an info message
 	dec	nrings(r5)		; if more than number in nrings
 	bne	100$			; then give up
-	wrtall	#dia.07			; /63/ "% No answer"^/cr/^/lf/
+	wrtall	#dia.07			; /63/ "% No answer"^/cr/<lf>
 	mov	#aborted,(r5)		; flag need to make modem stop
 	br	100$
 90$:	mov	#failed	,(r5)		; come here if modem stopped itself
@@ -1020,7 +1020,7 @@ fmtstr:	save	^/r3/
 
 ;	passed:	 2(sp)	= string
 ;		 4(sp)	= time-out
-;	return:	   r0	= ^// for success, 0 for time out
+;	return:	   r0	= <> for success, 0 for time out
 
 waitfor:save	^/r2,r3,r4/		; this decrements stack pointer 6
 	mov	2+6(sp)	,r4		; string we are expecting
@@ -1145,7 +1145,7 @@ shodia::call	thunk_loamdm			; /63/ ensure correct overlay loaded
 	call	L10266			; display it
 	.newline			; /62/
 
-	clr	-(sp)			; a flag, if ^// something found
+	clr	-(sp)			; a flag, if <> something found
 
 	mov	ph.noanswer(r4),r1	; /62/ default to not answering phone
 	tst	answer			; /62/ did user SET PHONE ANSWER?
@@ -1199,7 +1199,7 @@ shodia::call	thunk_loamdm			; /63/ ensure correct overlay loaded
 
 	mov	res.head(r4),r3		; response header
 	beq	290$			; nothing present
-	wrtall	#dia.14			; /63/ "Result strings:"^/cr/^/lf/
+	wrtall	#dia.14			; /63/ "Result strings:"^/cr/<lf>
 210$:	mov	r3	,r0		; /62/ get the response address
 	beq	290$			; all done
 	add	#4	,r0		; /62/ offset to text
@@ -1227,11 +1227,11 @@ shodia::call	thunk_loamdm			; /63/ ensure correct overlay loaded
 	call	L10266			; tag above with speed
 250$:	.newline
 	br	280$
-260$:	wrtall	#dia.16			; /63/ "Rings+1"^/cr/^/lf/
+260$:	wrtall	#dia.16			; /63/ "Rings+1"^/cr/<lf>
 	br	280$
 270$:	cmp	r0	,#con38400	; /62/ kludge to see if it's 38.4kb
 	beq	240$			; /62/ it is..
-	wrtall	#dia.17			; /63/ "Failure"^/cr/^/lf/
+	wrtall	#dia.17			; /63/ "Failure"^/cr/<lf>
 280$:	mov	(r3)	,r3		; pick up link to..
 	br	210$			; ..next please
 

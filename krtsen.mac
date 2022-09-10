@@ -644,13 +644,13 @@ sdat$$:	tst	dpnumber		; /43/ first data packet?
 ;/E64/	This next, commented-out section closes and re-opens the
 ;	input file to reset our send pointer.  We are going to try
 ;	rewinding it, instead.
-;	calls	close	,^/#lun.in/	; /E64/ clean up please
+;	calls	close	,<#lun.in>	; /E64/ clean up please
 ;	clr	inopn			; /E64/ it's closed now
-;	calls	open	,^/#filnam,#lun.in,image/ ; /63/ back to top of file
+;	calls	open	,<#filnam,#lun.in,image> ; /63/ back to top of file
 ;	tst	r0			; /E64/ did it work?
 ;	beq	50$			; /E64/ yes
-;	calls	syserr	,^/r0,#errtxt/	; /E64/ no
-;	calls	error	,^/#3,#errtxt,#aspace,#filnam/ ; /E64/ add space here
+;	calls	syserr	,<r0,#errtxt>	; /E64/ no
+;	calls	error	,<#3,#errtxt,#aspace,#filnam> ; /E64/ add space here
 ;	jmp	sabort			; /E64/ whoops!!
 ;
 ;50$:	mov	sp	,inopn		; file is open

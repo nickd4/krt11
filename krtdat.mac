@@ -53,21 +53,21 @@ cmdadr:: .blkw	1		; saved address of command routine
 cmdbuf:: .blkw	1		; /53/ pointer to command line input buffer
 cmdlun:: .blkw	1		; current command file lun
 cmdnum:: .blkw	1		; index into the current command list
-con8bit::.blkw	1		; if ^// we pass eight bits to console
+con8bit::.blkw	1		; if <> we pass eight bits to console
 conesc:: .blkw	1		; escape character for CONNECT
 conmsg:: .blkw	1		; /BBS/ flag to hold CONNECT sign-on
 conpar:: .blkb	20		; other Kermit's sinit parameters
-csi.fake::.blkw	1		; /62/ if ^// use fake CSI comma parser
-ctlflgs::.blkb	^/1.+32.+1.+32./	; /63/ DEL&200 ,NUL..US ,DEL ,^/NUL..US/&200
+csi.fake::.blkw	1		; /62/ if <> use fake CSI comma parser
+ctlflgs::.blkb	^/1.+32.+1.+32./	; /63/ DEL&200 ,NUL..US ,DEL ,<NUL..US>&200
 datauk:: .blkw	1		; /62/ data unknown loop counter
 defpri:: .blkw	1		; /BBS/ TSX priority when Kermit was started
 diatmo:: .blkw	1		; /46/ SET DIAL TIME-OUT
-do8bit:: .blkw	1		; if ^// doing 8-bit prefixing
+do8bit:: .blkw	1		; if <> doing 8-bit prefixing
 doattr:: .blkw	1		; if 0 don't send attribute packets
-doauto:: .blkw	1		; if ^// check list for binary file type match
-dolong:: .blkw	1		; /42/ if ^// do long packets
-dorpt::	 .blkw	1		; if ^// do repeat counts
-;doslid::.blkw	1		; /42/ if ^// do sliding windows
+doauto:: .blkw	1		; if <> check list for binary file type match
+dolong:: .blkw	1		; /42/ if <> do long packets
+dorpt::	 .blkw	1		; if <> do repeat counts
+;doslid::.blkw	1		; /42/ if <> do sliding windows
 dowild:: .blkw	1		; /63/ if 0 wildcarding must be explicit
 dpnumber::.blkw	1		; /63/ serial number of data packet
 duplex:: .blkw	1		; if 0, full (default), else half
@@ -79,30 +79,30 @@ exieof:: .blkw	1		; /45/ SET EOF [NO]EXIT
 exstal:: .blkw	1		; /41/ take file current line number pointer
 filein:: .blkw	2		; /43/ file data bytes in
 fileout::.blkw	2		; /43/ file data bytes out
-filprot::.blkw	1		; if ^// don't overwrite files
+filprot::.blkw	1		; if <> don't overwrite files
 getcroutine::.blkw 1		; alternate address for get char routine
 handch:: .blkw	1		; handshake char (for IBM systems)
-image::	 .blkw	1		; if ^// in image mode
-incfile::.blkw	1		; /BBS/ set ^// to keep incomplete file
+image::	 .blkw	1		; if <> in image mode
+incfile::.blkw	1		; /BBS/ set <> to keep incomplete file
 incpar:: .blkw	1		; /56/ parity was found in rec'd SOH char
 index::	 .blkw	1		; index into directory, for wildcarded lookups
-infomsg:: .blkw	1		; /41/ if ^// display information messages
+infomsg:: .blkw	1		; /41/ if <> display information messages
 initry:: .blkw	1		; /BBS/ number of retries for init packet only
 inopn::	 .blkw	1		; did sensw ever open anything?
 inprogress::.blkw 1		; /BBS/ packets in progress flag
 inserv:: .blkw	1		; currently we are a server
-jobtype::.blkw	1		; /45/ 0 for interactive, ^// for batch
+jobtype::.blkw	1		; /45/ 0 for interactive, <> for batch
 lastcmd::.blkw	1		; /BBS/ last command's dispatch address
 lastli:: .blkw	ln$cnt+1	; /BBS/ SL previous commands pointers
-linksts::.blkw	1		; if ^// the link device is active
-locase:: .blkw	1		; /BBS/ if ^// pass lower case file name
-logini:: .blkw	1		; if ^// cursor is not on a newline at column 1
+linksts::.blkw	1		; if <> the link device is active
+locase:: .blkw	1		; /BBS/ if <> pass lower case file name
+logini:: .blkw	1		; if <> cursor is not on a newline at column 1
 maxtry:: .blkw	1		; maximum number of retries for data packets
-mcrcmd:: .blkw	1		; if ^// it's a MCR/CCL command line
-milnet:: .blkw	1		; /BBS/ if ^// send XONs when first CONNECTing
+mcrcmd:: .blkw	1		; if <> it's a MCR/CCL command line
+milnet:: .blkw	1		; /BBS/ if <> send XONs when first CONNECTing
 modem::	 .blkb	40		; /37/ ascii modem name
 modtype::.blkw	1		; /BBS/ address of modem data structure
-mready:: .blkw	1		; /BBS/ if ^// modem is initialized to dial out
+mready:: .blkw	1		; /BBS/ if <> modem is initialized to dial out
 msgtim:: .blkw	1		; /43/ warning message already done flag
 nakrec:: .blkw	1		; /BBS/ anti-resonating NAK shift register
 nextone::.blkw	1		; /62/ pointer to the next filespec in argbuf
@@ -116,31 +116,31 @@ pcnt.n:: .blkw	2		; /43/ NAKs received count
 pcnt.r:: .blkw	2*34		; rpack packet counts by type
 pcnt.s:: .blkw	2*34		; spack packet counts by type
 pcnt.t:: .blkw	2		; /44/ time-out count
-pf2$ok:: .blkw	1		; /BBS/ if ^// off PF2 can't overlay HELP
+pf2$ok:: .blkw	1		; /BBS/ if <> off PF2 can't overlay HELP
 phnum::	 .blkw	1		; /40/ last phone number dialed
 pkrate:: .blkw	4		; /62/ last packet start & duration
 pnhead:: .blkw	1		; /45/ listhead for SET PHONE numbers
 ports::	 .blkb	ln$max		; /BBS/ store TSX ports to try here
-prexon:: .blkw	1		; /53/ if ^// prefix packets with an XON
+prexon:: .blkw	1		; /53/ if <> prefix packets with an XON
 pulse::	 .blkw	1		; /54/ SET PHONE PULSE/TONE
 qedtst:: .blkw	1		; /63/ # .gtim loops to find clock ticking
 qu.ini:: .blkw	1		; /BBS/ store SET TT [NO]QUIET here
-ranerr:: .blkw	1		; if ^// generate random checksum errors
+ranerr:: .blkw	1		; if <> generate random checksum errors
 rawfil:: .blkw	1		; /54/ SET FILE NAMING
 rdrate:: .blkw	3		; /56/ exec I/O stats /62/ 3 words
 recbit:: .blkw	1		; /43/ find out if parity was on
 reclng:: .blkw	1		; /42/ max size I can read
 recsop:: .blkw	1		; SET RECEIVE START-OF-PACKET
 rectim:: .blkw	1		; /62/ SET RECEIVE TIME-OUT
-rem.ack::.blkw	1		; /63/ if ^// ACK rec'd for REMOTE command
-remote:: .blkw	1		; if ^// we are remote
+rem.ack::.blkw	1		; /63/ if <> ACK rec'd for REMOTE command
+remote:: .blkw	1		; if <> we are remote
 restof:: .blkw	1		; /BBS/ pointer to rest of args in argbuf
 rptcount::.blkw	1		; number of repeated chars in a string
 rptinit::.blkw	1		; repeat init, meaning first time through proc
 rptlast::.blkw	1		; the last char when checking repeats
 rptquo:: .blkw	1		; prefix char for repeat quoting
 rptsave::.blkw	1		; save failed char in repeat encoding
-rtvol::	 .blkw	1		; if ^// do dir disk volume id test
+rtvol::	 .blkw	1		; if <> do dir disk volume id test
 seed::	 .blkw	1		; to generate random errors for debugging
 senlen:: .blkw	1		; /62/ save SET SEND p.spsiz
 senlng:: .blkw	1		; /42/ max size I am allowed to send
@@ -151,16 +151,16 @@ sentim:: .blkw	1		; /62/ SET SEND TIME-OUT
 senwin:: .blkw	1		; /42/ sliding windows not yet here..
 sertim:: .blkw	1		; time-out waiting for server command
 serwait::.blkw	1		; SET SERVER TIME-OUT
-set8bit::.blkw	1		; if ^// set bit seven on char
+set8bit::.blkw	1		; if <> set bit seven on char
 setchkt::.blkw	1		; /62/ save SET BLO here
 setrpt:: .blkw	1		; used to set repeat encoding on/off
 settle:: .blkw	1		; /BBS/ modem settle ticks on reset
-signon:: .blkw	1		; /BBS/ if ^// sign-on text has been displayed
+signon:: .blkw	1		; /BBS/ if <> sign-on text has been displayed
 size::	 .blkw	1		; size of last call to buffer_fill
 skipfile::.blkw	1		; /BBS/ copy of inc-file-disp to file closer
 skipfl:: .blkw	1		; should we send a eof$discard packet?
-sl.ked:: .blkw	1		; /BBS/ make ^// for SL's KED mode
-sl.on::	 .blkw	1		; /BBS/ make ^// to turn on SL
+sl.ked:: .blkw	1		; /BBS/ make <> for SL's KED mode
+sl.on::	 .blkw	1		; /BBS/ make <> to turn on SL
 snd8bit::.blkw	1		; local do 8-bit prefixing flag
 spare0:: .blkb	32.		; /63/ temp buffer, for small stuff..
  SP0SIZ	 ==	^/.-spare0/	; /63/ size of above spare0 buffer
@@ -168,14 +168,14 @@ spare1:: .blkb	256.		; /BBS/ temp buffer, max SVID filespec
  SP1SIZ	 ==	^/.-spare1/	; /63/ size of above spare1 buffer
 sparsz:: .blkw	1		; size of our sinit packet
 state::	 .blkw	1		; current recsw or sensw state
-summary::.blkw	1		; /BBS/ if ^// do dir summary only
+summary::.blkw	1		; /BBS/ if <> do dir summary only
 sy.ini:: .blkw	1		; init file is executing flag
 tgetaddr::.blkw	1		; get text address for textsrc macro
 times::	 .blkw	10		; /43/ time stamp stats
 tk.err:: .blkw	1		; /BBS/ format init file error message display
 trace::	 .blkw	1		; file and packet logging status word
-tsxcl::	 .blkw	1		; if ^// it's TSX and CL
-tt$io::	 .blkw	1		; /62/ if ^// do I/O through TT
+tsxcl::	 .blkw	1		; if <> it's TSX and CL
+tt$io::	 .blkw	1		; /62/ if <> do I/O through TT
 ttname:: .blkb	16		; our current link device ascii name
 ttpar2:: .blkw	1		; /BBS/ $tcfig saved here
 ttparm:: .blkw	1		; /BBS/ jsw stored here
@@ -187,11 +187,11 @@ warn8done::.blkw 1		; /BBS/ 8-bit quote warning has been done flag
 wasmore::.blkw	1		; /62/ flag for multiple arguments display
 wasnul:: .blkw	1		; /45/ for "?" processing in the command line
 xgottn:: .blkw	1		; server got an "X" packet
-xmode::	 .blkw	1		; if ^// doing text output to TT
-xredial::.blkw	1		; /BBS/ if ^// redial (retry) a failed call
+xmode::	 .blkw	1		; if <> doing text output to TT
+xredial::.blkw	1		; /BBS/ if <> redial (retry) a failed call
 xresult::.blkb	4		; /BBS/ SET PHONE XMODE
 ; we need this to be a constant, therefore, define it in krtdef.mac
-;RWSIZE	 == ^/.-rwdata/		; end of r/w defa zero'd by start-up init
+;RWSIZE	 == <.-rwdata>		; end of r/w defa zero'd by start-up init
 .iif ne .-rwdata-rwsize .error ^/; rwsize has changed, must update krtdef.mac/
 
 	.page
@@ -199,7 +199,7 @@ xresult::.blkb	4		; /BBS/ SET PHONE XMODE
 
 edicmd::.word	-1		; SL hasn't saved anything yet
 edists::.word	1		; /BBS/ SL insert mode is init'd on here
-xprint::.word	0		; /62/ if ^// dump TT to LP, here for safety..
+xprint::.word	0		; /62/ if <> dump TT to LP, here for safety..
 prompt::.asciz	"KRT> "		; /63/ say this is a special version
 	.even			; /62/ prompt buffer = 32. bytes total
 	.blkb	26.		; /62/ if stack overflows, make it obvious!

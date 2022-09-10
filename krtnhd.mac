@@ -20,15 +20,15 @@
 	mov	src	,-(sp)		; pass multiplier to p$mul
 	mov	reg	,-(sp)		; pass multiplicand too
 	call	p$mul			; multiply, returns a 16-bit product
-;	.iif eq ^/$$-1/	mov	(sp)+	,r1	; ..if input register was r1
+;	.iif eq <$$-1>	mov	(sp)+	,r1	; ..if input register was r1
 	.iif idn ^/reg/,r1 mov	(sp)+	,r1	; ..if input register was r1
-;	.iif eq ^/$$-3/	mov	(sp)+	,r3	; ditto if r3
+;	.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
 	.iif idn ^/reg/,r3 mov	(sp)+	,r3	; ditto if r3
-;	.iif eq ^/$$-5/	mov	(sp)+	,r5	; ditto if r5
+;	.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
 	.iif idn ^/reg/,r5 mov	(sp)+	,r5	; ditto if r5
-;	.iif ne ^?^/$$+1/&1? .error      ^/; bad dst reg for MUL macro/
-;	.iif eq ^/$$-3/	mov	(sp)+	,r3	; ditto if r3
-;	.iif eq ^/$$-5/	mov	(sp)+	,r5	; ditto if r5
+;	.iif ne ^?^/$$+1/&1? .error      <; bad dst reg for MUL macro>
+;	.iif eq <$$-3>	mov	(sp)+	,r3	; ditto if r3
+;	.iif eq <$$-5>	mov	(sp)+	,r5	; ditto if r5
 	.endm	mul
 
 	.macro	div	src,reg		; /BBS/ made this double precision

@@ -46,7 +46,7 @@
 	.even				; /63/ doing this at the end of a list
 	.nlist (me)			; /63/
 	$$trip	= 0			; /62/ reset trip counter for next cmd
-	.iff	; b ^/name/		; ya, process args into command data
+	.iff	; b <name>		; ya, process args into command data
 	.list (me)
 	.psect	cmdtxt	,ro,d,lcl,rel,con
 	.nlist (me)
@@ -66,7 +66,7 @@
 	  .iff
 	  .word	arg			; /63/ ya, stuff in its location
 	  .endc
-	.endc	; b ^/name/
+	.endc	; b <name>
 	.list (me)
 	.restore
 	.nlist (me)

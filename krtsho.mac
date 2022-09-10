@@ -261,7 +261,7 @@ ld$stat:.byte	4 ,135			; get status of
 ld$num:	.byte	0 ,0			; this LD unit
 	.word	ld$buf			; and put it here
 ld$buf:	.word	0 ,0 ,0 ,0 ,0		; ld$num emt writes data here
-txflag:	.word	0			; /BBS/ if ^//, sending
+txflag:	.word	0			; /BBS/ if <>, sending
 C2:	.word	0			; hours
 C3:	.word	0			; mins
 C4:	.word	0			; secs
@@ -443,7 +443,7 @@ sho$de:	clr	r0			; index := 0
 60$:	wrtall	#sh.004			; "  SEED = "
 	mov	seed	,r0		; get a copy of the seed
 	call	L10266			; display it
-	wrtall	#sh.005			; "."^/cr/^/lf/
+	wrtall	#sh.005			; "."^/cr/<lf>
 	bit	#log$op	,trace		; is a file open?
 	beq	70$			; no
 	wrtall	#sh.009			; "Logfile is "
@@ -480,7 +480,7 @@ sho$ti::calls	thunk_asctim	,^/#errtxt,#0/	; get time of day into a buffer
 	wrtall	#raslug			; /62/ "  ("
 	mov	clkflg	,r0		; /62/ pass line time clock rate
 	call	L10266			; /62/ dump it to terminal
-	wrtall	#ratag			; /62/ "Hz)"^/cr/^/lf/
+	wrtall	#ratag			; /62/ "Hz)"^/cr/<lf>
 	br	a20$			; /62/
 
 c$pwd::	tst	tsxsave			; /63/ running under TSX?
@@ -1228,7 +1228,7 @@ sho$vl:	tst	tsxsave			; running under TSX?
 	wrtall	#sh.079			; /63/ " is set "
 	tstb	vlflag			; the answer is..
 	beq	20$			; 		  0 is local
-	wrtall	#sh.109			; /63/ "REMOTE"	 ^// means remote
+	wrtall	#sh.109			; /63/ "REMOTE"	 <> means remote
 	br	30$
 20$:	wrtall	#sh.110			; /63/ "LOCAL"
 30$:	.newline
@@ -1446,7 +1446,7 @@ g70$:	wrtall	#sh.132			; /63/ then do the next part of log
 ;	input:	argbuf	= command args
 ;	output:	cmdbuf	= first arg
 ;		argbuf	= second arg
-;		 r0	= if ^//, error code
+;		 r0	= if <>, error code
 
 	CVTARG	= C.CRLF ! C.LSPA ! C.SSPA ! C.TSPA ; /62/ don't upper case
 

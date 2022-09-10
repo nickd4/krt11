@@ -108,7 +108,7 @@ htxt:	.ascii	^/cr/^/lf/"       Server REMOTE commands:"^/cr/^/lf/^/cr/^/lf/
 	.ascii	"       SEND    Send file(s) to server"^/cr/^/lf/
 	.ascii	"REMOTE SPACE   Show available disk space"^/cr/^/lf/
 	.asciz	"REMOTE TYPE    Type specified file"^/cr/^/lf/
-;	.asciz	"REMOTE WHO     Show active BBS lines"^/cr/^/lf/
+;	.asciz	"REMOTE WHO     Show active BBS lines"^/cr/<lf>
 invarg:	.asciz	"?KRTSER-E-Invalid argument(s)"
 notimp:	.asciz	"?KRTSER-W-Unimplemented command"
 rem.01:	.asciz	"Receive XREPLY failed"
@@ -530,7 +530,7 @@ gen.t:	mov	#packet+1,r1		; get the packet address
 	.page
 ;	.sbttl	Generic WHO
 ;
-;gen.w:	calls	systat,^/#1/		; load output into out buff
+;gen.w:	calls	systat,<#1>		; load output into out buff
 ;	textsrc	#whobuff		; aim out buff at packet buffer
 ;	mov	#null	,r0		; flag it's not file I/O
 ;	call	xreply			; do the extended reply now
@@ -676,7 +676,7 @@ rem.two:mov	argbuf	,r1		; check for optional password
 	bne	10$			; not yet..
 	tstb	@r1			; null here?
 	beq	20$			; yes, no password present
-	clrb	-1(r1)			; /63/ insert null where ^/space/ was
+	clrb	-1(r1)			; /63/ insert null where <space> was
 	calls	doremo	,^/r0,#2,argbuf,r1/ ; /63/ ya, insert password too
 	br	30$
 20$:	calls	doremo	,^/r0,#1,argbuf/	; /63/ no password today

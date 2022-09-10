@@ -44,19 +44,19 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	dial.string	==	20	; address of dial format string
 	dial.rate	==	22	; ticks delay between sending chars
 	dial.ack	==	24	; modem response to confirm number
-	dial.blind	==	26	; if ^// dial w/o wait for dial tone
+	dial.blind	==	26	; if <> dial w/o wait for dial tone
 	dial.wait	==	30	; string for pause format effector
 	dial.confirm	==	32	; string to confirm number for dialing
 	dial.go		==	34	; ie, va212 returns "DIALING\n"
-	res.bin		==	36	; if ^// it's binary responses (DF03)
-	dial.echo	==	40	; if ^// modem echoes its input
+	res.bin		==	36	; if <> it's binary responses (DF03)
+	dial.echo	==	40	; if <> modem echoes its input
 	mod.comment	==	42	; addr of brief description of modem
 	res.head	==	44	; head of the list of result messages
 	dial.xabort	==	46	; /45/ string to kill call in progress
 	dial.idle	==	50	; /45/ string puts modem in idle state
 	dial.pulse	==	52	; /45/ pulse dialing command string
 	dial.nopulse	==	54	; /45/ tone dialing command string
-	init.once	==	56	; /BBS/ if ^// modem stays initialized
+	init.once	==	56	; /BBS/ if <> modem stays initialized
 	time.settle	==	60	; /62/ reset settle-time in secs
 	x.result	==	62	; /62/ "Hayes" style extended mode
 	ph.answer	==	64	; /62/ enable answer mode string
@@ -107,7 +107,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	dial$ack
 
 	.macro	dial$blind	s
-	modstr	^/s/ ,dial.blind		; 26  if ^// dial w/o waiting dial tone
+	modstr	^/s/ ,dial.blind		; 26  if <> dial w/o waiting dial tone
 	.endm	dial$blind
 
 	.macro	dial$wait	s
@@ -123,11 +123,11 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	dial$go
 
 	.macro	res$bin		v
-	modval	v ,res.bin		; 36  if ^// it's binary responses
+	modval	v ,res.bin		; 36  if <> it's binary responses
 	.endm	res$bin
 
 	.macro	dial$echo	v
-	modval	v ,dial.echo		; 40  if ^// modem echoes its input
+	modval	v ,dial.echo		; 40  if <> modem echoes its input
 	.endm	dial$echo
 
 	.macro	mod$comment	s
@@ -139,7 +139,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 ;	res.head(current_modem) --> first entry of linked list
 ;
 ;	.word	link_to_next		or zero for the last entry
-;	.word	response_class		^/0 fail, 0 info, 1 ring, /1 success
+;	.word	response_class		<0 fail, 0 info, 1 ring, >1 success
 ;	.asciz	"response_string"
 ;
 	.list (me)
@@ -194,7 +194,7 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.endm	dial$nopulse
 
 	.macro	init$once	v
-	modval	v ,init.once		; 56  if ^// modem stays initialized
+	modval	v ,init.once		; 56  if <> modem stays initialized
 	.endm	init$once
 
 	.macro	time$settle	v
@@ -321,15 +321,15 @@ $$dial.blind	=	sentinel; 26 dial.blind	   blind dial command string
 $$dial.wait	=	sentinel; 30 dial.wait	   pause character string
 $$dial.confirm	=	sentinel; 32 dial.confirm  optional "ok" string
 $$dial.go	=	sentinel; 34 dial.go	   optional "dialing" string
-$$res.bin	=	0	; 36 res.bin	   if ^// single char response
-$$dial.echo	=	0	; 40 dial.echo	   if ^// modem echos commands
+$$res.bin	=	0	; 36 res.bin	   if <> single char response
+$$dial.echo	=	0	; 40 dial.echo	   if <> modem echos commands
 $$mod.comment	=	sentinel; 42 mod.comment   modem comment string
 $$res.head	=	0	; 44 res.head	   result messages listhead
 $$dial.xabort	=	sentinel; 46 dial.xabort   abort dialing string
 $$dial.idle	=	sentinel; 50 dial.idle	   reset modem to idle string
 $$dial.pulse	=	sentinel; 52 dial.pulse	   PULSE dialing string
 $$dial.nopulse	=	sentinel; 54 dial.nopulse  TONE dialing string
-$$init.once	=	0	; 56 init.once	   if ^// modem stays initted
+$$init.once	=	0	; 56 init.once	   if <> modem stays initted
 $$time.settle	=	20.	; 60 time.settle   ticks to wait after a reset
 $$x.result	=	-1	; 62 x.result	   Hayes Xmode, default is off
 $$ph.answer	=	sentinel; 64 ph.answer	   enable auto-answer string
@@ -339,7 +339,7 @@ $$ph.noanswer	=	sentinel; 66 ph.noanswer   disable auto-answer string
 	  $$user = 1
 	.iff
 	  $$user = 0
-	.endc	; b ^/user/
+	.endc	; b <user>
 	$$lab = lab
 	.endm	define
 	; the .wordn macro is like .word but outputs null instead of sentinel
@@ -365,15 +365,15 @@ $$ph.noanswer	=	sentinel; 66 ph.noanswer   disable auto-answer string
 	.wordn	$$dial.wait	; 30 dial.wait	   pause character string
 	.wordn	$$dial.confirm	; 32 dial.confirm  optional "ok" string
 	.wordn	$$dial.go	; 34 dial.go	   optional "dialing" string
-	.word	$$res.bin	; 36 res.bin	   if ^// single char response
-	.word	$$dial.echo	; 40 dial.echo	   if ^// modem echos commands
+	.word	$$res.bin	; 36 res.bin	   if <> single char response
+	.word	$$dial.echo	; 40 dial.echo	   if <> modem echos commands
 	.wordn	$$mod.comment	; 42 mod.comment   modem comment string
 	.word	$$res.head	; 44 res.head	   result messages listhead
 	.wordn	$$dial.xabort	; 46 dial.xabort   abort dialing string
 	.wordn	$$dial.idle	; 50 dial.idle	   reset modem to idle string
 	.wordn	$$dial.pulse	; 52 dial.pulse	   PULSE dialing string
 	.wordn	$$dial.nopulse	; 54 dial.nopulse  TONE dialing string
-	.word	$$init.once	; 56 init.once	   if ^// modem stays initted
+	.word	$$init.once	; 56 init.once	   if <> modem stays initted
 	.word	$$time.settle	; 60 time.settle   ticks to wait after a reset
 	.word	$$x.result	; 62 x.result	   Hayes Xmode, default is off
 	.wordn	$$ph.answer	; 64 ph.answer	   enable auto-answer string
@@ -481,7 +481,7 @@ mod$res		^/Disconnect/	,FAILED
 mod$res		^/No Answer/	,FAILED
 mod$res		^/No Dialtone/	,FAILED
 mod$res		^/No Tone/	,FAILED
-mod$res		^/On Line/	,CONNECT	; /BBS/ ^/On Line Originate/
+mod$res		^/On Line/	,CONNECT	; /BBS/ <On Line Originate>
 mod$res		^/Ring/		,RING
 enddef
 
@@ -728,7 +728,7 @@ x$result	^/12./
 ph$answer	^/S0=1/				; /62/
 ph$noanswer	^/S0=0/				; /62/
 mod$res		^/BUSY/		,FAILED
-;mod$res	^/CONNECT FAST/	,CON38400	; /63/ use this if you can, or
+;mod$res	<CONNECT FAST>	,CON38400	; /63/ use this if you can, or
 mod$res		^/CONNECT FAST/	,CON19200	; this if 19.2 is max speed..
 mod$res		^/CONNECT 38400/	,CON38400
 mod$res		^/CONNECT 19200/	,CON19200

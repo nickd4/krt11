@@ -341,7 +341,7 @@ xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover
 	wrtall	#osi.04			; /63/ "HIMEM .. must be at least .."
 	mov	r2	,r0		; copy needed value for L10266
 	call	L10266			; /BBS/ what it needs..
-	wrtall	#osi.05			; /63/	". bytes"^/cr/^/lf/
+	wrtall	#osi.05			; /63/	". bytes"^/cr/<lf>
 	jmp	180$			; /BBS/ die
 
 120$:	mov	#freept	,r2		; setup pointer to start of free core
@@ -401,10 +401,10 @@ xinit::	.gtim	#rtwork	,#timbuf	; ensure clock rollover
 	octout	r0			; r0 still contains maxtop here
 	sub	@r2	,r0		; get diff for reporting
 
-170$:	wrtall	#osi.11			; /63/ ^/cr/^/lf/"You are "
+170$:	wrtall	#osi.11			; /63/ ^/cr/<lf>"You are "
 	neg	r0			; fix sign, args were flipped
 	call	plural			; display value and "word" or "words"
-	wrtall	#osi.12			; /63/ " from happiness.."^/cr/^/lf/
+	wrtall	#osi.12			; /63/ " from happiness.."^/cr/<lf>
 180$:	clr	r0			; do a hard exit (includes .hreset)
 	.exit
 
@@ -619,7 +619,7 @@ $240$:	bis	#ttmode	,@#jsw		; this pgm runs in single char mode
 	sub	@fetpt	,@sp		; /BBS/ minus top of program + buffers
 	mov	(sp)+	,r0		; /BBS/ = what's left for handlers
 	call	plural			; /BBS/ display it
-	wrtall	#osi.15			; /63/ " free to load hand.."^/cr/^/lf/
+	wrtall	#osi.15			; /63/ " free to load hand.."^/cr/<lf>
 410$:	return
 
 	.end

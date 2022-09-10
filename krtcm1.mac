@@ -599,7 +599,7 @@ c$take::tst	cmdlun			; indirect file already open?
 	tst	r0			; no support for it yet here..
 	bne	140$			; /62/ disallow wildcarded file name
 
-;	calls	chkext	,^/#srcnam/	; check for binary file type
+;	calls	chkext	,<#srcnam>	; check for binary file type
 ;	tst	r0			; iz it binary?
 ;	beq	110$			; nope
 ;	mov	#er$fnm	,r0		; ya, bad file name
@@ -851,7 +851,7 @@ sho$line::wrtall #cm1.06			; /63/ "Link device is "
 
 150$:	.newline
 	wrtall	#cm1.18			; /63/ "Flow-Control: "
-	bit	#40	,r1		; /62/ if ^// it's done in hardware
+	bit	#40	,r1		; /62/ if <> it's done in hardware
 	bne	160$
 	wrtall	#cm1.19			; /63/ "XOFF/XON   "
 	br	170$

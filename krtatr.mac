@@ -285,7 +285,7 @@ sn.xle:	mov	(r5)	,r3		; file open on this chan
 ;	R $ A T T R
 ;
 ;	input:	 (r5)	= packet buffer address
-;	output:	  r0	= if ^//, error code
+;	output:	  r0	= if <>, error code
 
 r$attr::save	^/r1,r2,r5/		; /BBS/ cleaned this up a bit..
 	bit	#at.on	,doattr		; /63/ attribute processing enabled?
@@ -430,7 +430,7 @@ rx.cdt:	clr	-(sp)			; init 2 digit year flag
 	call	gnum			; make it an integer
 	mov	r1	,day.x		; and save it here
 
-	;  2_bits^/year_ext/ ,4_bits^/mon/ ,5_bits^/day/ ,5_bits^/year-1972/
+	;  2_bits^/year_ext/ ,4_bits^/mon/ ,5_bits^/day/ ,5_bits<year-1972>
 	mov	mon.x	,r1		; recover month
 	ash	#5	,r1		; partial shift towards final location
 	add	day.x	,r1		; recover days

@@ -132,7 +132,7 @@ vms:	.asciz	"DECVMSEX"		; /54/ from EXCHANGE under VMS4.x
 ;	 (r5)	= possibly wildcarded input file specification
 ;	2(r5)	= output file spec, name of file matching input spec
 ;	index	= count of files found, init to 0 before first call
-;	  r0	= if ^//, error code
+;	  r0	= if <>, error code
 
 lookup::save	^/r1,r2,r3/
 	tst	index			; /62/ new call sequence today?
@@ -234,7 +234,7 @@ fixwild::save	^/r2/
 ;	 D O D I R			; /62/ major rewrite using server code
 ;
 ;	 (r5)	= wildcarded filespec
-;	  r0	= if ^//, error code
+;	  r0	= if <>, error code
 
 dodir::	call	sdirini			; init directory lookup and
 	tst	r0			; pre-load output buffer
@@ -260,7 +260,7 @@ dodir::	call	sdirini			; init directory lookup and
 ;
 ;	input:   (r5)	= wildcarded name
 ;	output:   r1	= next character in the directory listing
-;		  r0	= if ^//, error code
+;		  r0	= if <>, error code
 ;
 ;	SDODIR is called by the server to respond to a remote directory
 ;	command, returning one char at a time so BUFFIL can use it, via
@@ -287,7 +287,7 @@ sdirini::copyz	(r5)	,dirnam	,#80.	; /62/ copy name over, don't overwrite
 20$:	R0toR2				; /62/ copy the date
 	tst	summary			; doing a summary only?
 	beq	30$			; /62/ nope
-	R0toR2	#dcrlf			; /62/ ya, prefix with ^/cr/^/lf/
+	R0toR2	#dcrlf			; /62/ ya, prefix with ^/cr/<lf>
 	R0toR2	dirnam			; /62/ display file spec for SPACE cmd
 30$:	clr	r0			; /62/ no error
 40$:	return
@@ -314,7 +314,7 @@ dirnex:	mov	dirbfr	,r2		; pointer to buffer
 	calls	lookup	,^/dirnam,r3/	; /62/ try to find a matching file
 	tst	r0			; successful?
 	bne	30$			; no
-	R0toR2	#dcrlf			; /62/ ya, prefix with ^/cr/^/lf/
+	R0toR2	#dcrlf			; /62/ ya, prefix with ^/cr/<lf>
 	R0toR2	r3			; /62/ copy file spec into buff
 	calls	d$cvtnum,^/r3,loklen,#0/	; /BBS/ file size
 	R0toR2	r3			; /62/ append it please
@@ -342,7 +342,7 @@ dirnex:	mov	dirbfr	,r2		; pointer to buffer
 70$:	return
 
 dirsum:	mov	sp	,endflg		; /63/ flag it's all over
-	R0toR2	#dcrlf			; /62/ prefix with ^/cr/^/lf/
+	R0toR2	#dcrlf			; /62/ prefix with ^/cr/<lf>
 	tst	summary			; doing a SPACE summary only?
 	bne	10$			; ya, skip the newline here
 	tst	index			; anything listed?
@@ -361,14 +361,14 @@ dirsum:	mov	sp	,endflg		; /63/ flag it's all over
 	dec	numblks			; singular or plural?
 	beq	30$			; just one
 	R0toR2	#plural			; /63/ not 1, so make it plural
-30$:	R0toR2	#dcrlf			; ^/cr/^/lf/
+30$:	R0toR2	#dcrlf			; ^/cr/<lf>
 	calls	d$cvtnum,^/r3,numfree,#-1/ ; free blocks
 	R0toR2	r3			; put ascii number in buffer
 	R0toR2	#free			; " Free Block"
 	dec	numfree			; singular or plural?
 	beq	40$			; singular
 	R0toR2	#plural			; /63/ not 1, so make it plural
-40$:	R0toR2	#dcrlf			; ^/cr/^/lf/
+40$:	R0toR2	#dcrlf			; ^/cr/<lf>
 	return
 
 	.page
@@ -385,7 +385,7 @@ R0toR2:	movb	(r0)+	,(r2)+		; copy a byte
 ;	O P N D E V
 ;
 ;	input:	  (r5)	= file spec string
-;	output:	   r0	= if ^//, error code
+;	output:	   r0	= if <>, error code
 
 opndev:	calls	fparse	,^/(r5),#sluggy/	; /62/ check for valid device
 	tst	r0			; /BBS/ is it?
@@ -486,7 +486,7 @@ opndev:	calls	fparse	,^/(r5),#sluggy/	; /62/ check for valid device
 
 ;	G E T H O M E
 ;
-;	output:	   r0	= if ^//, error code
+;	output:	   r0	= if <>, error code
 
 gethom: save	^/r1,r2/			; /54/
 	.readw	#rtwork,#lun.sr,#dirbuf,#400,#hd$blk
@@ -782,7 +782,7 @@ filtim:	save	^/r0,r1,r2,r3/
 ;		 2(r5)	= unsigned 16-bit value to write into buffer
 ;		 4(r5)	= display formatting:
 ;			  0  = field set to 6 and right justified
-;			  ^// = space at left, number from left, .asciz
+;			  <> = space at left, number from left, .asciz
 
 d$cvtnum:save	^/r0,r1,r2,r3/		; /62/ cleaned up this code..
 	mov	(r5)	,r2		; write the number here

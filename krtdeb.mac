@@ -149,7 +149,7 @@ symsiz:
 	entry	^/DO8BIT/, int, 1
 	entry	^/DOATTR/, int, 1
 	entry	^/DORPT/ , int, 1
-;	entry	^/DOSLID/, int, 1
+;	entry	<DOSLID>, int, 1
 	entry	^/EDISTS/, int, 1
 	entry	^/EBQUOT/, chr, 1
 	entry	^/ERRTXT/, chr, erbfsiz

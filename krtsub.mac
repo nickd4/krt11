@@ -54,7 +54,7 @@ radchr:	.ascii	" ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789"
 	.psect	_$code
 	.sbttl	BASIC+ CVT$$ function	; /62/ unused functions pulled..
 
-;	calls	cvt$$	,^/addr(input),len(input),val(cvt_bit_pattern)/
+;	calls	cvt$$	,<addr(input),len(input),val(cvt_bit_pattern)>
 ;
 ;	returns:  addr(input)	= trimmed string
 ;		    r0		= length of what's left
@@ -263,7 +263,7 @@ instr::	save	^/r1,r2,r3,r4/
 	    sob	r2	,20$		; loop for len(pattern)-1
 30$:	    mov	r3	,r0		; the current loop count
 	    inc	r0			; point to the next character
-	    add	#6	,sp		; fix the stack from save ^/r0,r1,r2/
+	    add	#6	,sp		; fix the stack from save <r0,r1,r2>
 	    br	70$
 
 40$:	    unsave	^/r2,r1,r0/	; the match failed, restore the
@@ -416,7 +416,7 @@ $SAVRG:	MOV	R4	,-(SP)
 
 ;	input:	 (r5)	= address of .asciz decimal number string to convert
 ;	output:	  r1	= binary value of the string
-;		  r0	= if ^//, not a number
+;		  r0	= if <>, not a number
 
 l$val::	save	^/r3/
 	clr	r1			; initialize the result
@@ -443,7 +443,7 @@ l$val::	save	^/r3/
 
 ;	input:	 (r5)	= address of .asciz octal number string to convert
 ;	output:	  r1	= binary value of the string
-;		  r0	= if ^//, not a number
+;		  r0	= if <>, not a number
 
 octval::save	^/r3/			; /62/ all new..
 	clr	r1			; initialize the result

@@ -87,7 +87,7 @@
 	movb	map(reg),reg
 	.endm	mapch
 
-	.macro	sob	reg	,dst	; subtract one and branch if ^//
+	.macro	sob	reg	,dst	; subtract one and branch if <>
 	dec	reg
 	bne	dst
 	.endm	sob
@@ -107,7 +107,7 @@ map:	.rept	48.			; table returns integer value of ascii
 	.byte	377			; HEX digit or -1 for any non-HEX char
 	.endr
 	.byte	0   ,1   ,2   ,3   ,4   ,5   ,6   ,7   ,8.  ,9.
-	.byte	377 ,377 ,377 ,377 ,377 ,377 ,377 ; skip past :;^/=/?@
+	.byte	377 ,377 ,377 ,377 ,377 ,377 ,377 ; skip past :;<=>?@
 	.byte	10. ,11. ,12. ,13. ,14. ,15. ; mapping "A" to "F" here..
 	.rept	256.-70.
 	.byte	377
@@ -137,7 +137,7 @@ handld:	.blkw	1000			; handler loading done here
 inblk:	.word	0			; input file current block number
 inbuff:	.blkw	400			; the input file buffer
 inpnt:	.word	0			; and pointer into it
-jobtype:.word	0			; if ^// params passed when pgm was run
+jobtype:.word	0			; if <> params passed when pgm was run
 outblk:	.word	0			; output file current block number
 outbuf:	.blkw	400			; and same for the output file
 outpnt:	.word	0			; and its pointer

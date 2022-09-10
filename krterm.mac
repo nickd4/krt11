@@ -61,7 +61,7 @@ wrtlen:	.word	0			; /63/ write this many chars
 
 ;	T T Y I N I
 ;
-;	input:	  (r5)	= if ^// don't force ^W/^B off, as for CONNECT mode
+;	input:	  (r5)	= if <> don't force ^W/^B off, as for CONNECT mode
 ;	output:	   r0	= cleared, no error possible
 
 t.ttyini::save	^/r1,r2/
@@ -124,7 +124,7 @@ t.ttyini::save	^/r1,r2/
 ;
 ;	input:	  (r5)	= time-out
 ;	output:	   r1	= character just read
-;		   r0	= if ^//, error code
+;		   r0	= if <>, error code
 
 t.xbinread::				; same here, different in KRTXL
 t.binread::cmp	(r5)	,#-1		; read without any wait?
@@ -158,7 +158,7 @@ t.binread::cmp	(r5)	,#-1		; read without any wait?
 
 ;	B I N W R I
 ;
-;	output:	  r0	= if ^//, error code
+;	output:	  r0	= if <>, error code
 
 t.binwrite::tst	tsxsave			; /63/ running under TSX?
 	beq	10$			; /63/ no

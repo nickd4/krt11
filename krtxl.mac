@@ -99,7 +99,7 @@ alloc:	.byte	0 ,156			; /BBS/ allocate a device emt args
 	.word	dblk			; /BBS/ device name goes here
 xcsts::	.word	0			; /62/ saved from stsdrv
 xcwork:	.word	0 ,0 ,0 ,0 ,0 ,0	; for async calls to the handler
-xcwrite:.word	0			; if ^// write is in progress
+xcwrite:.word	0			; if <> write is in progress
 
 	.psect	xcrw	,rw,d,lcl,rel,con
 getspd:	.word	0			; /62/ buffer speed until confirmed ok
@@ -135,11 +135,11 @@ dev.ok:	.rad50	"CL "		; use rad50 space, not zero
 	.page
 	.sbttl	CL handler options	; /37/
 
-;	0    1	send \014 ^/FF/		10     400  send \015 ^/CR/
-;	1    2	send \011 ^/HT/		11    1000  send CTL chars
+;	0    1	send \014 ^/FF/		10     400  send \015 <CR>
+;	1    2	send \011 <HT>		11    1000  send CTL chars
 ;	2    4	send lower case		12    2000  raise DTR
-;	3   10	send \012 ^/LF/		13    4000  accept/send 8-bit chars
-;	4   20	accept \012 ^/LF/	14   10000  undefined
+;	3   10	send \012 <LF>		13    4000  accept/send 8-bit chars
+;	4   20	accept \012 <LF>	14   10000  undefined
 ;	5   40	FF on block 0 write	15   20000      "
 ;	6  100	send binary output	16   40000      "
 ;	7  200	accept binary input	17  100000      "
@@ -242,7 +242,7 @@ x.assdev::save	^/r2,r1/			; mods to stop ANY bad name
 ;	T T Y I N I
 ;
 ;	input:	  (r5)	= TSX ^W/^B flag, only used by T.TTYINI
-;	output:	   r0	= is ^//, error code
+;	output:	   r0	= is <>, error code
 
 x.ttyini::tst	tsxsave			; running under TSX?
 	beq	10$			; /62/ no
@@ -323,7 +323,7 @@ mapxl:	save	^/r1,r2,r3/		; /BBS/ heavily hacked..
 	clr	parity			; /62/ KM is an 8-bit device
 80$:	inc	xl.lock			; /62/ keep it, XC or XL open forever
 
-90$:	mov	r1	,r50dev		; if r50dev ^// 0 then device is valid
+90$:	mov	r1	,r50dev		; if r50dev <> 0 then device is valid
 	add	#50	,sp		; pop local buffer
 	clr	r0			; no error, also clears carry
 	br	130$
@@ -409,7 +409,7 @@ x.ttyfin::.twait #rtwork,#wait		; force at least 1 tick wait
 ;
 ;	input:	  (r5)	= time-out in secs, 0=max (65535 ticks), -1=one tick
 ;	output:    r1	= character just read
-;		   r0	= if ^//, error code
+;		   r0	= if <>, error code
 
 ; /BBS/ The -1 time-out option's now used to speed up eatjunk in
 ;	KRTDIA.MAC's dial/redial routines.   This routine _MUST_
@@ -469,7 +469,7 @@ xxread:	mov	(r5)	,r3		; time-out in seconds here
 
 ;	B I N W R I
 ;
-;	output:	  r0	= if ^//, error code
+;	output:	  r0	= if <>, error code
 
 x.binwrite::save	^/r1,r2,r3,r4/
 	mov	2(r5)	,r4		; byte count for the write

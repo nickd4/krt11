@@ -335,7 +335,7 @@ sd$off::bit	#log$op	,trace		; is there a logfile open?
 	beq	a10$			; /41/ no
 	wrtall	#prefix			; /41/ call it Logfile now
 	wrtall	#logfil			; /BBS/ include the actual file name
-	wrtall	#st0.38			; /63/ " closed"^/cr/^/lf/
+	wrtall	#st0.38			; /63/ " closed"^/cr/<lf>
 a10$:	bic	#log$al!log$io,trace	; /BBS/ clear all disk debug bits now
 a20$:	clr	r0			; success
 a30$:	return
@@ -367,7 +367,7 @@ sdopen:	bit	#log$op	,trace		; a logfile open?
 	bne	a40$			; /BBS/ ya, skip this message..
 	wrtall	#prefix			; /BBS/ no, say it's already there
 	wrtall	#logfil			; /BBS/ including what it is
-	wrtall	#st0.39			; /63/ " is already open"^/cr/^/lf/
+	wrtall	#st0.39			; /63/ " is already open"^/cr/<lf>
 a40$:	br	a20$			; /63/ no error, clr r0 clears carry
 
 a50$:	mov	argbuf	,r0		; /BBS/ bump argpnt to the next arg..
@@ -1030,18 +1030,18 @@ j20$:	return
 	;.enabl	lsb
 
 ; Control character quoting may be disabled for each byte individually 
-; by making its corresponding flag byte in CLTFLGS ^// 0.
+; by making its corresponding flag byte in CLTFLGS <> 0.
 ;
 ;	flags offset	character controlled
 ;	------------    --------------------
-;	CTLFLGS+  0  =  ascii 377  ^/200!DEL/
-;	       +  1  =  ascii   0  ^/NUL/
+;	CTLFLGS+  0  =  ascii 377  <200!DEL>
+;	       +  1  =  ascii   0  <NUL>
 ;	        ...
-;	       + 40  =  ascii  37  ^/US/
-;	       + 41  =  ascii 177  ^/DEL/
-;	       + 42  =  ascii 200  ^/200!NUL/
+;	       + 40  =  ascii  37  <US>
+;	       + 41  =  ascii 177  <DEL>
+;	       + 42  =  ascii 200  <200!NUL>
 ;	        ...
-;	       +101  =  ascii 237  ^/200!US/
+;	       +101  =  ascii 237  <200!US>
 
 ;	r2  =   buffer pointer for register indexing
 ;	r3  =	loop counter for sct$all
@@ -1127,16 +1127,16 @@ ct.all:	tst	r4			; allow anything
 	beq	k60$			; ya
 	cmp	r1	,#24		; an XOFF?
 	beq	k60$			; ya
-	cmp	r1	,#63		; maybe it's ^/200!XON/
+	cmp	r1	,#63		; maybe it's <200!XON>
 	beq	k60$			; ya
-	cmp	r1	,#65		; how about ^/200!XOFF/
+	cmp	r1	,#65		; how about <200!XOFF>
 	bne	k70$			; nope..
 k60$:	tst	km.lock			; hardware flow control here is
 	beq	k80$			; only supported on the KM handler
 	clr	-(sp)			; a one word buffer
 	mov	sp	,r2		; pointer to it
 	.spfun	#rtwork,#xc.control,#clstat,r2,#0,#1 ; get the status
-	bit	#cl.flow,(sp)+		; if ^// it's done in hardware
+	bit	#cl.flow,(sp)+		; if <> it's done in hardware
 	beq	k80$			; it's software flow control
 k70$:	movb	r4	,ctlflgs(r1)	; set or clear as req'd ..
 

@@ -235,7 +235,7 @@ loop:	mov	#fline	,linno		; start at this line
 	mov	r0	,addr		; save for peek
 	mov	#pkemt	,r0		; set up peek
 	emt	375			; get lcdtim register value
-	cmp	r0	,#timout	; if lcdtim^//timout DCD has gone away
+	cmp	r0	,#timout	; if lcdtim<>timout DCD has gone away
 	beq	40$			; if lcdtim=timout skip to next..
 
 	cmp	tsxver	,#630.		; will documented kill emt work?

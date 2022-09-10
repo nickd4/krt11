@@ -226,7 +226,7 @@ b10$:	upcase	argbuf			; upper case the argument
 	command	kmlst	,XOFF	,1	,km$xof
 	command	kmlst
 
-km$rts:	mov	sp	,r1		; make word count ^//
+km$rts:	mov	sp	,r1		; make word count <>
 	br	b20$
 
 km$xof:	mov	#ctlflgs,r1		; /63/ pointer to control flags data

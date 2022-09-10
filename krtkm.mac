@@ -15,11 +15,11 @@
 ;
 ; Add SPFUNs to support Xmodem compatibly with the TSX CL handler:
 ;
-;	CLSET	^/250/	Set CL options (binin and binout only)
-;	CLRSET	^/251/	Clear CL options (binin and binout only)
-;	CLIPND	^/261/	Get number of input chars pending
-;	CLWBYT	^/263/	Write with byte count
-;	CLCHAR	^/266/	Get CL characteristics (options flags only)
+;	CLSET	<250>	Set CL options (binin and binout only)
+;	CLRSET	<251>	Clear CL options (binin and binout only)
+;	CLIPND	<261>	Get number of input chars pending
+;	CLWBYT	<263>	Write with byte count
+;	CLCHAR	<266>	Get CL characteristics (options flags only)
 ;
 ; Enabling binin or binout does not in itself bypass XOFF flow control
 ; processing in the input or output routines here, one must explicitly
@@ -67,7 +67,7 @@
 ; as it only loads handlers when started.  KM may be mapped to save
 ; low memory:
 ;
-;	DEVDEF	^/KM/,MAPH
+;	DEVDEF	<KM>,MAPH
 ;
 ; To build KM under RT-11 V5 (KRTSYS.COM):
 ; MAC/OBJ:KM KRTSJ.CND+KRTKM
@@ -115,12 +115,12 @@
 	.page
 	.sbttl	Interface and operating system defaults
 
-	.iif ndf km$dve	km$dve = 0	; if ^// DL(V)-11/E interface
-	.iif ndf km$pdt	km$pdt = 0	; if ^// display holds on PDT-11 LEDs
-	.iif ndf km$pro	km$pro = 0	; if ^// PRO-series modem interface
-	.iif ndf km$sbc	km$sbc = 0	; if ^// Falcon SBC-11 interface
+	.iif ndf km$dve	km$dve = 0	; if <> DL(V)-11/E interface
+	.iif ndf km$pdt	km$pdt = 0	; if <> display holds on PDT-11 LEDs
+	.iif ndf km$pro	km$pro = 0	; if <> PRO-series modem interface
+	.iif ndf km$sbc	km$sbc = 0	; if <> Falcon SBC-11 interface
 			rte$m =: 0	; RTEM is not supported here
-	.iif ndf tsx$p  tsx$p  = 0	; if ^// support TSX-Plus
+	.iif ndf tsx$p  tsx$p  = 0	; if <> support TSX-Plus
 	.iif ne  km$dve	km$dve = 1	; ensure proper assembly
 	.iif ne  km$pdt	km$pdt = 1
 	.iif ne  km$pro	km$pro = 1
@@ -244,7 +244,7 @@
 	sysptr	= 54		; location of address of RMON base
 	    qcomp	= 270	;  offset to I/O exit routine address
 	    confg2	= 370	;  offset to second configuration word
-		pros$	= 20000	;   if ^// it's a PRO-series system
+		pros$	= 20000	;   if <> it's a PRO-series system
 
 	b.code	= -1		; init as speed not settable
 	b.deflt = 0		; init as nothing to set for speed
@@ -273,7 +273,7 @@
 		cl.dtr	= 4	; /63/ dtr
 		cl.rts	= 10	; /63/ rts
 		cl.cts	= 20	; /63/ cts
-		cl.flow	= 40	; /63/ ^// for rts/cts flow control
+		cl.flow	= 40	; /63/ <> for rts/cts flow control
 	clspeed	= 256		; get or set speed
 	clclr	= 257		; abort pending I/O
 	clipnd	= 261		; /63/ get number of input chars pending
@@ -534,7 +534,7 @@ s.brk:	tst	q$wcnt(r4)		; start break or stop break?
 ;	two lines here and in cl.clr (below).  Doing this will require making
 ;	the bcs bwrite/jmp km$err code in the driver entry code unconditional
 ;	as km$err will then be too far to branch.  Currently this driver only
-;	checks and uses the binin ^/000200/ and binout ^/000100/ option bits.
+;	checks and uses the binin ^/000200/ and binout <000100> option bits.
 
 cl.set:	.if eq mmg$t
 	bis	@q$buff(r4),clopts	; set the desired options
@@ -635,7 +635,7 @@ km$fin:	.drfin	KM			; knowing's more important than noping
 	.page
 	.sbttl	Set and/or clear flow control
 
-s.flow:	mov	q$wcnt(r4),ctsflg	; set it (0=XOFF,^//=CTS) then clear it
+s.flow:	mov	q$wcnt(r4),ctsflg	; set it (0=XOFF,<>=CTS) then clear it
 s.clr:	clr	rxhold			; hose possible received hold
 	.if eq km$pro
 	bis	#tx.ie	,@tx$csr	; ensure output interrupts are on
@@ -765,7 +765,7 @@ s.speed:tst	q$wcnt(r4)		; set it or get it?
 	beq	km$err			; 38.4k is unavailable
 	  .endc
 	mov	r1	,curspd		; save to return speed when asked..
-	  .if ne km$pro			; speed = ^/b.code*20/+b.code
+	  .if ne km$pro			; speed = <b.code*20>+b.code
 	mov	r1	,-(sp)		; save copy of speed code for receive
 	asl	r1			; then shift it into xmit speed bits
 	asl	r1
@@ -775,14 +775,14 @@ s.speed:tst	q$wcnt(r4)		; set it or get it?
 	movb	r1	,@#km$bdr	; set both tx and rx speeds
 	  .iff
 	    .if ne km$dve
-	swab	r1			; speed = ^/b.code*10000/!dve.en
+	swab	r1			; speed = <b.code*10000>!dve.en
 	asl	r1
 	asl	r1
 	asl	r1
 	asl	r1
 	bis	#dve.en	,r1		; now set the speed enable bit
 	    .endc
-	    .if ne km$sbc		; speed = ^/b.code*10/!sbc.en
+	    .if ne km$sbc		; speed = <b.code*10>!sbc.en
 	picadr	#sbcspd			; get conversion table pointer
 	add	r1	,r0		; add speed offset
 	movb	(r0)	,r1		; copy real speed code from table
@@ -913,13 +913,13 @@ kmint:	jsr	r5	,@$inptr	; drop back to the
 	.word	^c^/km$pri*40/&340	; device priority
 	.iftf
 	tst	(pc)+			; if sending a break..
-brkflg:	.word	0			;  ^// if break is asserted
+brkflg:	.word	0			;  <> if break is asserted
 	bne	40$			; ..then output can't be done
 	tst	(pc)+			; flow control status  -2=doRESUME
 txhold:	.word	0			;  -1=doHOLD, 0=RESUMEed, 1=onHOLD
 	bpl	20$			; nothing to do
 	tst	(pc)+			; check flow control type
-ctsflg:	.word	0			; if ^// do RTS/CTS flow control
+ctsflg:	.word	0			; if <> do RTS/CTS flow control
 	bne	10$			; go get CTS status into rxhold
 ; /63/ use hardware flow control with binout or uncomment the next 2 lines
 ;	bit	#binout	,clopts		; /63/ if doing binary output
@@ -938,10 +938,10 @@ ctsflg:	.word	0			; if ^// do RTS/CTS flow control
 	bne	20$			; ya
 	mov	#1	,rxhold		; no, set the hold flag
 20$:	tst	(pc)+			; is other end ready for more data..?
-rxhold:	.word	0			;  ^// if it sent an XOFF or CTS is low
+rxhold:	.word	0			;  <> if it sent an XOFF or CTS is low
 	bne	40$			; ..not yet
 	tst	(pc)+			; is the queue being changed?
-qchflg:	.word	0			;  ^// if queue is being updated
+qchflg:	.word	0			;  <> if queue is being updated
 	bne	40$			; ya, output must wait..
 	jsr	pc	,txproc		; no, try to get something to output
 	beq	40$			; nothing was there..

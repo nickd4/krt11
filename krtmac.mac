@@ -183,7 +183,7 @@
 	  .endr				; got it
 	.if eq $$			; no args present?
 	jsr	pc	,name		; if so, substitute a simple call
-	.iff				; at least one arg in ^/arglst/
+	.iff				; at least one arg in <arglst>
 	mov	r5	,-(sp)		; /63/ will be used to point to arg(s)
 	  .if eq $$-1			; is it one or more than one arg?
 	  .chksp	arglst		; one arg, check for legal SP modes

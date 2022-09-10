@@ -110,12 +110,12 @@ rmsidx:	.word	0			; /BBS/ current place in RMS index
 sub.2:	.blkb	100			; /62/ fill in with sub topics
 sub.3:	.blkb	100			; /62/ as required by how far in
 sub.4:	.blkb	100			; /62/ nested wildcarding goes..
-subwild:.word	0			; /62/ ^// if 1st char of input is "*"
+subwild:.word	0			; /62/ <> if 1st char of input is "*"
 topics:	.word	0 ,0 ,0 ,0 ,0 ,0 ,0 ,0	; /BBS/ list of topic/subtopic addrs
 topbuf:	.blkb	200			; (nested) topics buffer
 toplev:	.word	0			; level of current topic
 ttbuff:	.blkb	134.			; /63/ terminal read buffer
-wild:	.word	0			; ^// if topic wildcarded
+wild:	.word	0			; <> if topic wildcarded
 
 	.page
 	.psect	$code

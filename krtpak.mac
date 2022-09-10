@@ -314,7 +314,7 @@ rpack$::call	dcdtst			; /62/ check DCD, report any change..
 
 ;	W A I T S O H
 ;
-;	output:	  r0	= if ^//, error code
+;	output:	  r0	= if <>, error code
 ;		  r1	= the SOH or a null if we timed out
 
 ; /BBS/	^Z exit changed to ^C abort (requires two successive ^Cs)
@@ -898,7 +898,7 @@ checks:	save	^/r0,r1,r2,r3/
 ;	CRC-CCIT polynomial.
 ;
 ;	The string should be the fields of the packet between  but
-;	not including the  ^/mark/  and  the  block check, which is
+;	not including the  <mark>  and  the  block check, which is
 ;	treated as a string of bits with the low order bit of  the
 ;	first  character  first and the high order bit of the last
 ;	character last --  this  is  how  the  bits  arrive on the
@@ -961,7 +961,7 @@ crctb2:	.word	     0 ,010611 ,021422 ,031233 ,043044 ,053655 ,062466 ,072277
 ;
 ;	input:	 (r5)	= #0 for file or null terminated source buffer address
 ;		2(25)	= destination buffer, will be null terminated
-;	output:	  r0	= if ^//, RMS error code
+;	output:	  r0	= if <>, RMS error code
 ;		  r1	= returned string length, excluding null terminator
 ;
 ;	Control and 8-bit char prefixing and repeat count encoding done here.
@@ -1234,7 +1234,7 @@ logerr::calls	thunk_syserr	,^/r0,#errtxt/	; enter with r0=whatever_the_error_was
 	bic	#^/log$op!log$al!log$io/,trace ; kill all disk-based debugging
 	mov	#er$lwe	,r0		; this is some logfile write error..
 	calls	thunk_syserr	,^/r0,#spare1/	; generate an error message saying so
-	strcat	#spare1	,#pak.07	; /62/ now insert a ^/cr/^/lf/ after it
+	strcat	#spare1	,#pak.07	; /62/ now insert a ^/cr/<lf> after it
 	strcat	#spare1	,#errtxt	; then include the reported error too
 	tst	inserv			; skip TT stuff
 	bne	30$			; if a server
@@ -1306,7 +1306,7 @@ spac.p:	bicb	#200	,r1		; space means we are always LOW
 	return				; on bit seven
 
 odd.p:	bic	#^c^/177/,r1		; hose any previous parity
-	tstb	partab(r1)		; if char's entry in table is ^//
+	tstb	partab(r1)		; if char's entry in table is <>
 	bne	10$			; leave parity bit clear
 	bisb	#200	,r1		; else set parity bit
 10$:	return

@@ -551,7 +551,7 @@ dskdmp::save				; /42/ save r0-r5
 	inc	r1			; /BBS/ increment the byte counter
 	cmp	r1	,#72.		; /BBS/ done 72. chars yet?
 	ble	140$			; /BBS/ nope
-	.newline			; /BBS/ ya, do a ^/cr/^/lf/
+	.newline			; /BBS/ ya, do a ^/cr/<lf>
 	clr	r1			; /BBS/ and reset the byte counter
 140$:	sob	r2	,110$		; /BBS/ continue
 	tst	r1			; /BBS/ need a newline?

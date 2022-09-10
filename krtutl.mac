@@ -45,7 +45,7 @@ elfmo:	.word	0 ,0 ,0 ,0		; .rad50 file name lives here
 dfflag:	.word	0			; try default extents (.DSK,.DEV) flag
 dismnt:	.byte	3 ,135			; dump the LDn assign for..
 disunit:.byte	0 ,0			; ..this unit number
-dkflag:	.word	0			; assign this mount DK if ^//
+dkflag:	.word	0			; assign this mount DK if <>
 ;nocache:.byte	2 ,135			; dismount the world,
 ;	.word	0			; cache wise..
 newdk:	.asciz	"LDn:"			; defdir string is loaded from here
@@ -101,7 +101,7 @@ sta.7:	.asciz	" = STA."
 	.sbttl	The real work of MOUNT	; /BBS/ added
 
 ;	input:	argbuf	= entire argument string, unparsed
-;		 r1	= if ^// then dismount
+;		 r1	= if <> then dismount
 
 mount::	upcase	argbuf			; upper case all args
 	mov	argbuf	,r2		; pointer to LDn:
@@ -452,7 +452,7 @@ bufunp::save	^/r2,r3,r4,r5/
 	bisb	(r2)+	,r0		; must be one you know  avoid sxt here
 	mov	r0	,r1		; /63/ copy to compare
 	bic	#^c^/177/,r1		; lower 7 bits against the quote char
-	cmpb	r1	,senpar+p.qctl	; if ch ^// myquote
+	cmpb	r1	,senpar+p.qctl	; if ch <> myquote
 	beq	40$			;  then
 	ctl	r0	,r0		;   ch := ctl(ch)
 40$:	movb	r0	,(r4)+		; copy the byte over now
@@ -501,7 +501,7 @@ paksta::mov	r2	,-(sp)		; save ptr to "REC.SW" or "SEN.SW"
 	calls	asctim	,^/r1,r2/	; make it ascii, insert in buff
 	cmp	(sp)+	,(sp)+		; pop duration buffer
 	add	#11.	,r1		; bump past time just written
-	mov	#sta.5	,r2		; point to ^/cr/^/lf/^/cr/^/lf/
+	mov	#sta.5	,r2		; point to ^/cr/^/lf/^/cr/<lf>
 30$:	call	sta.cp			; copy into output string
 	mov	(sp)+	,r2		; get ptr to "REC.SW" or "SEN.SW"
 	call	sta.cp			; copy into output string
@@ -541,7 +541,7 @@ prerrp::tst	remote			; /BBS/ if running as remote..
 	.sbttl	Get time of day		; /62/ use cvttim to include ticks
 
 ;	input:	 (r5)	= buffer address for .asciz string
-;		2(r5)	= if ^//, location of time value to process	; /62/
+;		2(r5)	= if <>, location of time value to process	; /62/
 
 asctim::save	^/r0,r1,r2,r3/
 	mov	2(r5)	,r3		; /62/ was a pointer passed?

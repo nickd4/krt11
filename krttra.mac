@@ -43,7 +43,7 @@ twarea:	.word	0 ,0			; .twait work area
 	.sbttl	TRANSMIT		; /BBS/ heavily hacked..
 
 ;	input:	argbuf	= name of file to send
-;	output:	   r0	= if ^//, error code
+;	output:	   r0	= if <>, error code
 
 c$tran::tst	remote			; /62/ disallow to TT
 	beq	10$			; prevents typing TSX lead-in!

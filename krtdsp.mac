@@ -96,19 +96,19 @@ cl$line::.word	0			; perm copy, follows valid assign
 d.allo::.byte	0 ,156			; (de)allocate a device emt args
 	.word	cl.r50			; device to (de)allo..
 cl.r50::.word	0 ,0 ,0 ,0		; ..which lives here
-km.lock::.word	0			; /62/ if ^// it's KM running
+km.lock::.word	0			; /62/ if <> it's KM running
 r50dev::.word	0 ,0 ,0 ,0		; current link dev name, if handler
 suspnd::.word	0			; suspend count for CONNECT tasks
 xcdone::.word	0			; moved here, read is complete
-xk.con::.word	0			; if ^//, reads to terminal emulator
+xk.con::.word	0			; if <>, reads to terminal emulator
 xkrd1:	.word	0 ,0 ,0 ,0 ,0 ,0	; work area for handler reads
 ; moved to krtdef.mac
 ;xksize	==	100			; size in bytes for handler reads
 xkbuff::.blkb	xksize+2		; read buffer for handler
 xkpoint::.word	xkbuff			; pointer to current position in buff
 xkspeed::.word	0			; moved here to live in root
-xl.lock::.word	0			; if ^// XL can't do .close
-z.atch::.word	0			; if ^// TSX line was gotten here
+xl.lock::.word	0			; if <> XL can't do .close
+z.atch::.word	0			; if <> TSX line was gotten here
 
 	.psect	$pdata
 tsxwai:	.word	0 ,1			; ticks between reads from keyboard
@@ -373,7 +373,7 @@ tt.io:	tst	(r0)+			; bump to TT I/O address
 	SRDDRV	=	203		; special read, wc is max # of bytes
 					; to read, always returns at least one
 					; byte, up to max if data are there
-	STATE	=	2		; ^// flags scheduler to run the task
+	STATE	=	2		; <> flags scheduler to run the task
 
 readxk::tst	xcdone			; is there a read already queued?
 	bne	10$			; /62/ ya, can't queue more than one
