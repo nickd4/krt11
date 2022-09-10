@@ -41,11 +41,11 @@ ispy.rel \
 syslbv.rel
 	aslink -p0 -a '$$ohand=0o1000' -ilmuwqz -o $@ $^
 
-ohandl.rel: syslib/ohandl.mac macro-11.mac
+ohandl.rel: syslib/ohandl.mac macro-11.mac sysmac.mac
 	aspdp11 -glwqz -o $@ $<
 
 # this has to be linked right after ohandl.rel as it fills in $ovtab
-otable.rel: otable.mac
+otable.rel: otable.mac macro-11.mac sysmac.mac
 	aspdp11 -glwqz -o $@ $<
 
 krtatr.rel: krtatr.mac macro-11.mac sysmac.mac krtnhd.mac
@@ -153,16 +153,16 @@ krtxm.rel: krtxm.mac macro-11.mac sysmac.mac krtnhd.mac
 krtxmo.rel: krtxmo.mac macro-11.mac sysmac.mac krtnhd.mac
 	aspdp11 -glwqz -o $@ $<
 
-cvttim.rel: syslib/cvttim.mac macro-11.mac
+cvttim.rel: syslib/cvttim.mac macro-11.mac sysmac.mac
 	aspdp11 -glwqz -o $@ $<
 
-div60.rel: syslib/div60.mac macro-11.mac
+div60.rel: syslib/div60.mac macro-11.mac sysmac.mac
 	aspdp11 -glwqz -o $@ $<
 
-ispy.rel: syslib/ispy.mac macro-11.mac
+ispy.rel: syslib/ispy.mac macro-11.mac sysmac.mac
 	aspdp11 -glwqz -o $@ $<
 
-syslbv.rel: syslib/syslbv.mac macro-11.mac
+syslbv.rel: syslib/syslbv.mac macro-11.mac sysmac.mac
 	aspdp11 -glwqz -o $@ $<
 
 clean:

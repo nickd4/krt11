@@ -1,9 +1,8 @@
 	.include "./macro-11.mac"
-; .module is in sysmac.mac and doesn't seem to work yet
-;	.module	ohandl
+	.include "./sysmac.mac"
+	.module	ohandl,3
 	.globl	$ovdf1
 	.globl	$ovdf2
-.ohand	==	3
 	.area	$ohand (rel,con)
 	.word	060502				; 000000
 $ovrh::	.word	010046,010146,010246		; 000002

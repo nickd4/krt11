@@ -1,7 +1,6 @@
 	.include "./macro-11.mac"
-; .module is in sysmac.mac and doesn't seem to work yet
-;	.module	cvttim
-.cvtti	==	2
+	.include "./sysmac.mac"
+	.module	cvttim,2
 	.area	sys$i (rel,con)
 cvttim::.word	005725,012501,012100,011101	; 000000
 	.word	062705,000010			; 000010

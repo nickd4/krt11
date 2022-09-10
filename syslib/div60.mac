@@ -1,7 +1,6 @@
 	.include "./macro-11.mac"
-; .module is in sysmac.mac and doesn't seem to work yet
-;	.module	div60
-.div60	==	2
+	.include "./sysmac.mac"
+	.module	div60,2
 	.area	sys$i (rel,con)
 $divtk::.word	012704,000062,010046,012700	; 000000
 	.word	000300				; 000010

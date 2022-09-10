@@ -1,4 +1,6 @@
-	.radix	o
+	.include "./macro-11.mac"
+	.include "./sysmac.mac"
+	.module	otable,0
 
 ; for basepage below 1000, just insert values calculated by link-11
 
