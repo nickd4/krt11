@@ -121,9 +121,11 @@ binl:	.ascii	".BAC"			; compiled BASIC files
 ;	     comma	 6	  part of a ppn or uic
 ;	alpha-numeric	 7	  any char that's ok in directory or file name
 
-chtype:	.rept	128.		; doing ascii 0. through 127.
-	.byte		 0	; init everything to being ignored
-	.endr
+chtype:	; for aslink, avoid overlap in the output ihx file (holes are zeroed)
+	;.rept	128.		; doing ascii 0. through 127.
+	;.byte		 0	; init everything to being ignored
+	;.endr
+	.blkb	128.
 
 	chtype	 0	,1	; exit on null
 	chtype	lf	,1	; /62/ exit on a line feed

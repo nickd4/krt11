@@ -88,6 +88,29 @@ hex2bin.py --pad=0 --range=7dea:83c9 krt_segment_000022.ihx krt_segment_000022.b
 hex2bin.py --pad=0 --range=7dea:8513 krt_segment_000023.ihx krt_segment_000023.bin
 hex2bin.py --pad=0 --range=7dea:86e7 krt_segment_000024.ihx krt_segment_000024.bin
 
+(
+  dd ibs=512 conv=sync if=krt.bin
+  dd ibs=512 conv=sync if=krt_segment_000001.bin
+  dd ibs=512 conv=sync if=krt_segment_000002.bin
+  dd ibs=512 conv=sync if=krt_segment_000003.bin
+  dd ibs=512 conv=sync if=krt_segment_000004.bin
+  dd ibs=512 conv=sync if=krt_segment_000005.bin
+  dd ibs=512 conv=sync if=krt_segment_000006.bin
+  dd ibs=512 conv=sync if=krt_segment_000007.bin
+  dd ibs=512 conv=sync if=krt_segment_000010.bin
+  dd ibs=512 conv=sync if=krt_segment_000011.bin
+  dd ibs=512 conv=sync if=krt_segment_000012.bin
+  dd ibs=512 conv=sync if=krt_segment_000013.bin
+  dd ibs=512 conv=sync if=krt_segment_000014.bin
+  dd ibs=512 conv=sync if=krt_segment_000015.bin
+  dd ibs=512 conv=sync if=krt_segment_000016.bin
+  dd ibs=512 conv=sync if=krt_segment_000017.bin
+  dd ibs=512 conv=sync if=krt_segment_000020.bin
+  dd ibs=512 conv=sync if=krt_segment_000021.bin
+  dd ibs=512 conv=sync if=krt_segment_000022.bin
+  dd ibs=512 conv=sync if=krt_segment_000023.bin
+) >krt.sav
+
 od --output-duplicates -w2 <krt/krt.sav |head --lines=9507 >good
-od --output-duplicates -w2 <krt.bin >bad
+od --output-duplicates -w2 <krt.sav >bad
 diff --unified good bad >diff

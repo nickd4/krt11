@@ -1,3 +1,4 @@
+.globl null
 	.title	KRTMDM	Modem definitions
 	.include "macro-11.mac"
 	.segment 000024
@@ -146,7 +147,9 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.psect	resdat	,ro,d,lcl,rel,con ; /62/
 	.nlist (me)
 	$res1 = .			; save current pc in "resdat"
-	.word	0			; link to next is zero for now..
+	; for aslink, avoid overlap in the output ihx file (holes are zeroed)
+	;.word	0			; link to next is zero for now..
+	.blkw	1
 	.if  b	^/class/			; if class not specified, then
 	.word	0			; make it zero (info only message)
 	.iff				; else insert specified
@@ -213,6 +216,13 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.page
 	.sbttl	Macros to place data in the individual fields
 
+	; for aslink, we need a sentinel symbol in same areas as strings, to use
+	; instead of global null symbol (null will be output instead of sentinel)
+	.save
+	.psect	string	,ro,d,lcl,rel,con
+	sentinel = .-1
+	.restore
+
 	.macro	modstr	s ,offset	; insert a string in modem's data
 	.list (me)
 	.save
@@ -235,26 +245,30 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	    .endc
 	  .endr
 	.byte	0			; null terminate
-	.list (me)
-	.psect	modinf	,ro,d,lcl,rel,con
-	$$save = . ; link-11 doesn't need this
-	. = $$current+offset
-	.word	$$addr			; where to find it..
-	. = $$save ; link-11 doesn't need this
+	; for aslink, just save in appropriate variable, will be output later
+	;.list (me)
+	;.psect	modinf	,ro,d,lcl,rel,con
+	;$$save = . ; link-11 doesn't need this
+	;. = $$current+offset
+	;.word	$$addr			; where to find it..
+	;. = $$save ; link-11 doesn't need this
 	.restore
-	.nlist (me)
+	;.nlist (me)
+	$$'offset = $$addr
 	.endm	modstr
 
 	.macro	modval	val ,offset	; insert value (word) in modem's data
-	.list (me)
-	.save
-	.psect	modinf	,ro,d,lcl,rel,con
-	$$save = . ; link-11 doesn't need this
-	. = $$current+offset		; it goes here..
-	.word	val
-	. = $$save ; link-11 doesn't need this
-	.restore
-	.nlist (me)
+	; for aslink, just save in appropriate variable, will be output later
+	;.list (me)
+	;.save
+	;.psect	modinf	,ro,d,lcl,rel,con
+	;$$save = . ; link-11 doesn't need this
+	;. = $$current+offset		; it goes here..
+	;.word	val
+	;. = $$save ; link-11 doesn't need this
+	;.restore
+	;.nlist (me)
+	$$'offset = val
 	.endm	modval
 
 	.page
@@ -265,11 +279,8 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 ;	data field macros.  The individual modem definition entries following
 ;	(two pages below) are good examples of how this is accomplished.
 
+	$$first	  = 1			; no previous link (doing first modem)
 	.macro	define	lab ,s ,user
-	.if eq	$$trip			; /62/ this has to be done this way
-	$$prev	= modinf		; /62/ because "ndf" blows up the
-	$$trip	= 1			; /62/ .LST output..
-	.endc				; /62/
 	$res	  = 0			; init the result message
 	$reslast  = 0			; macro counters
 
@@ -293,52 +304,103 @@ loamdm::mov	#modinf	,r0		; /63/ return address of top of list
 	.restore
 	.nlist (me)
 
-lab:	.word	0		;  0 mod.next	   link to next please
+lab:	; for aslink, avoid overlap in the output ihx file (holes are zeroed)
+	;.word	0		;  0 mod.next	   link to next please
+	.blkw	1
 	.word	$$		;  2 mod.string	   modem type string address
-	.word	30.		;  4 dial.time	   dial time-out in secs
-	.word	null		;  6 wake.string   init to dial out string
-	.word	0		; 10 wake.rate	   ticks between init chars
-	.word	null		; 12 wake.prompt   command mode prompt string
-	.word	null		; 14 dmod.string   optional dial cmd string
-	.word	null		; 16 dmod.prompt   optional dial prompt string
-	.word	null		; 20 dial.string   actual dial command string
-	.word	0		; 22 dial.rate	   ticks between dial chars
-	.word	null		; 24 dial.ack	   dialing acknowledged string
-	.word	null		; 26 dial.blind	   blind dial command string
-	.word	null		; 30 dial.wait	   pause character string
-	.word	null		; 32 dial.confirm  optional "ok" string
-	.word	null		; 34 dial.go	   optional "dialing" string
-	.word	0		; 36 res.bin	   if ^// single char response
-	.word	0		; 40 dial.echo	   if ^// modem echos commands
-	.word	null		; 42 mod.comment   modem comment string
-	.word	0		; 44 res.head	   result messages listhead
-	.word	null		; 46 dial.xabort   abort dialing string
-	.word	null		; 50 dial.idle	   reset modem to idle string
-	.word	null		; 52 dial.pulse	   PULSE dialing string
-	.word	null		; 54 dial.nopulse  TONE dialing string
-	.word	0		; 56 init.once	   if ^// modem stays initted
-	.word	20.		; 60 time.settle   ticks to wait after a reset
-	.word	-1		; 62 x.result	   Hayes Xmode, default is off
-	.word	null		; 64 ph.answer	   enable auto-answer string
-	.word	null		; 66 ph.noanswer   disable auto-answer string
+$$dial.time	=	30.	;  4 dial.time	   dial time-out in secs
+$$wake.string	=	sentinel;  6 wake.string   init to dial out string
+$$wake.rate	=	0	; 10 wake.rate	   ticks between init chars
+$$wake.prompt	=	sentinel; 12 wake.prompt   command mode prompt string
+$$dmod.string	=	sentinel; 14 dmod.string   optional dial cmd string
+$$dmod.prompt	=	sentinel; 16 dmod.prompt   optional dial prompt string
+$$dial.string	=	sentinel; 20 dial.string   actual dial command string
+$$dial.rate	=	0	; 22 dial.rate	   ticks between dial chars
+$$dial.ack	=	sentinel; 24 dial.ack	   dialing acknowledged string
+$$dial.blind	=	sentinel; 26 dial.blind	   blind dial command string
+$$dial.wait	=	sentinel; 30 dial.wait	   pause character string
+$$dial.confirm	=	sentinel; 32 dial.confirm  optional "ok" string
+$$dial.go	=	sentinel; 34 dial.go	   optional "dialing" string
+$$res.bin	=	0	; 36 res.bin	   if ^// single char response
+$$dial.echo	=	0	; 40 dial.echo	   if ^// modem echos commands
+$$mod.comment	=	sentinel; 42 mod.comment   modem comment string
+$$res.head	=	0	; 44 res.head	   result messages listhead
+$$dial.xabort	=	sentinel; 46 dial.xabort   abort dialing string
+$$dial.idle	=	sentinel; 50 dial.idle	   reset modem to idle string
+$$dial.pulse	=	sentinel; 52 dial.pulse	   PULSE dialing string
+$$dial.nopulse	=	sentinel; 54 dial.nopulse  TONE dialing string
+$$init.once	=	0	; 56 init.once	   if ^// modem stays initted
+$$time.settle	=	20.	; 60 time.settle   ticks to wait after a reset
+$$x.result	=	-1	; 62 x.result	   Hayes Xmode, default is off
+$$ph.answer	=	sentinel; 64 ph.answer	   enable auto-answer string
+$$ph.noanswer	=	sentinel; 66 ph.noanswer   disable auto-answer string
+	; for aslink, the rest of the data will be output in the enddef macro
+	.if  b	^/user/			; if not the user-defined modem
+	  $$user = 1
+	.iff
+	  $$user = 0
+	.endc	; b ^/user/
+	$$lab = lab
+	.endm	define
+	; the .wordn macro is like .word but outputs null instead of sentinel
+	.macro	.wordn	val
+	.if eq	(val-sentinel)
+	  .word	null
+	.else
+	  .word	val
+	.endc	; eq (val-sentinel)
+	.endm	.wordn
+	; the enddef macro outputs the fields after opportunity to change them
+	.macro	enddef
+	.word	$$dial.time	;  4 dial.time	   dial time-out in secs
+	.wordn	$$wake.string	;  6 wake.string   init to dial out string
+	.word	$$wake.rate	; 10 wake.rate	   ticks between init chars
+	.wordn	$$wake.prompt	; 12 wake.prompt   command mode prompt string
+	.wordn	$$dmod.string	; 14 dmod.string   optional dial cmd string
+	.wordn	$$dmod.prompt	; 16 dmod.prompt   optional dial prompt string
+	.wordn	$$dial.string	; 20 dial.string   actual dial command string
+	.word	$$dial.rate	; 22 dial.rate	   ticks between dial chars
+	.wordn	$$dial.ack	; 24 dial.ack	   dialing acknowledged string
+	.wordn	$$dial.blind	; 26 dial.blind	   blind dial command string
+	.wordn	$$dial.wait	; 30 dial.wait	   pause character string
+	.wordn	$$dial.confirm	; 32 dial.confirm  optional "ok" string
+	.wordn	$$dial.go	; 34 dial.go	   optional "dialing" string
+	.word	$$res.bin	; 36 res.bin	   if ^// single char response
+	.word	$$dial.echo	; 40 dial.echo	   if ^// modem echos commands
+	.wordn	$$mod.comment	; 42 mod.comment   modem comment string
+	.word	$$res.head	; 44 res.head	   result messages listhead
+	.wordn	$$dial.xabort	; 46 dial.xabort   abort dialing string
+	.wordn	$$dial.idle	; 50 dial.idle	   reset modem to idle string
+	.wordn	$$dial.pulse	; 52 dial.pulse	   PULSE dialing string
+	.wordn	$$dial.nopulse	; 54 dial.nopulse  TONE dialing string
+	.word	$$init.once	; 56 init.once	   if ^// modem stays initted
+	.word	$$time.settle	; 60 time.settle   ticks to wait after a reset
+	.word	$$x.result	; 62 x.result	   Hayes Xmode, default is off
+	.wordn	$$ph.answer	; 64 ph.answer	   enable auto-answer string
+	.wordn	$$ph.noanswer	; 66 ph.noanswer   disable auto-answer string
 	$$end	= .
 	.iif ne	 ^?^/$$end-$$current/-mod.size? .error ^/; 's define size error/
 
-	.if  b	^/user/			; if not the user-defined modem
-	. = $$prev			; insert link address of modem data
-	.word	lab			; just defined in the previous modem
-	. = $$end			; then go back where we were
-	$$prev = lab			; and save new address for next link
-	.iff				; if this is the user-defined modem..
-	.list (me)
-	.restore			; exit root, come back to this overlay
-	$$$ = .
-	. = $modtail			; /BBS/ back to top of last definition
-	.word	lab			; /62/ insert link to user-defined
-	. = $$$
-	.nlist (me)
-	.endc	; b ^/user/
-	.endm	define
+	.if  ne $$first
+	  $$first = 0			; no previous link (doing first modem)
+	  $$prev = $$lab		; just save new address for next link
+	.iff
+	  .if  ne $$user		; if not the user-defined modem
+	    . = $$prev			; insert link address of modem data
+	    .word $$lab			; just defined in the previous modem
+	    . = $$end			; then go back where we were
+	    $$prev = $$lab		; and save new address for next link
+	  .iff				; if this is the user-defined modem..
+	    .list (me)
+	    .restore			; exit root, come back to this overlay
+	    $$$ = .
+	    . = $modtail		; /BBS/ back to top of last definition
+	    .word $$lab			; /62/ insert link to user-defined
+	    . = $$$
+	    .nlist (me)
+	  .endc	; ne $$user
+	.endc ; ne $$first
+	.endm	enddef
 
 	.page
 	.sbttl	Modem response classes	; /BBS/
@@ -396,6 +458,7 @@ mod$res		^/NO DIAL TONE/	,FAILED
 mod$res		^/NO RINGING/	,FAILED
 mod$res		^/RINGING/	,RING
 mod$res		^/VOICE/		,FAILED
+enddef
 
 define		cts24	,^/CTS2424/
 mod$comment	^?CTS/Fabri-Tek 2424AD?
@@ -420,6 +483,7 @@ mod$res		^/No Dialtone/	,FAILED
 mod$res		^/No Tone/	,FAILED
 mod$res		^/On Line/	,CONNECT	; /BBS/ ^/On Line Originate/
 mod$res		^/Ring/		,RING
+enddef
 
 define		df03	,^/DF03/
 mod$comment	^/DEC DF03AC/
@@ -431,6 +495,7 @@ dial$time	30.
 res$bin		1				; single char responses
 mod$res		^/A/		,CONNECT
 mod$res		^/B/		,FAILED
+enddef
 
 define		df100	,^/DF100/
 mod$comment	^/DEC DF112/
@@ -447,6 +512,7 @@ mod$res		^/Disconnected/	,FAILED
 mod$res		^/Error/		,FAILED
 mod$res		^/No answer/	,FAILED
 mod$res		^/No dial tone/	,FAILED
+enddef
 
 define		df200	,^/DF200/
 mod$comment	^/DEC DF224/
@@ -465,6 +531,7 @@ mod$res		^/Disconnected/	,FAILED
 mod$res		^/Error/		,FAILED
 mod$res		^/No answer/	,FAILED
 mod$res		^/No dial tone/	,FAILED
+enddef
 
 define		hayes	,^/HAYES/		; /BBS/ updated..
 mod$comment	^~Hayes Generic Command Set - DTE follows DCE speed~
@@ -501,6 +568,7 @@ mod$res		^/NO DIAL TONE/	,FAILED		; many clones
 mod$res		^/RING/		,RING		; includes "RINGING"
 mod$res		^/RRING/		,RING		; Telebit-style rringing
 mod$res		^/VOICE/		,FAILED
+enddef
 
 define		hayes.mnp ,^/HAYES-MNP/		; /BBS/ added from above..
 mod$comment	^?Hayes Generic V.42/MNP - Lock DTE speed before using!?
@@ -528,6 +596,7 @@ mod$res		^/NO DIAL TONE/	,FAILED
 mod$res		^/RING/		,RING
 mod$res		^/RRING/		,RING
 mod$res		^/VOICE/		,FAILED
+enddef
 
 define		microcom ,^/MICROCOM/
 mod$comment	^/MicroCom SX1200/
@@ -541,6 +610,7 @@ dial$time	35.
 mod$res		^/!/		,FAILED
 mod$res		^/CONNECT/	,CONNECT
 mod$res		^/NO CONNECT/	,FAILED
+enddef
 
 define		r212a	,^/R212A/		; added by edit RTM01
 mod$comment	^/Rixon R212A/
@@ -560,6 +630,7 @@ mod$res		^/ON LINE/	,CONNECT
 mod$res		^/ON-LINE/	,CONNECT
 mod$res		^/NO ANSWER/	,FAILED
 mod$res		^/RINGING/	,RING
+enddef
 
 define		T2500	,^/T2500/		; /BBS/ added..
 mod$comment	^~Telebit w/o error correction - DTE follows DCE speed~
@@ -590,6 +661,7 @@ mod$res		^/NO ANSWER/	,FAILED
 mod$res		^/NO CARRIER/	,FAILED
 mod$res		^/NO DIAL TONE/	,FAILED
 mod$res		^/RRING/		,RING
+enddef
 
 define		T2500MNP ,^/T2500MNP/		; /BBS/ added..
 mod$comment	^/Telebit MNP only - Locks DTE speed/
@@ -613,6 +685,7 @@ mod$res		^/NO ANSWER/	,FAILED
 mod$res		^/NO CARRIER/	,FAILED
 mod$res		^/NO DIAL TONE/	,FAILED
 mod$res		^/RRING/		,RING
+enddef
 
 define		T2500V.42 ,^/T2500V.42/		; /BBS/ added..
 mod$comment	^?Telebit V.42/MNP - Locks DTE speed?
@@ -636,6 +709,7 @@ mod$res		^/NO ANSWER/	,FAILED
 mod$res		^/NO CARRIER/	,FAILED
 mod$res		^/NO DIAL TONE/	,FAILED
 mod$res		^/RRING/		,RING
+enddef
 
 define		T3000	,^/T3000/		; /62/ added..
 mod$comment	^~Telebit w/o V.42/MNP - DTE follows DCE - XOFF restraint~
@@ -671,6 +745,7 @@ mod$res		^/NO CARRIER/	,FAILED
 mod$res		^/NO DIALTONE/	,FAILED
 mod$res		^/NO PROMPTTONE/	,FAILED		; /63/
 mod$res		^/RRING/		,RING
+enddef
 
 define		T3000V.42 ,^/T3000V.42/		; /62/ added..
 mod$comment	^?Telebit V.42/MNP - DTE is locked - RTS/CTS restraint?
@@ -695,6 +770,7 @@ mod$res		^/NO CARRIER/	,FAILED
 mod$res		^/NO DIALTONE/	,FAILED
 mod$res		^/NO PROMPTTONE/	,FAILED		; /63/
 mod$res		^/RRING/		,RING
+enddef
 
 define		T3000X.42 ,^/T3000X.42/		; /63/ added..
 mod$comment	^?Telebit V.42/MNP - DTE is locked - XOFF restraint?
@@ -719,6 +795,7 @@ mod$res		^/NO CARRIER/	,FAILED
 mod$res		^/NO DIALTONE/	,FAILED
 mod$res		^/NO PROMPTTONE/	,FAILED		; /63/
 mod$res		^/RRING/		,RING
+enddef
 
 define		vadic	,^/VADIC/
 mod$comment	^/Vadic Generic VA212/
@@ -745,6 +822,7 @@ mod$res		^/ONLINE/	,CONNECT
 mod$res		^/RINGING/	,RING
 mod$res		^/TIME OUT/	,FAILED
 mod$res		^/VOICE/		,FAILED
+enddef
 
 define		va42	,^/VA4224/
 mod$comment	^/Vadic 4224/
@@ -773,6 +851,7 @@ mod$res		^/ONLINE/	,CONNECT
 mod$res		^/RINGING/	,RING
 mod$res		^/TIME OUT/	,FAILED
 mod$res		^/VOICE/		,FAILED
+enddef
 
 	.page
 	.sbttl	User-Defined modem
@@ -784,6 +863,7 @@ mod$res		^/VOICE/		,FAILED
 ;	work here because this buffer is NOT stored in this overlay.
 
 define	usermd	,^/USER-DEFINED/	,GLOBAL
+enddef
 
 ;	No more modem definitions allowed past here!
 
