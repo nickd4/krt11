@@ -372,7 +372,7 @@ c$redi::mov	argbuf	,r3		; argbuf address
 
 c$dial::tst	signon			; if coming here from init file
 	bne	b10$			; dump sign-on stuff before dial
-	call	sho$line
+	call	thunk_sho$line
 
 b10$:	tstb	ttname			; check for a real terminal name
 	bne	b20$			; ok
@@ -387,7 +387,7 @@ b20$:	call	inqcd			; /62/ check to see if already talking
 
 b30$:	call	findnumber		; perhaps a SET PHONE NUMBER?
 	bcs	b100$			; findnu handles its own error
-	call	loamdm			; /63/ ensure modem data are loaded
+	call	thunk_loamdm			; /63/ ensure modem data are loaded
 	mov	modtype	,r0		; recover the address of descriptor
 	bne	b40$			; ok
 	mov	#er$mdm	,r0		; please SET MODEM first
@@ -443,12 +443,12 @@ b120$:	clr	r0			; /62/ error already handled
 b130$:	tst	xredial			; come here from c$redial?
 	beq	b140$			; nope
 	tst	(sp)+			; ya, pop its return address
-b140$:	jmp	c$conn			; and CONNECT automatically..
+b140$:	jmp	thunk_c$conn			; and CONNECT automatically..
 
 	.page
 	.sbttl	Reset the modem		; /BBS/ all new
 
-c$idle::call	loamdm			; /63/ ensure modem data are loaded
+c$idle::call	thunk_loamdm			; /63/ ensure modem data are loaded
 	mov	modtype	,r4		; get modem type
 	beq	b120$			; no modem is on-line
 	tst	r50dev			; is there a line set?
@@ -491,7 +491,7 @@ fixspeed:tst	b4speed			; did last call alter speed?
 findmodem:save	^/r3/
 	tstb	modem			; did caller supply a modem name?
 	beq	80$			; nope..
-	call	loamdm			; /63/ load predefined modems' data
+	call	thunk_loamdm			; /63/ load predefined modems' data
 	mov	r0	,r3		; /63/ get address of head of list
 	cmpb	#'?	,modem		; come here for help?
 	beq	40$			; ya, format display accordingly
@@ -513,7 +513,7 @@ findmodem:save	^/r3/
 	beq	80$			; ya, skip list of possibilities
 
 40$:	wrtall	#dia.06			; /63/ "..known modem types.."^/cr/^/lf/
-	call	loamdm			; /63/ load predefined modems' data
+	call	thunk_loamdm			; /63/ load predefined modems' data
 	mov	r0	,r3		; /63/ get address of head of list
 50$:	wrtall	mod.string(r3)		; now print the list of modems
 	strlen	mod.string(r3)		; length of modem type
@@ -604,7 +604,7 @@ findnumber:save	^/r3,r2/			; /45/ Added 20-Feb-86 13:00:50 BDN
 getatn:	save	^/r1,r2,r3,r4/
 	clr	-(sp)			; init "msg rec'd" flag
 	mov	#buffer	,r2		; write init string here
-	call	loamdm			; /63/ ensure modem data are loaded
+	call	thunk_loamdm			; /63/ ensure modem data are loaded
 	mov	modtype	,r4		; get address of structure
 	clr	mready			; modem is no longer ready
 	mov	wake.string(r4),r3	; point to the init string
@@ -1092,7 +1092,7 @@ do.put:	strlen	r1			; /63/ get length
 	.page
 	.sbttl	SHOW MODEM, SHOW DIAL	; /BBS/ heavily hacked
 
-shodia::call	loamdm			; /63/ ensure correct overlay loaded
+shodia::call	thunk_loamdm			; /63/ ensure correct overlay loaded
 	mov	modtype	,r4		; get address of descriptor
 	bne	10$			; got it
 	direrr	#er$mdm			; no modem type has been set

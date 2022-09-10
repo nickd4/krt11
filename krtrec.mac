@@ -86,7 +86,7 @@ rec.12:	.asciz	"Received file name - "		; /63/
 rec.13:	.asciz	"Warning: "			; /63/
 rec.14:	.asciz	"REC.SW"
 rec.15:	.asciz	"Parity found in SOH byte"
-rec.16:	.asciz	" renamed to "
+rec.16:	.asciz	" thunk_renamed to "
 	.even
 
 	.page
@@ -123,11 +123,11 @@ rec.sw::movb	@r5	,state		; load passed state
 	clr	numtry			; number_trys := 0
 	clr	outopn			; say nothing is open now
 	clr	logini			; /62/ force display stats header
-	call	inista			; /63/ init packet stats
+	call	thunk_inista			; /63/ init packet stats
 	movb	rectim	,senpar+p.time	; /62/ load RECEIVE time-out value
 
 10$:	call	recdeb			; perhaps debugging should be done
-	call	reclog			; /62/ update transfer stats display
+	call	thunk_reclog			; /62/ update transfer stats display
 	cmp	incpar	,#1		; /56/ is it possible that parity
 	bne	20$			; /56/ is messed up?
 	calls	printm,^/#2,#rec.13,#rec.15/ ; /63/ warn, but only once
@@ -150,7 +150,7 @@ rec.sw::movb	@r5	,state		; load passed state
 	calls	close	,^/#lun.ou/	; ensure that it's closed
 40$:	clr	outopn			; clear this flag to say it is..
 	.purge	#lun.sr			; /62/ close dir search channel
-	call	incsta			; /43/ init timer stats
+	call	thunk_incsta			; /43/ init timer stats
 	unsave	^/r0/			; pop exit status code please
 	return
 
@@ -200,7 +200,7 @@ a30$:	movb	r1	,state		; pass returned state
 	.sbttl	Received bad ACK/NAK and error handling
 	;.enabl	lsb			; /62/ all new..
 
-recx.e:	calls	prerrp	,^/#packet/	; received error packet, display it
+recx.e:	calls	thunk_prerrp	,^/#packet/	; received error packet, display it
 	br	rabort
 r$sync:	call	m$sync			; packets out of sync error
 	br	rabort
@@ -235,7 +235,7 @@ recdeb:	mov	trace	,r0		; copy of debug status word
 	sub	#100.	,sp		; allocate a small buffer
 	mov	sp	,r1		; point to it
 	mov	#rec.14	,r2		; /62/ point to "REC.SW"
-	call	paksta			; get elapsed time of last transaction
+	call	thunk_paksta			; get elapsed time of last transaction
 	sub	sp	,r1		; get the record length
 	mov	sp	,r2		; and point back to the record
 	bit	#log$pa	,trace		; debugging for recsw?
@@ -282,13 +282,13 @@ rinit:	inc	numtry			; check for retry count
 	.page
 	.sbttl	Process response to RINIT
 
-rini.s:	calls	rpar	,^/#packet,r2/	; send_init  get other side's init
-	calls	spar	,^/#packet/	; parameters, then fill with ours
+rini.s:	calls	thunk_rpar	,^/#packet,r2/	; send_init  get other side's init
+	calls	thunk_spar	,^/#packet/	; parameters, then fill with ours
 	spack	#msg$ack,paknum,sparsz,#packet ; and ship that back to sender
 	clr	numtry			; retry_count := 0
 	incm64	paknum			; paknum := (paknum+1) mod 64
 	movb	#sta.fil,r1		; state := file_receive
-	jmp	inirepeat		; /62/ initialize repeat processing
+	jmp	thunk_inirepeat		; /62/ initialize repeat processing
 
 	.page
 	.sbttl	Receive file header
@@ -299,7 +299,7 @@ rfile:	inc	numtry			; check for retry count
 	blos	10$			; no
 	 jmp	r$retry			; /62/ log why we aborted please
 
-10$:	call	clratr			; ensure attribute stuff is cleared
+10$:	call	thunk_clratr			; ensure attribute stuff is cleared
 	movb	conpar+p.chkt,chktyp	; time to use new checksum
 	movb	chktyp	,chksiz		; compute the checksum size also
 	sub	#'0	,chksiz		; simple
@@ -349,10 +349,10 @@ rfil.f:	cmp	r3	,paknum		; file name
 	beq	10$			; ensure correct packet number
 	 jmp	r$sync			; /62/ log the reason for this abort
 
-10$:	calls	bufunp	,^/#packet,#spare1/ ; /BBS/ use buff that's long enough
+10$:	calls	thunk_bufunp	,^/#packet,#spare1/ ; /BBS/ use buff that's long enough
 	calls	printm	,^/#2,#rec.12,#spare1/ ; /63/ display remote file name
-	calls	namcvt	,^/#spare1,#packet/ ; /BBS/ maybe strip node::dev:[dir]
-	calls	fixfil	,^/#packet,#srcnam/ ; fix invalid chars/trunc for RT-11
+	calls	thunk_namcvt	,^/#spare1,#packet/ ; /BBS/ maybe strip node::dev:[dir]
+	calls	thunk_fixfil	,^/#packet,#srcnam/ ; fix invalid chars/trunc for RT-11
 	mov	#asname	,r1		; /62/ point to possible new name
 	tstb	(r1)			; /62/ renaming this time?
 	bne	20$			; /62/ ya, go say so..
@@ -388,7 +388,7 @@ rfil.f:	cmp	r3	,paknum		; file name
 	movb	#sta.dat,r1		; return data
 	return
 
-60$:	calls	syserr	,^/r0,#errtxt/	; /42/ no, get the system error text
+60$:	calls	thunk_syserr	,^/r0,#errtxt/	; /42/ no, get the system error text
 	calls	error	,^/#3,#errtxt,#aspace,r1/ ; /BBS/ include bad name
 	jmp	rabort			; /62/ abort
 
@@ -404,7 +404,7 @@ rfil.s:	inc	numtry			; send_init, must have lost ours
 	mov	#63	,r1		; /62/ that packet and remain
 20$:	cmp	r3	,r1		; /62/ in the current state
 	bne	30$			; no
-	 calls	spar	,^/#packet/	; ya, reload parameters and
+	 calls	thunk_spar	,^/#packet/	; ya, reload parameters and
 	 spack	#msg$ack,r3,sparsz,#packet ; resend our send_init stuff
 	 jmp	deja$$			; /62/ warn dupe packet occurred
 
@@ -505,7 +505,7 @@ rdat.a:	cmp	r3	,paknum		; case "A"
 
 30$:	 jmp	rabort			; /62/ abort, must be way out of sync
 
-40$:	calls	r$attr	,^/#packet/	; process the received attributes
+40$:	calls	thunk_r$attr	,^/#packet/	; process the received attributes
 	tst	r0			; was this successful?
 	bne	30$			; /62/ no, bail out
 	spack	#msg$ack,paknum		; ya, ACK it
@@ -534,7 +534,7 @@ rdat.d:	tst	xmode			; do we need to create the file
 	cmpb	#':	,(r0)		; /63/ is "LP" followed by a colon?
 	beq	30$			; /63/ ya, a lookup to LP will hang..
 10$:	clr	index			; /62/ reset lookup's file counter
-	calls	lookup,^/#filnam,#srcnam/ ; /62/ does file exist already?
+	calls	thunk_lookup,^/#filnam,#srcnam/ ; /62/ does file exist already?
 	tst	r0			; /62/ well?
 	bne	30$			; /62/ no
 	.purge	#lun.sr			; /62/ ya, hose dir search channel
@@ -553,7 +553,7 @@ rdat.d:	tst	xmode			; do we need to create the file
 	mov	#lun.ou	,outlun		; set a real lun for output
 	tst	r0			; did the file create work?
 	beq	40$			; yes
-	calls	syserr	,^/r0,#errtxt/	; no, get the system error text
+	calls	thunk_syserr	,^/r0,#errtxt/	; no, get the system error text
 	calls	error	,^/#3,#errtxt,#aspace,r4/ ; /BBS/ add space here
 	jmp	rabort			; /62/ abort
 
@@ -593,7 +593,7 @@ rdat.d:	tst	xmode			; do we need to create the file
 	calls	bufemp	,^/#packet,r2/	; correct packet, get the data out
 	tst	r0			; did bufemp return any errors?
 	beq	100$			; no
-	calls	syserr	,^/r0,#errtxt/	; ya, lookup error msg text
+	calls	thunk_syserr	,^/r0,#errtxt/	; ya, lookup error msg text
 	calls	error	,^/#1,#errtxt/	; send error packet or display err msg
 	jmp	180$			; /62/ take the abort exit please
 
@@ -618,7 +618,7 @@ rdat.d:	tst	xmode			; do we need to create the file
 	bne	150$			; /56/ no
 	tst	xmode			; /BBS/ don't do this
 	bne	150$			; /BBS/ within an extended reply
-	call	cs$in			; /56/ yes, print stats
+	call	thunk_cs$in			; /56/ yes, print stats
 	br	150$			; /56/ and exit
 
 120$:	spack	#msg$ack,paknum,#1,#rec.04 ; /62/ ^X typed, send "X" in data
@@ -675,7 +675,7 @@ rdat.z:	cmp	paknum	,r3		; end-of-file
 
 20$:	clr	r2			; it's the console terminal
 30$:	calls	close	,^/r2/		; do the close now
-40$:	call	clratr			; attributes no longer valid
+40$:	call	thunk_clratr			; attributes no longer valid
 	clr	outopn			; flag it
 	spack	#msg$ack,r3		; ACK the EOF packet
 	clr	numtry			; /48/ then re-init retry counter

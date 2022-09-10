@@ -139,7 +139,7 @@ kerini::mov	#rwdata	,r0		; first of all, clear all read/write
 	call	sparini			; initialize my sinit parameters
 
 	mov	#1	,blip		; assume logging all packets to TT
-	call	xinit			; /42/ moved call forward, init memory
+	call	thunk_xinit			; /42/ moved call forward, init memory
 
 	mov	#soh	,recsop		; assume ^A please, for receive SOH
 	mov	#soh	,sensop		; ditto for sending..

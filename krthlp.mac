@@ -161,7 +161,7 @@ c$help::call	hlpopn			; come here for just plain help..
 	clr	wild			; clear the wildcarding flag
 	clr	topics			; init [sub]topics pointers
 	clrb	prbuff			; /BBS/ clear sub-level prompt buffer
-	call	loahlp			; /63/ load HELP text index overlay
+	call	thunk_loahlp			; /63/ load HELP text index overlay
 	mov	r0	,rmsidx		; /63/ goto the top of the RMS list
 	mov	argbuf	,r5		; /BBS/ point to possible command args
 	tstb	@r5			; anything there?
@@ -187,7 +187,7 @@ c$help::call	hlpopn			; come here for just plain help..
 70$:	clr	topics			; re-init [sub]topics pointers
 	clrb	prbuff			; /BBS/ clear sub-level prompt buffer
 	clrb	hlpbuf			; /BBS/ init one more buffer
-	call	loahlp			; /63/ load HELP text index overlay
+	call	thunk_loahlp			; /63/ load HELP text index overlay
 	mov	r0	,rmsidx		; /63/ goto the top of the RMS list
 80$:	.newline
 	mov	#'1	,-(sp)		; flag to..
@@ -286,7 +286,7 @@ hfind:	save	^/r2,r3,r4,r5/
 	mov	#topics	,r5		; point to the help topic list
 	mov	#'1	,r2		; current topic level
 	clrb	htopic			; clear out header
-	call	loahlp			; /63/ load HELP text index overlay
+	call	thunk_loahlp			; /63/ load HELP text index overlay
 	mov	r0	,r4		; /63/ pointer to fake RMS list
 
 10$:	tst	@r5			; anything to look for?
@@ -352,7 +352,7 @@ hfind:	save	^/r2,r3,r4,r5/
 	mov	#2	,r0		; /62/ match with wildcarding
 	br	120$			; /62/ done
 
-100$:	call	loahlp			; /63/ load HELP text index overlay
+100$:	call	thunk_loahlp			; /63/ load HELP text index overlay
 	mov	r0	,rmsidx		; /63/ reset to top of file
 	mov	#1	,r0		; /63/ nothing found (reached EOF)
 	clr	@r5			; /BBS/ zap pointer to ng [sub]topic
@@ -560,7 +560,7 @@ hlpopn:	mov	#rtname	,r3		; top of list of file specs to try
 	tst	r0			; error?
 	bne	20$			; ya
 	clrb	hlpbuf(r1)		; no, ensure it's .asciz please
-	call	loahlp			; /63/ load overlay containing hident
+	call	thunk_loahlp			; /63/ load overlay containing hident
 	strlen	#hident			; length of verifying string
 	calls	instr	,^/r4,r1,#hident,r0/ ; check it
 	tst	r0			; a match?

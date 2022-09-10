@@ -185,7 +185,7 @@ pf$2:	tst	pf2$ok			; could doing this destroy an overlay?
 20$:	strcpy	argbuf	,r0		; /62/ pass desired topic to HELP
 	.newline			; format display
 	save	^/r5,r4/			; preserve pointers
-	call	c$help			; dump the help text to the terminal
+	call	thunk_c$help			; dump the help text to the terminal
 	unsave	^/r4,r5/			; recover pointers
 30$:	call	retype			; then re-display the command line
 	sec				; not done yet

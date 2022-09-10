@@ -1427,11 +1427,11 @@ kermit::mov	#stack	,sp		; initialize a large stack
 ;	mov	#nosub	,r0		; /BBS/ do this for this bbs to
 ;	emt	375			; /BBS/ prevent leaving until done
 	call	sho$version		; print version and edit number
-	call	kerini			; init program, look for KRT.INI
+	call	thunk_kerini			; init program, look for KRT.INI
 	tst	sy.ini			; /BBS/ init file going to run?
 	bne	10$			; /62/ ya, wait until after it's done
-	call	sho$line		; /BBS/ no, display default now
-10$:	call	binini			; load binary-types list into buffer
+	call	thunk_sho$line		; /BBS/ no, display default now
+10$:	call	thunk_binini			; load binary-types list into buffer
 	br	NEW10$			; /BBS/ skip over ^C's newline
 
 	.page
@@ -1452,7 +1452,7 @@ cmdloop::.cmkt	#rtwork	,#40		; in case not coming from ccast
 	beq	20$			; nope..
 	spack	#msg$error,paknum	; yes, try to break out of it all
 	.twait	#rtwork	,#fifteen	; wait 15 ticks for output completion
-	call	incsta			; /63/ finish up transfer stats
+	call	thunk_incsta			; /63/ finish up transfer stats
 	movb	#defchk	,chktyp		; reset the checksum type
 	mov	#1	,chksiz		; and the size of the checksum
 20$:	call	clostt			; close it up
@@ -1486,7 +1486,7 @@ cmdloop::.cmkt	#rtwork	,#40		; in case not coming from ccast
 NEW10$:	clr	cccnt			; no ^Cs typed yet
 	call	setcc			; /BBS/ enable ^C test's mark timer
 	mov	argbuf	,argpnt		; ensure arg pointer is reset
-	call	fixchk			; restore the SET block check type
+	call	thunk_fixchk			; restore the SET block check type
 	textsrc				; /62/ ensure reset to file I/O
 	clr	inprogress		; /63/ packet xfr no longer active
 	clr	rem.ack			; /63/ no ACK rec'd for REMOTE cmd
@@ -1512,7 +1512,7 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 	tst	cmdlun			; /62/ no, reading from indirect file?
 	bne	NEW10$			; ya, do one more loop to dump err msg
 	bisb	#fatal$	,@#userrb	; /62/ no, inform rest of the world
-	jmp	c$exit			; /BBS/ an error occured and exit..
+	jmp	thunk_c$exit			; /BBS/ an error occured and exit..
 
 30$:	cmp	r0	,#cmd$ab	; /62/ ^C typed?
 	bne	NEW10$			; /62/ no
@@ -1531,7 +1531,7 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 	mov	argbuf	,r0		; /BBS/ pointer to argument buffer
 50$:	movb	(r4)+	,(r0)+		; /BBS/ copy it in like a command arg
 	bne	50$			; /BBS/ until the null
-	call	c$take			; /BBS/ attempt to take it
+	call	thunk_c$take			; /BBS/ attempt to take it
 	br	10$			; /BBS/ done..
 
 ; /BBS/ allow changing default device ala CP/M by entering device name
@@ -1567,7 +1567,7 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 90$:	unsave	^/r0/			; /BBS/ pop err reg from getcmd, etc..
 	cmp	r0	,#cmd$ex	; ^Z typed?
 	bne	100$			; no
-	jmp	c$exit			; yes, exit normally
+	jmp	thunk_c$exit			; yes, exit normally
 
 100$:	cmp	r0	,#cmd$bad	; invalid command?
 	bne	110$			; no
@@ -1592,34 +1592,34 @@ NEW10$:	clr	cccnt			; no ^Cs typed yet
 	tst	exieof			; /62/ cmd file, does user want out?
 	beq	NEW10$			; /62/ no, keep Kermit alive..
 150$:	bisb	#fatal$	,@#userrb	; /62/ no, inform rest of the world
-	jmp	c$exit			; /62/ an error occured and exit..
+	jmp	thunk_c$exit			; /62/ an error occured and exit..
 
 	.page
 	.sbttl	SHOW ALL		; /63/ here to call different overlays
 
 sho$all::.newline			; /63/ format display for readability
-	call	sho$a0			; /63/ this is all to place the modem
+	call	thunk_sho$a0			; /63/ this is all to place the modem
 	tst	modtype			; /63/ (has a modem type been set?)
 	beq	10$			; /63/ in a good place for SHOW ALL..
-	call	shodia			; /63/ (ya)
+	call	thunk_shodia			; /63/ (ya)
 	.newline			; /63/ format display
-10$:	call	sho$a1			; /63/ do remaining parameters
+10$:	call	thunk_sho$a1			; /63/ do remaining parameters
 	return
 
 	.page
 	.sbttl	Kludge to put new code in caller's overlay
 
-xxsdia::jmp	shodia			; /62/ SHOW DIAL
+xxsdia::jmp	thunk_shodia			; /62/ SHOW DIAL
 
 	.page
 	.sbttl	The FINISH command
 
 c$fin::	call	ckremote
 	bcs	10$			; we are remote, abort this
-	call	remfin			; tell remote server to exit
+	call	thunk_remfin			; tell remote server to exit
 	tst	rem.ack			; /63/ did it work?
 	beq	10$			; /63/ nope..
-	jmp	c$conn			; /BBS/ ya, go CONNECT
+	jmp	thunk_c$conn			; /BBS/ ya, go CONNECT
 10$:	clr	r0			; /62/ error already handled
 	return
 
@@ -1628,13 +1628,13 @@ c$fin::	call	ckremote
 
 c$rem::	call	ckremote		; running as remote?
 	bcs	40$			; nope..
-	call	loarem			; get the remote command overlay in
+	call	thunk_loarem			; get the remote command overlay in
 	calls	getcm0	,^/argbuf,r0/	; and try it please
 	mov	r0	,r3		; /BBS/ save the index (can't use r1)
 	bmi	10$			; /BBS/ didn't find the remote command
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	40$			; /BBS/ ya
-	call	loarem			; get the overlay resident
+	call	thunk_loarem			; get the overlay resident
 	calls	getcm1	,^/argbuf,r0,r3/	; get any required args for command
 	tst	r0			; now could we get command arguments?
 	bmi	10$			; /BBS/ no
@@ -1655,18 +1655,18 @@ c$rem::	call	ckremote		; running as remote?
 	.page
 	.sbttl	REMOTE command sub-routines
 
-rmtcop::call	gettwo			; ensure both arguments are here
+rmtcop::call	thunk_gettwo			; ensure both arguments are here
 	tst	r0			; are they?
 	bne	10$			; no, just exit then please
 	call	lower			; /62/ in case 2d arg came from gettwo
-	call	remcop			; /62/ attempt the copy operation
+	call	thunk_remcop			; /62/ attempt the copy operation
 10$:	return
 
-rmtren::call	gettwo			; ensure both arguments are here
+rmtren::call	thunk_gettwo			; ensure both arguments are here
 	tst	r0			; are they?
 	bne	10$			; no, just exit then please
 	call	lower			; /62/ in case 2d arg came from gettwo
-	call	remren			; /62/ attempt the rename operation
+	call	thunk_remren			; /62/ attempt the rename operation
 10$:	return
 
 ckremote::tst	remote			; local or remote?  also clears carry
@@ -1696,7 +1696,7 @@ isitas::mov	csi.fake,nextone	; /62/ use fake csi comma parsing?
 	mov	#er$fnm	,r0		; no, emit an
 	br	50$			; error message
 10$:	mov	sp	,wasmore	; for display formatting
-20$:	calls	fixwild	,^/r1/		; make "?" into "%"
+20$:	calls	thunk_fixwild	,^/r1/		; make "?" into "%"
 	mov	#srcnam	,r2		; destination address
 	clrb	asname			; not renaming yet..
 30$:	tstb	@r1			; end of the line today?
@@ -1718,11 +1718,11 @@ isitas::mov	csi.fake,nextone	; /62/ use fake csi comma parsing?
 60$:	strcpy	#asname	,r1		; 1st arg not wildcard, copy 2nd arg
 	mov	rawfil	,-(sp)		; save current setting
 	clr	rawfil			; enable namcvt
-	calls	namcvt	,^/r1,#spare1/	; dump everything but "file.typ"
+	calls	thunk_namcvt	,^/r1,#spare1/	; dump everything but "file.typ"
 	tstb	spare1			; anything left?
 	bne	70$			; ya, continue
-	calls	namcvt	,^/#srcnam,#spare1/ ; no, get inp "file.typ" only
-	calls	fixfil	,^/#spare1,#errtxt/ ; truncate rec'd names, send is ok
+	calls	thunk_namcvt	,^/#srcnam,#spare1/ ; no, get inp "file.typ" only
+	calls	thunk_fixfil	,^/#spare1,#errtxt/ ; truncate rec'd names, send is ok
 	strcat	#asname	,#errtxt	; concat in_file_name to out_dev
 
 70$:	mov	(sp)+	,rawfil		; back to where it wuz..
@@ -1776,7 +1776,7 @@ getcmd:	clrb	@argbuf			; ensure argument buffer is cleared
 	add	cmdbuf	,r0		; ya, point to the end of it all
 	clrb	@r0			; and make it .asciz
 	mov	sp	,pf2$ok		; /BBS/ so PF2 can't eat overlays
-	call	loacmd			; get the command list overlay
+	call	thunk_loacmd			; get the command list overlay
 	calls	getcm0	,^/r4,r0/	; search for the command
 	mov	r1	,cmdadr		; store address of routine away
 	mov	r0	,cmdnum		; store index of command away
@@ -1784,7 +1784,7 @@ getcmd:	clrb	@argbuf			; ensure argument buffer is cleared
 	bmi	20$			; no
 	tst	wasnul			; /BBS/ were commands listed via "?"
 	bne	20$			; /BBS/ ya
-	call	loacmd			; get the command list overlay
+	call	thunk_loacmd			; get the command list overlay
 	calls	getcm1	,^/r4,r0,r3/	; now get the rest of the command line
 	tst	r0			; or prompt for extra
 	bmi	20$			; it didn't work
@@ -1860,7 +1860,7 @@ readcmd::mov	r2	,-(sp)
 
 120$:	mov	sy.ini	,r2		; /62/ from KRT.INI?
 	beq	130$			; no
-	call	defterm			; display default, set up TT
+	call	thunk_defterm			; display default, set up TT
 	br	140$			; and continue
 130$:	tst	infomsg			; really print the message?
 	beq	140$			; no
@@ -1883,7 +1883,7 @@ readcmd::mov	r2	,-(sp)
 	tst	exieof			; /62/ does user want out?
 	beq	170$			; /62/ no, keep Kermit alive..
 160$:	bisb	#fatal$	,@#userrb	; /62/ ya, inform rest of the world
-	jmp	c$exit			; /62/ and exit..
+	jmp	thunk_c$exit			; /62/ and exit..
 
 170$:	tst	mcrcmd			; did we ever look for a MCR> command?
 	bne	180$			; ya, just do a terminal read
@@ -1896,7 +1896,7 @@ readcmd::mov	r2	,-(sp)
 	clr	r0			; no error
 	br	190$
 
-180$:	calls	kbredi	,^/2(r5),@r5/	; read a record from the terminal
+180$:	calls	thunk_kbredi	,^/2(r5),@r5/	; read a record from the terminal
 190$:	mov	(sp)+	,r2
 	return
 
@@ -2045,7 +2045,7 @@ getcm1::save	^/r1,r2,r3/
 	mov	.cmdar(r3),r3		; get the argument prompt now
 	beq	40$			; /63/ no arg prompt for this command
 	strcpy	r2	,r3		; /55/ copy the prompt over now
-30$:	calls	kbredi	,^/r2,argbuf/	; /55/ read a command from keyboard
+30$:	calls	thunk_kbredi	,^/r2,argbuf/	; /55/ read a command from keyboard
 	tst	r0			; get anything?
 	bne	50$			; read failed or ^C or ^Z typed
 	calls	cvt$$,^/argbuf,r1,#cvtarg/ ; remove junk

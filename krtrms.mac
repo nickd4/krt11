@@ -784,7 +784,7 @@ close::	save	^/r4,r2/			; use r4, for calling clr.at
 ;		 r0	= if ^//, error code
 
 getnxt::save	^/r1/
-	calls	lookup	,^/#srcnam,#filnam/ ; /62/
+	calls	thunk_lookup	,^/#srcnam,#filnam/ ; /62/
 	tst	r0			; did it work?
 	beq	30$			; yes
 	cmp	r0	,#er$nmf	; no more files matching name?
@@ -795,7 +795,7 @@ getnxt::save	^/r1/
 	bne	30$			; yes, that's ok then
 	mov	#er$fnf	,r0		; no, convert er$nmf to er$fnf
 20$:	mov	r0	,-(sp)		; save lookup error
-	calls	syserr	,^/r0,#errtxt/	; get the error text
+	calls	thunk_syserr	,^/r0,#errtxt/	; get the error text
 	calls	error	,^/#3,#errtxt,#aspace,#filnam/ ; /62/ include file name
 	.purge	#lun.sr			; /62/ dump search channel
 	mov	(sp)+	,r0		; restore saved error code from lookup
@@ -1173,7 +1173,7 @@ ccast:	tst	ccflag			; /51/ was there a ^C typed?
 direr$::mov	r0	,-(sp)		; don't destroy r0
 	mov	4(sp)	,r0		; recover error code
 	beq	30$			; error 0 is a nop
-	calls	syserr	,^/r0,#errtxt/	; get appropriate error message
+	calls	thunk_syserr	,^/r0,#errtxt/	; get appropriate error message
 	tst	cmdlun			; indirect command file running?
 	beq	10$			; nope..
 	mov	r0	,tk.err		; ya, flag and save the error

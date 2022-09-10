@@ -74,7 +74,7 @@ ep::	mov	#200$	,r0
 	jmp	dispatch
 	.save
 	.psect	$pdata
-200$:	.word	x.'ep,t.'ep		; dropped multi-term stuff
+200$:	.word	thunk_x.'ep,thunk_t.'ep		; dropped multi-term stuff
 	.restore
 	;.dsabl	lsb
 	.nlist (me)
@@ -157,7 +157,7 @@ set$line::tst	xl.lock			; can current device go away?
 	clr	remote			; no longer are we remote
 60$:	tst	infomsg			; SET TT QUIET?
 	beq	70$			; ya
-	call	sho$line		; no, display the new line
+	call	thunk_sho$line		; no, display the new line
 70$:	clr	r0			; error handled above
 80$:	return
 
@@ -180,11 +180,11 @@ assdev::mov	@r5	,r0		; get the first character of the name
 	beq	20$			; no
 	mov	#er$140	,r0		; ya, got to drop it first
 	br	30$
-20$:	call	x.assdev		; try to talk to it
+20$:	call	thunk_x.assdev		; try to talk to it
 30$:	return
 
 40$:	mov	mready	,-(sp)		; save modem status
-	call	c$idle			; reset modem, if need be..
+	call	thunk_c$idle			; reset modem, if need be..
 	tst	(sp)+			; was there a modem?
 	beq	50$			; nope
 	calls	suspend	,^/#0,settle/	; ya, let it settle
@@ -289,7 +289,7 @@ opentt::clr	r0			; /BBS/ preset to no error
 
 	.save
 	.psect	$pdata
-L999$:	.word	x.ttyini,t.ttyini
+L999$:	.word	thunk_x.ttyini,thunk_t.ttyini
 	.restore
 
 	.page

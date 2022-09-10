@@ -69,56 +69,56 @@ std.26:	.asciz	"Local or Remote? "
 loaset::mov	#setcmd	,r0		; calling this also loads this overlay
 	return
 
-	command	setcmd	,ATTRIBUTES	,1	,set$at	,std.01
-	command setcmd	,BAUD		,2	,set$sp	,std.02
-	command	setcmd	,BINARY-TYPE	,2	,set$bi	,std.03
-	command	setcmd	,BLOCK-CHECK-TYPE,2	,set$bl	,std.04
-	command setcmd	,CL:		,2	,set$cl	,std.05
-	command setcmd	,CONSOLE	,2	,set$co	,std.06
-	command setcmd	,CONTROL-CHARACTER,4	,set$ct	,std.07
-	command setcmd	,DEBUG		,3	,set$debug,std.08
-	command setcmd	,DEFAULT	,3	,c$cwd	,std.09
-	command	setcmd	,DELAY		,3	,set$dl	,std.10
-	command setcmd	,DIAL		,2	,set$di	,std.06
-	command setcmd	,DTR		,2	,set$dtr
-	command setcmd	,DUPLEX		,2	,set$du	,std.11
-	command	setcmd	,END-OF-LINE	,2	,set$eo	,std.12
-	command setcmd	,EOF		,2	,set$ef	,std.13
-	command setcmd	,ESCAPE		,2	,set$es	,std.12
-	command	setcmd	,FILE-TYPE	,2	,set$fi	,std.14
-	command setcmd	,FLOW-CONTROL	,2	,set$km	,std.15
-	command setcmd	,HANDSHAKE	,2	,set$ha	,std.16
-	command setcmd	,HOME		,2	,set$ho	,std.09
-	command setcmd	,INCOMPLETE-FILE-DISPOSITION ,1	,set$in	,std.17
-	command setcmd	,LD:		,2	,set$ld	,std.06
+	command	setcmd	,ATTRIBUTES	,1	,thunk_set$at	,std.01
+	command setcmd	,BAUD		,2	,thunk_set$sp	,std.02
+	command	setcmd	,BINARY-TYPE	,2	,thunk_set$bi	,std.03
+	command	setcmd	,BLOCK-CHECK-TYPE,2	,thunk_set$bl	,std.04
+	command setcmd	,CL:		,2	,thunk_set$cl	,std.05
+	command setcmd	,CONSOLE	,2	,thunk_set$co	,std.06
+	command setcmd	,CONTROL-CHARACTER,4	,thunk_set$ct	,std.07
+	command setcmd	,DEBUG		,3	,thunk_set$debug,std.08
+	command setcmd	,DEFAULT	,3	,thunk_c$cwd	,std.09
+	command	setcmd	,DELAY		,3	,thunk_set$dl	,std.10
+	command setcmd	,DIAL		,2	,thunk_set$di	,std.06
+	command setcmd	,DTR		,2	,thunk_set$dtr
+	command setcmd	,DUPLEX		,2	,thunk_set$du	,std.11
+	command	setcmd	,END-OF-LINE	,2	,thunk_set$eo	,std.12
+	command setcmd	,EOF		,2	,thunk_set$ef	,std.13
+	command setcmd	,ESCAPE		,2	,thunk_set$es	,std.12
+	command	setcmd	,FILE-TYPE	,2	,thunk_set$fi	,std.14
+	command setcmd	,FLOW-CONTROL	,2	,thunk_set$km	,std.15
+	command setcmd	,HANDSHAKE	,2	,thunk_set$ha	,std.16
+	command setcmd	,HOME		,2	,thunk_set$ho	,std.09
+	command setcmd	,INCOMPLETE-FILE-DISPOSITION ,1	,thunk_set$in	,std.17
+	command setcmd	,LD:		,2	,thunk_set$ld	,std.06
 	command setcmd	,LINE		,2	,set$line,std.18
-	command setcmd	,LOCAL-ECHO	,3	,set$lc	,std.01
-	command setcmd	,LOGFILE	,3	,set$log
-	command setcmd	,LONG-PACKETS	,3	,set$lp	,std.01
-	command setcmd	,MODEM-TYPE	,1	,set$modem,std.19
-	command	setcmd	,NOATTRIBUTES	,3	,st$nat
-	command setcmd	,NODEBUG	,3	,sd$off
-	command	setcmd	,NOLONG-PACKETS	,3	,st$nlp
-	command setcmd	,NOREPEAT-QUOTING,3	,rep$of
-	command setcmd	,NOUPDATE	,3	,set$nu
-	command	setcmd	,PARITY		,3	,set$pa	,std.20
-	command	setcmd	,PAUSE		,3	,set$ps	,std.10
-	command setcmd	,PHONE		,2	,set$ph	,std.06
-	command setcmd	,PROMPT		,2	,set$pr	,std.21
-	command setcmd	,RANDOM		,2	,set$ra	,std.01
-	command setcmd	,RECEIVE	,3	,set$rc	,std.06
-	command setcmd	,REPEAT-QUOTING	,3	,set$rp	,std.01
-	command	setcmd	,RETRY		,3	,set$re	,std.22
-	command setcmd	,SEED		,3	,set$se	,std.23
-	command	setcmd	,SEND		,3	,set$sn	,std.06
-	command setcmd	,SERVER		,3	,set$sv	,std.06
-	command setcmd	,SL		,2	,set$sl	,std.24
-	command setcmd	,SPEED		,2	,set$sp	,std.02
-	command	setcmd	,START-OF-PACKET,2	,set$so	,std.12
-	command setcmd	,TERMINAL	,2	,set$tt	,std.16
-	command setcmd	,TT:		,2	,set$tt	,std.16
-	command setcmd	,UPDATE		,1	,set$up	,std.25
-	command	setcmd	,VLSWCH		,1	,set$vl	,std.26
+	command setcmd	,LOCAL-ECHO	,3	,thunk_set$lc	,std.01
+	command setcmd	,LOGFILE	,3	,thunk_set$log
+	command setcmd	,LONG-PACKETS	,3	,thunk_set$lp	,std.01
+	command setcmd	,MODEM-TYPE	,1	,thunk_set$modem,std.19
+	command	setcmd	,NOATTRIBUTES	,3	,thunk_st$nat
+	command setcmd	,NODEBUG	,3	,thunk_sd$off
+	command	setcmd	,NOLONG-PACKETS	,3	,thunk_st$nlp
+	command setcmd	,NOREPEAT-QUOTING,3	,thunk_rep$of
+	command setcmd	,NOUPDATE	,3	,thunk_set$nu
+	command	setcmd	,PARITY		,3	,thunk_set$pa	,std.20
+	command	setcmd	,PAUSE		,3	,thunk_set$ps	,std.10
+	command setcmd	,PHONE		,2	,thunk_set$ph	,std.06
+	command setcmd	,PROMPT		,2	,thunk_set$pr	,std.21
+	command setcmd	,RANDOM		,2	,thunk_set$ra	,std.01
+	command setcmd	,RECEIVE	,3	,thunk_set$rc	,std.06
+	command setcmd	,REPEAT-QUOTING	,3	,thunk_set$rp	,std.01
+	command	setcmd	,RETRY		,3	,thunk_set$re	,std.22
+	command setcmd	,SEED		,3	,thunk_set$se	,std.23
+	command	setcmd	,SEND		,3	,thunk_set$sn	,std.06
+	command setcmd	,SERVER		,3	,thunk_set$sv	,std.06
+	command setcmd	,SL		,2	,thunk_set$sl	,std.24
+	command setcmd	,SPEED		,2	,thunk_set$sp	,std.02
+	command	setcmd	,START-OF-PACKET,2	,thunk_set$so	,std.12
+	command setcmd	,TERMINAL	,2	,thunk_set$tt	,std.16
+	command setcmd	,TT:		,2	,thunk_set$tt	,std.16
+	command setcmd	,UPDATE		,1	,thunk_set$up	,std.25
+	command	setcmd	,VLSWCH		,1	,thunk_set$vl	,std.26
 	command	setcmd
 
 	.end

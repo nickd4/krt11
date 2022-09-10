@@ -236,7 +236,7 @@ L1$:	bic	#log$al!log$io,trace	; /62/ clear all disk debug bits now
 
 	; /BBS/ if logfile already exists, query before overwriting it
 	clr	index			; /62/ clear lookup's file counter
-	calls	lookup,^/#spare1,#errtxt/ ; /62/ does file already exist?
+	calls	thunk_lookup,^/#spare1,#errtxt/ ; /62/ does file already exist?
 	tst	r0			; /62/ find it?
 	bne	200$			; /62/ no
 	.purge	#lun.sr			; /62/ ya, hose dir search channel
@@ -925,7 +925,7 @@ sph$no:	clr	answer			; /62/ don't enable next time dialing
 	tst	mready			; /62/ is a modem currently on-line?
 	beq	sph$xx			; /62/ no
 	tst	(sp)+			; /62/ pop local dispatch return addr
-	jmp	set$dtr			; /62/ reinit modem so no answer works
+	jmp	thunk_set$dtr			; /62/ reinit modem so no answer works
 
 sph$to:	mov	#1	,pulse		; make it tone dialing
 	br	sph$xx			; /62/
@@ -941,7 +941,7 @@ sph$nu:	mov	#pnhead	,r5		; get listhead for phone numbers
 	beq	20$			; yes, insert new element here
 	mov	(r5)	,r5		; no, check the next one
 	br	10$			; keep looking
-20$:	call	skipit			; /BBS/ ignore comma in argument
+20$:	call	thunk_skipit			; /BBS/ ignore comma in argument
 	strlen	argbuf			; get total length of data
 	add	#4	,r0		; add in space for nulls and ensure
 	bic	#1	,r0		; even length, also link next field

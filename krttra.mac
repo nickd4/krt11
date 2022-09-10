@@ -125,6 +125,6 @@ c$tran::tst	remote			; /62/ disallow to TT
 130$:	mov	#bell	,r0		; load a beep
 	.ttyout				; ring the bell when done
 	mov	sp	,conmsg		; suppress CONNECT sign-on msg
-	jmp	c$conn			; and connect automatically..
+	jmp	thunk_c$conn			; and connect automatically..
 
 	.end

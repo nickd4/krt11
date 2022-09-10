@@ -120,13 +120,13 @@ typdef:	.asciz	".LST"			; default extent for type
 	.sbttl	The SET command		; /BBS/ just about all new..
 
 c$set::	upone	argbuf			; upper case just next arg
-	call	loaset			; load the set commands overlay
+	call	thunk_loaset			; load the set commands overlay
 	calls	getcm0	,^/argbuf,r0/	; lookup address of desired command
 	mov	r0	,r2		; save a copy of it
 	bmi	60$			; some sort of error occurred
 	tst	wasnul			; were commands listed via "?"
 	bne	110$			; ya
-	call	loaset			; reload set commands overlay
+	call	thunk_loaset			; reload set commands overlay
 	calls	getcm1	,^/argbuf,r0,r2/	; check possible argument to command
 	tst	r0			; well?
 	bmi	60$			; bad arg..
@@ -478,14 +478,14 @@ cl.wild:tst	r50dev			; is there now a link device?
 
 140$:	mov	infomsg	,-(sp)		; save status of SET TT [NO]QUIET
 	clr	infomsg			; suppress display
-	call	set$modem		; try to SET to supplied string
+	call	thunk_set$modem		; try to SET to supplied string
 	mov	(sp)+	,infomsg	; restore SET TT [NO]QUIET
 	tst	r0			; did set$modem work?
 	bne	150$			; /63/ no
 	tstb	spare0			; /63/ was an xmode value saved?
 	beq	190$			; /63/ no, done
 	strcpy	argbuf	,#spare0	; /63/ put xmode where sph$xm needs it
-	call	sph$xm			; /63/ try to SET PHONE XMODE..
+	call	thunk_sph$xm			; /63/ try to SET PHONE XMODE..
 	tst	r0			; did it work?
 	beq	190$			; /63/ ys
 	mov	#er$147	,r0		; SET PHONE XMODE failed
@@ -533,12 +533,12 @@ c$conn::tstb	ttname			; anything to connect ??
 	br	20$
 
 10$:	mov	mready	,-(sp)		; save modem's init status
-	call	doconn			; run the terminal emulator
+	call	thunk_doconn			; run the terminal emulator
 	tst	(sp)+			; was modem ever initialized?
 	beq	40$			; no
 	tst	mready			; ya, still initialized?
 	bne	40$			; ya
-	call	reinit			; no, go re-init it
+	call	thunk_reinit			; no, go re-init it
 	tst	r0			; /62/ did it work?
 	beq	30$			; /62/ ya
 20$:	direrr	r0			; /62/ dump error message
@@ -629,8 +629,8 @@ c$take::tst	cmdlun			; indirect file already open?
 
 c$spac::mov	sp	,summary	; flag for summary only
 c$dir::	upcase	argbuf			; upper case all command args
-	calls	fixwild	,^/argbuf/	; convert "?" to "%"
-	calls	dodir	,^/argbuf/	; /62/ do the directory
+	calls	thunk_fixwild	,^/argbuf/	; convert "?" to "%"
+	calls	thunk_dodir	,^/argbuf/	; /62/ do the directory
 	tst	r0			; did it work?
 	beq	10$			; yes
 	direrr	r0			; no, print the error
@@ -653,7 +653,7 @@ c.mnt:	tst	tsxsave			; /63/ running under TSX?
 	mov	#er$v62	,r0		; no
 	br	30$
 
-20$:	call	mount			; do the mount now
+20$:	call	thunk_mount			; do the mount now
 	tst	r0			; did it work?
 	beq	40$			; yes
 30$:	direrr	r0			; no, print error message
@@ -683,7 +683,7 @@ c$type::upcase	argbuf			; upper case all args
 
 20$:	calls	iswild	,^/#srcnam/	; wildcarded?
 	mov	r0	,r4		; save copy of answer
-30$:	calls	lookup	,^/#srcnam,#filnam/ ; /62/
+30$:	calls	thunk_lookup	,^/#srcnam,#filnam/ ; /62/
 	tst	r0			; did it work?
 	beq	70$			; yes
 	clr	r1			; clear try for another flag..
@@ -699,7 +699,7 @@ c$type::upcase	argbuf			; upper case all args
 
 70$:	mov	#more	,r3		; init for text file filtering
 	clr	r1			; init binary/text flag
-	calls	chkext	,^/#filnam/	; check for binary file type
+	calls	thunk_chkext	,^/#filnam/	; check for binary file type
 	tst	r0			; iz it binary?
 	beq	80$			; no..
 	mov	#less	,r3		; ya, get binary file filter
@@ -868,12 +868,12 @@ sho$line::wrtall #cm1.06			; /63/ "Link device is "
 	.page
 	.sbttl	Cleanup before exiting to monitor	; /BBS/ enhanced
 
-c$exit::call	sd$off			; close possibly open debug file
+c$exit::call	thunk_sd$off			; close possibly open debug file
 	tst	outopn			; is an output file open?
 	beq	10$			; no
 	calls	close	,^/#lun.ou/	; ya, close it
 10$:	mov	mready	,-(sp)		; save modem status
-	call	c$idle			; reset modem, if need be..
+	call	thunk_c$idle			; reset modem, if need be..
 	tst	(sp)+			; was there a modem?
 	beq	20$			; nope
 	calls	suspend	,^/#0,settle/	; ya, let it settle

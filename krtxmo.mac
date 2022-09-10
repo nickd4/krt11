@@ -125,7 +125,7 @@ c$send::clr	wasmore			; init multi-args display flag
 	tst	remote			; in remote mode?
 	beq	70$			; no
 	clr	index			; /62/ init lookup's file counter
-	calls	lookup	,^/#srcnam,#spare1/ ; /62/ look for something to do
+	calls	thunk_lookup	,^/#srcnam,#spare1/ ; /62/ look for something to do
 	tst	r0			; /62/ well?
 	beq	60$			; /62/ at least one file exists
 	cmp	r0	,#er$nmf	; if error is "No more files"
@@ -152,7 +152,7 @@ c$send::clr	wasmore			; init multi-args display flag
 	tst	r0			; did it work?
 	bne	120$			; no, getnxt has sent the error packet
 	mov	sp	,inprogress	; packets are being exchanged
-	calls	sensw	,^/#msg$snd/	; now send the file
+	calls	thunk_sensw	,^/#msg$snd/	; now send the file
 	tst	r0			; did it work?
 	bne	120$			; no
 	mov	nextone	,r0		; ya, any more arguments to process?
@@ -247,7 +247,7 @@ x$modem:.scca	#ttctlc	,#ttctlc+4	; /62/ off ^C
 
 	mov	#nosingle,r0		; single char input dies in hieff mode
 	emt	375			; if activation chars are declared
-	calls	t.ttyini,^/#0/		; init TT
+	calls	thunk_t.ttyini,^/#0/		; init TT
 	movb	#1	,hieff		; setup high efficiency emt
 	mov	#hieff	,r0
 	emt	375			; do it

@@ -300,7 +300,7 @@
 
 	.macro	prsbuf	dst
 	mov	dst	,r0
-	call	prsarg
+	call	thunk_prsarg
 	.endm	prsbuf
 
 	.macro	rpack	len.a ,pakn.a ,msg.a ,max.len	; /62/

@@ -241,12 +241,12 @@ sh.125:	.asciz	" ("
 sh.126:	.asciz	"), applied to (0 = unprefixed, 1 = prefixed):"^/cr/^/lf/
 sh.127:	.asciz	": "
 sh.128:	.asciz	"         "	; 9 spaces
-sh.129:	.asciz	" renamed to "
-sh.130:	.asciz	" deleted"
+sh.129:	.asciz	" thunk_renamed to "
+sh.130:	.asciz	" thunk_deleted"
 sh.131:	.asciz	" block"
 sh.132:	.asciz	" copied to "
 sh.133:	.asciz	"_To: "
-sh.134:	.asciz	"No logical disks are mounted"^/cr/^/lf/
+sh.134:	.asciz	"No logical disks are thunk_mounted"^/cr/^/lf/
 dkslug:	.asciz	"DK  --> "
 hoslug:	.asciz	"HOME--> "
 lis.ctrl:.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"
@@ -303,7 +303,7 @@ c$show::tstb	@argbuf			; /BBS/ any arg there?
 command	sholst	,ALL		,2	,sho$all
 command	sholst	,ASSIGNS	,2	,sho$df
 command	sholst	,ATTRIBUTES	,2	,sho$at	; /BBS/ wuz missing..
-command	sholst	,BAUD		,2	,sho$line ; /62/
+command	sholst	,BAUD		,2	,thunk_sho$line ; /62/
 command	sholst	,BINARY-TYPE	,2	,sho$bt
 command	sholst	,BLOCK-CHECK-TYPE,2	,sho$bl
 command	sholst	,CL:		,2	,sho$cl	; /62/
@@ -316,18 +316,18 @@ command	sholst	,DEFAULT	,3	,sho$df
 command	sholst	,DELAY		,3	,sho$dl
 ;comman	sholst	,DEVICES	,3	,sho$dv	; /BBS/ devlst only!!
 command	sholst	,DIAL		,2	,sho$dp
-command	sholst	,DTR		,2	,sho$line ; /62/
+command	sholst	,DTR		,2	,thunk_sho$line ; /62/
 command	sholst	,DUPLEX		,2	,sho$co	; /62/
 command	sholst	,END-OF-LINE	,2	,sho$pa	; /62/
 command	sholst	,EOF		,2	,sho$eof ; /62/
 command	sholst	,ESCAPE		,2	,sho$es
 command	sholst	,FILE-TYPE	,2	,sho$fi
-command	sholst	,FLOW-CONTROL	,2	,sho$line ; /62/
+command	sholst	,FLOW-CONTROL	,2	,thunk_sho$line ; /62/
 command	sholst	,HANDSHAKE	,2	,sho$ha
 command	sholst	,HOME		,2	,sho$df	; /62/
 command	sholst	,INCOMPLETE-FILE-DISPOSITION ,1 ,sho$in
 command	sholst	,LD:		,2	,sho$su	; /62/
-command	sholst	,LINE		,2	,sho$line
+command	sholst	,LINE		,2	,thunk_sho$line
 command	sholst	,LOCAL-ECHO	,3	,sho$co	; /62/
 command	sholst	,LOGFILE	,3	,sho$de	; /62/
 command	sholst	,LONG-PACKETS	,3	,sho$pk	; /62/
@@ -346,7 +346,7 @@ command	sholst	,SEED		,3	,sho$de	; /62/
 command	sholst	,SEND		,3	,sho$pa	; /62/
 command	sholst	,SERVER		,3	,sho$sv
 command	sholst	,SL		,2	,sho$sl
-command	sholst	,SPEED		,2	,sho$line ; /62/
+command	sholst	,SPEED		,2	,thunk_sho$line ; /62/
 command	sholst	,START-OF-PACKET,2	,sho$so
 command	sholst	,SUBMOUNTS	,2	,sho$su
 command	sholst	,TERMINAL	,1	,sho$tt
@@ -363,7 +363,7 @@ command	sholst
 
 sho$a0::call	sho$version		; version
 	call	sho$me			; /63/ free memory for fetches
-	call	sho$line	; line
+	call	thunk_sho$line	; line
 	.newline			; /63/
 	return
 
@@ -469,13 +469,13 @@ sho$da::call	sho.da			; /63/
 	.newline
 	br	a20$			; /62/
 
-sho.da:	calls	ascdat	,^/#errtxt,#-1/	; /62/ get date into a buffer
+sho.da:	calls	thunk_ascdat	,^/#errtxt,#-1/	; /62/ get date into a buffer
 	wrtall	#errtxt			; display it
 	return
 
 sho$dy::call	sho.da			; /63/ both date and time..
 	wrtall	#sh.101			; /63/ "  "
-sho$ti::calls	asctim	,^/#errtxt,#0/	; get time of day into a buffer
+sho$ti::calls	thunk_asctim	,^/#errtxt,#0/	; get time of day into a buffer
 	wrtall	#errtxt			; display it
 	wrtall	#raslug			; /62/ "  ("
 	mov	clkflg	,r0		; /62/ pass line time clock rate
@@ -1093,7 +1093,7 @@ sho$cl:	tst	tsxsave			; running under TSX?
 50$:	.newline
 	tst	tsxcl			; /63/ is link device a CL unit now?
 	beq	60$			; /63/ no
-	jmp	sho$line		; /63/ ya, display its parameters
+	jmp	thunk_sho$line		; /63/ ya, display its parameters
 60$:	wrtall	#sh.098			; /63/	"CL Priority: "
 	mov	cl.pri	,r0		; /63/ recover it
 	call	L10266			; /63/ and dump it
@@ -1373,7 +1373,7 @@ c$copy::upcase	argbuf			; upper case all args
 	br	c.print			; /63/
 
 c$del::	upcase	argbuf			; upper case the argument
-	calls	delete	,^/argbuf/	; try to delete the file
+	calls	thunk_delete	,^/argbuf/	; try to delete the file
 	tst	r0			; did it work?
 	bne	g40$			; /63/ no
 	tst	infomsg			; SET TT QUIET?
@@ -1387,7 +1387,7 @@ c$rena::upcase	argbuf			; upper case all args
 	tst	r0			; did it work out ok?
 	bne	g30$			; /63/ no
 	upcase	argbuf			; /62/ in case from kybd "To:" prompt
-	calls	rename	,^/cmdbuf,argbuf/ ; do the rename now
+	calls	thunk_rename	,^/cmdbuf,argbuf/ ; do the rename now
 	tst	r0			; did it work?
 	bne	g40$			; /63/ no
 	tst	infomsg			; SET TT QUIET?
@@ -1413,17 +1413,17 @@ g50$:	strcpy	argbuf	,#pridev	; /63/ make LP: the output device
 c.print:mov	argbuf	,r2		; save a few bytes, use a reg
 	mov	rawfil	,-(sp)		; save current setting
 	clr	rawfil			; enable namcvt
-	calls	namcvt	,^/r2,#spare1/	; extract "file.typ"
+	calls	thunk_namcvt	,^/r2,#spare1/	; extract "file.typ"
 	tstb	spare1			; anything left?
 	bne	g60$			; ya, continue
-	calls	namcvt	,^/cmdbuf,#spare1/ ; no, get input "file.typ"
+	calls	thunk_namcvt	,^/cmdbuf,#spare1/ ; no, get input "file.typ"
 	strcat	r2	,#spare1	; concat input_file_name to output_dev
 g60$:	mov	(sp)+	,rawfil		; back to where it wuz..
 	calls	fparse	,^/cmdbuf,#srcnam/ ; /62/ get attrs here as lookup is
 	clr	index			; /62/ in another overlay  init index
-	calls   lookup  ,^/#srcnam,#spare1/ ; /62/ load input file attributes
+	calls   thunk_lookup  ,^/#srcnam,#spare1/ ; /62/ load input file attributes
 	.purge	#lun.sr			; /62/ dump lookup channel
-	calls	copy	,^/cmdbuf,r2/	; do the copy now
+	calls	thunk_copy	,^/cmdbuf,r2/	; do the copy now
 	tst	r0			; did it work?
 	bne	g40$			; no
 	tst	infomsg			; SET TT QUIET?

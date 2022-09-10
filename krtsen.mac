@@ -108,12 +108,12 @@ sensw::	movb	@r5	,state		; state at which caller wants to begin
 	beq	20$			; yes, assume caller's state is ok
 10$:	movb	#sta.sin,state		; no, must force a sinit exchange
 20$:	clr	logini			; /62/ force display stats header
-	call	inista			; /63/ init packet count stats
+	call	thunk_inista			; /63/ init packet count stats
 	clr	dpnumber		; /43/ clear data packet count
 	movb	sentim	,senpar+p.time	; /62/ load send time-out value
 
 30$:	call	sendeb			; do send debugging if enabled
-	call	senlog			; /62/ update transfer stats display
+	call	thunk_senlog			; /62/ update transfer stats display
 	cmp	incpar	,#1		; /62/ is it possible that parity
 	bne	40$			; /62/ is messed up?
 	calls	printm	,^/#1,#sen.02/	; /62/ warn, but only once
@@ -138,7 +138,7 @@ sensw::	movb	@r5	,state		; state at which caller wants to begin
 	clr	inopn			; /BBS/ say so..
 60$:
 	.purge	#lun.sr			; /62/ close dir search channel
-	call	incsta			; /43/ increment timer stats
+	call	thunk_incsta			; /43/ increment timer stats
 	unsave	^/r0/			; pop exit status code please
 	return
 
@@ -185,7 +185,7 @@ sndx.$:	cmp	numtry	,maxtry		; bad data, been here too often?
 	blo	bad$pak			; compare as if already bumped..
 s$retry:call	m$retry			; too many retries error
 	br	sabort
-sndx.e:	calls	prerrp	,^/#recpkt/	; print out received error packet
+sndx.e:	calls	thunk_prerrp	,^/#recpkt/	; print out received error packet
 	br	sabort
 s$sync:	call	m$sync			; can't resync packets error
 sabort:	movb	#sta.abo,r1		; exit please
@@ -218,7 +218,7 @@ sendeb:	mov	trace	,r0		; copy of debug status word
 	sub	#100.	,sp		; allocate a small buffer
 	mov	sp	,r1		; point to it
 	mov	#sen.01	,r2		; /62/ pointer to "SEN.SW"
-	call	paksta			; get elapsed time of last packet
+	call	thunk_paksta			; get elapsed time of last packet
 	sub	sp	,r1		; get the record length
 	mov	sp	,r2		; and point back to the record
 	bit	#log$pa	,trace		; debugging for SEND.SW
@@ -253,7 +253,7 @@ sattr:	clr	datauk			; /62/ init re-read only flag
 
 10$:	tst	doattr			; really do this?
 	beq	30$			; no
-	calls	w$attr	,^/#lun.in,#packet/ ; build the attributes packet
+	calls	thunk_w$attr	,^/#lun.in,#packet/ ; build the attributes packet
 	tst	r0			; any errors along the way?
 	bne	30$			; yes
 	tst	r1			; anything to send over?
@@ -402,7 +402,7 @@ sinit:	movb	#msg$snd,-(sp)		; normal sinit operation
 	mov	chksiz	,-(sp)		; and size (also not needed)
 	movb	#defchk	,chktyp		; force type one please
 	mov	#1	,chksiz		; length of it
-	calls	spar	,^/#packet/	; get our send parameters
+	calls	thunk_spar	,^/#packet/	; get our send parameters
 	call	cantyp			; flush pending input please
 	movb	6(sp)	,r5		; packet type to do today
 	spack	r5,paknum,sparsz,#packet ; send our init info now
@@ -435,7 +435,7 @@ sinit:	movb	#msg$snd,-(sp)		; normal sinit operation
 sini.$:	jmp	sndx.$			; /62/ common
 sini$$:	jmp	sndx$$			; /62/ code
 
-sini.e:	calls	prerrp	,^/#recpkt/	; /62/ print error message
+sini.e:	calls	thunk_prerrp	,^/#recpkt/	; /62/ print error message
 	cmpb	r5	,#msg$ser	; if called from sinfo..
 	beq	e40$			; /62/ ..ignore errors
 	jmp	sabort			; /62/ return(abort)
@@ -458,12 +458,12 @@ e20$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
 	blt	sini$$			; /62/ ya, re-send packet
 	jmp	bad$ack			; /62/ listen again, but just once
 
-e30$:	calls	rpar	,^/#recpkt,r2/	; load the other's parameters now
+e30$:	calls	thunk_rpar	,^/#recpkt,r2/	; load the other's parameters now
 e40$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; number_of_tries := 0
 	incm64	paknum			; pack_number := pack_number+1 mod 64
 	movb	#sta.fil,r1		; return(file)
-	jmp	inirepeat		; /62/ initialize repeat processing
+	jmp	thunk_inirepeat		; /62/ initialize repeat processing
 
 	;.dsabl	lsb			; /62/
 
@@ -483,8 +483,8 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 	mov	$image	,image		; ensure correct default for mode
 	mov	#filnam	,r3		; and point to it please
 	clr	skipfl			; the user skipped the rest of a file
-	call	clratr			; ensure attribute stuff is cleared
-	call	inirepeat		; must reset ptrs for repeat counts
+	call	thunk_clratr			; ensure attribute stuff is cleared
+	call	thunk_inirepeat		; must reset ptrs for repeat counts
 	sub	#ln$max+2,sp		; /63/ a converted file name buffer
 	mov	sp	,r4		; and point to it please
 	tst	inopn			; open files hanging around?
@@ -498,14 +498,14 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 	beq	40$			; no, don't do it please
 	tst	image			; /56/
 	bne	40$			; /56/
-	calls	chkext	,^/#filnam/	; should we force binary mode?
+	calls	thunk_chkext	,^/#filnam/	; should we force binary mode?
 	tst	r0			; if gt, then yes
 	ble	40$			; no
 	mov	#binary	,image		; yes, force binary file operations
 40$:	calls	open	,^/#filnam,#lun.in,image/ ; open the file for input
 	tst	r0			; did it work?
 	beq	50$			; yes
-	calls	syserr	,^/r0,#errtxt/	; no
+	calls	thunk_syserr	,^/r0,#errtxt/	; no
 	calls	error	,^/#3,#errtxt,#aspace,#filnam/ ; /BBS/ add space here
 	movb	#sta.abo,r1		; return(abort)
 	br	90$			; go dump local buffer and exit
@@ -513,7 +513,7 @@ sfile:	clr	datauk			; /62/ init re-read only flag
 50$:	mov	sp	,inopn		; file is open
 	tst	xmode			; is this a server X-tended reply?
 	bne	70$			; yes, send a simple "X" packet
-	calls	namcvt	,^/#filnam,r4/	; convert to simple name (strip dev:)
+	calls	thunk_namcvt	,^/#filnam,r4/	; convert to simple name (strip dev:)
 	tstb	asname			; /36/ check for alternate name?
 	beq	60$			; /36/ no
 	mov	#asname	,r4		; /36/ yes, point to that name
@@ -583,7 +583,7 @@ f30$:	tst	datauk			; /62/ already tossed one bad ACK/NAK?
 
 f40$:	tstb	recpkt			; /63/ anything in received packet?
 	beq	f50$			; /63/ no
-	calls	bufunp	,^/#recpkt,#spare1/ ; /63/ undo repeat encoding first
+	calls	thunk_bufunp	,^/#recpkt,#spare1/ ; /63/ undo repeat encoding first
 	calls	printm	,^/#2,#sen.03,#spare1/ ; /63/ ya, print the packet
 f50$:	clr	datauk			; /62/ stop read_only loop
 	clr	numtry			; number_of_tries := 0
@@ -657,7 +657,7 @@ sdat$$:	tst	dpnumber		; /43/ first data packet?
 	calls	rewind	,^/#lun.in/	; /E64/ rewind please
 	clr	fileout+0		; /63/ no chars sent yet
 	clr	fileout+2		; /63/ this too just to be sure..
-	call	inirepeat		; /E64/ must reset repeat count ptrs
+	call	thunk_inirepeat		; /E64/ must reset repeat count ptrs
 	calls	buffil	,^/#0,#packet/	; /63/ redo the re-sized packet
 	mov	r1	,size		; /63/ and save it's new length here
 10$:	jmp	sndx$$			; /62/ keep current state, try again
@@ -697,7 +697,7 @@ g50$:	clr	numtry			; retry_counter = 0
 	call	chkabo			; now check for ^A, ^E, ^X or ^Z
 	cmpb	r0	,#'A&37		; /56/ ^A stats?
 	bne	g60$			; /56/ no
-	call	cs$out			; /56/ yes, dump char counts
+	call	thunk_cs$out			; /56/ yes, dump char counts
 	br	g90$			; /56/ and finish up
 g60$:	cmpb	r0	,#abt$error&37	; /56/ if ^E
 	beq	g80$			; /56/ then send error packet

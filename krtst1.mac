@@ -121,7 +121,7 @@ set$sp::calls	l$val	,^/argbuf/	; get the speed into decimal
 	clr	r0			; /BBS/ restore r0 after inqcd eats it
 	br	30$			; /BBS/ definitely active, don't init
 10$:	tst	(sp)+			; /BBS/ ya, dump return address then
-	jmp	set$dtr			; load adjacent overlay, re-init modem
+	jmp	thunk_set$dtr			; load adjacent overlay, re-init modem
 
 20$:	mov	#er$spe	,r0		; /BBS/ unknown speed
 30$:	return
@@ -870,7 +870,7 @@ st$ox:	return
 	.page
 	.sbttl	SET PROMPT
 
-set$pr::call	skipit			; /BBS/ ignore comma in argument
+set$pr::call	thunk_skipit			; /BBS/ ignore comma in argument
 	mov	argbuf	,r1		; /63/ pointer to start of string
 	cmpb	(r1)	,#42		; /63/ is first byte a " ?
 	beq	10$			; /63/ yes

@@ -92,7 +92,7 @@ basedsp:
 	.sbttl	Local data
 
 	.psect	$pdata			; /62/ consolidated this stuff here..
-delmsg:	.asciz	" deleted"
+delmsg:	.asciz	" thunk_deleted"
 exitxt:	.asciz	^/cr/^/lf/"%KRTSER-I-Server stopped"^/cr/^/lf/
 	.blkb	ln$max			; /63/ buffer to prepend version data
 htxt:	.ascii	^/cr/^/lf/"       Server REMOTE commands:"^/cr/^/lf/^/cr/^/lf/
@@ -118,7 +118,7 @@ rem.04:	.asciz	" got invalid response"
 rem.05:	.asciz	" checksum failed"
 rem.06:	.asciz	" was NAKed"
 rem.07:	.asciz	" timed out"
-rem.08:	.asciz	"1 file renamed"	; /BBS/
+rem.08:	.asciz	"1 file thunk_renamed"	; /BBS/
 rem.ak:	.asciz	"Remote ACK:"^/cr/^/lf/
 ser.01:	.asciz	^/bell/"Get completed"
 ser.02:	.asciz	^/bell/"Get failed"
@@ -203,7 +203,7 @@ server:	clr	paknum			; packet_number := 0
 	mov	$image	,image		; ensure correct default is set
 	clr	summary			; /BBS/ reset summary only flag
 	clr	dirflg			; /62/ reset embedded blanks flag
-	call	fixchk			; sendpar_checktype := set_checktype
+	call	thunk_fixchk			; sendpar_checktype := set_checktype
 	mov	serwait	,sertim		; /41/ set a new time-out please
 	bit	#log$pa	,trace		; /62/ logging packets this time?
 	beq	10$			; /62/ no
@@ -256,34 +256,34 @@ sernop:	clr	r0			; /62/ we are not done
 	return
 
 serv.i:	mov	r3	,paknum		; we got an init packet
-	calls	rpar	,^/#packet,r2/	; save the other Kermit's parameters
-	calls	spar	,^/#packet/	; get our parameters
+	calls	thunk_rpar	,^/#packet,r2/	; save the other Kermit's parameters
+	calls	thunk_spar	,^/#packet/	; get our parameters
 	spack	#msg$ack,paknum,sparsz,#packet ; send them to the other Kermit
 	clr	r0			; not done
-	jmp	inirepeat		; /62/ init repeat char encoding
+	jmp	thunk_inirepeat		; /62/ init repeat char encoding
 
 serv.s:	mov	r3	,paknum		; got an sinit, init packet number
-	calls	rpar	,^/#packet,r2/	; store their send init info away
-	calls	spar	,^/#packet/	; and send them ours for the ACK
+	calls	thunk_rpar	,^/#packet,r2/	; store their send init info away
+	calls	thunk_spar	,^/#packet/	; and send them ours for the ACK
 	spack	#msg$ack,paknum,sparsz,#packet
-	call	inirepeat		; do repeat initialization
+	call	thunk_inirepeat		; do repeat initialization
 	incm64	paknum			; paknum := paknum+1 mod 64
-	calls	rec.sw	,^/#sta.fil/	; and get set to receive a file name
+	calls	thunk_rec.sw	,^/#sta.fil/	; and get set to receive a file name
 	clr	r0			; not done
 	return
 
-serv.r:	calls	bufunp	,^/#packet,#spare1/ ; /BBS/ use a spare buff
+serv.r:	calls	thunk_bufunp	,^/#packet,#spare1/ ; /BBS/ use a spare buff
 	clrb	spare1(r1)		; /53/ null terminate it
 	upcase	#spare1			; /BBS/ upper case it
 	calls	fparse,^/#spare1,#srcnam/ ; /BBS/ make sure it's an ok device
 	tst	r0			; /BBS/ is it?
 	bne	10$			; /BBS/ nope..
-	calls	fixwild	,^/#srcnam/	; /BBS/ change "?" to "%"
+	calls	thunk_fixwild	,^/#srcnam/	; /BBS/ change "?" to "%"
 	clr	index			; first file in directory please
 	call	getnxt			; get the first file name
 	tst	r0			; did it work?
 	bne	20$			; no, getnxt has sent the error pak
-	calls	sensw	,^/#sta.sin/	; ya, send the file(s)
+	calls	thunk_sensw	,^/#sta.sin/	; ya, send the file(s)
 	br	20$
 
 10$:	call	generr			; /BBS/ send an error message
@@ -297,7 +297,7 @@ serv.g:	clr	at$len			; /BBS/ used for local sizes too..
 	sub	#200	,sp		; /53/ make a temp copy of data
 	mov	sp	,r2		; /53/ point to it
 	copyz	#packet	,r2	,#176	; /62/ copy, but don't lunch stack!
-	calls	bufunp	,^/r2,#packet/	; /53/ undo it (with repeats)
+	calls	thunk_bufunp	,^/r2,#packet/	; /53/ undo it (with repeats)
 	add	#200	,sp		; /53/ pop buffer
 	movb	packet+0,r2		; first data byte is generic cmd type
 	scan	r2	,#gencom	; find it's command address
@@ -345,9 +345,9 @@ gen.k:	call	get2ar			; get pointers to "from" and "to"
 	upcase	r2			; /BBS/ upper case second arg
 	calls	fparse	,^/r1,#srcnam/	; /62/ get attrs here as lookup is in
 	clr	index			; /62/ an adjacent overlay  init index
-	calls   lookup  ,^/#srcnam,#spare1/ ; /62/ load input file attributes
+	calls   thunk_lookup  ,^/#srcnam,#spare1/ ; /62/ load input file attributes
 	.purge	#lun.sr			; /62/ dump lookup channel
-	calls	copy	,^/r1,r2/	; copy the file now
+	calls	thunk_copy	,^/r1,r2/	; copy the file now
 	tst	r0			; did it work?
 	bne	10$			; no
 	sub	#100	,sp		; /63/ yes, formulate a simple ACK
@@ -420,7 +420,7 @@ gen.e:	mov	#packet+1,r1		; get the packet address
 	bne	10$			; non-zero
 	clrb	@r1			; zero, make the string null
 10$:	upcase	r1			; /BBS/ upper case the packet
-	calls	delete	,^/r1,#lun.ou/	; do it
+	calls	thunk_delete	,^/r1,#lun.ou/	; do it
 	tst	r0			; did it work?
 	beq	20$			; yes
 	call	generr			; no, send the RMS error code over
@@ -443,11 +443,11 @@ gen.d:	mov	#packet+1,r1		; /38/ get the packet address
 	add	r1	,r2		; /BBS/ point to the end
 	clrb	@r2			; /BBS/ null terminate
 	upcase	r1			; /BBS/ upper case the packet
-	calls	fixwild	,^/r1/		; /BBS/ convert "?" to "%"
-	calls	sdirini	,^/r1/		; /38/ init directory lookup and
+	calls	thunk_fixwild	,^/r1/		; /BBS/ convert "?" to "%"
+	calls	thunk_sdirini	,^/r1/		; /38/ init directory lookup and
 	tst	r0			; /38/ preload sdodir's buffer
 	bne	10$			; /38/ send error packet on any error
-	mov	#sdodir	,getcroutine	; /38/ stuff address of get_next_char
+	mov	#thunk_sdodir	,getcroutine	; /38/ stuff address of get_next_char
 	mov	#null	,r0		; /38/ and flag we're NOT using a file
 	call	xreply			; /38/ do the extended reply now
 	tst	r0			; did it work?
@@ -482,7 +482,7 @@ gen.r:	call	get2ar			; get pointers to "from" and "to"
 	bcs	20$			; oops, send an error packet over
 	upcase	r1			; /BBS/ upper case first arg
 	upcase	r2			; /BBS/ upper case second arg
-	calls	rename	,^/r1,r2,#-1/	; rename the file now
+	calls	thunk_rename	,^/r1,r2,#-1/	; rename the file now
 	tst	r0			; did it work out ok?
 	bne	10$			; no
 	strlen	#rem.08			; /62/ get the string length
@@ -540,7 +540,7 @@ gen.t:	mov	#packet+1,r1		; get the packet address
 	.page
 	.sbttl	Generic command error handler
 
-generr:	calls	syserr	,^/r0,#errtxt/	; /BBS/ be more informative
+generr:	calls	thunk_syserr	,^/r0,#errtxt/	; /BBS/ be more informative
 	calls	error	,^/#1,#errtxt/	; get the error text and send it
 	clr	r0			; not done yet
 	return
@@ -609,7 +609,7 @@ c$get::	call	ckremote		; /62/ moved c$get here from the root
 	clr	paknum			; packet_number := 0
 	strlen	#srcnam			; get the length of the file name
 	spack	#msg$rcv,paknum,r0,#srcnam ; get the server to send this file
-	calls	recsw	,^/#sta.rin/	; and call the receiver
+	calls	thunk_recsw	,^/#sta.rin/	; and call the receiver
 80$:	call	clostt			; /62/ close the remote link
 	tst	r0			; did it work?
 	bne	110$			; no
@@ -636,7 +636,7 @@ remhos::call	seropn			; init the link
 	tst	r0			; /BBS/ did it work?
 	beq	10$			; /BBS/ ya
 	jmp	xit			; /BBS/ no, error msg dumped by ttyini
-10$:	call	inista			; /63/ init all the stats registers
+10$:	call	thunk_inista			; /63/ init all the stats registers
 	movb	sentim	,senpar+p.time	; /63/ use send time-out
 	call	sinfo			; exchange information please
 	clr	paknum			; packet_number := 0  (must do this)
@@ -720,7 +720,7 @@ remwho::calls	doremo	,^/#gn$who,#1,argbuf/ ; /63/ remote who
 doremo:	call	seropn			; initialize the link
 	tst	r0			; /BBS/ did it work?
 	bne	xit			; /BBS/ nope, err msg dumped by ttyini
-	call	inista			; /63/ init all the stats registers
+	call	thunk_inista			; /63/ init all the stats registers
 	movb	sentim	,senpar+p.time	; /63/ use send time-out
 	call	sinfo			; /63/ must do before calling buffil!
 	clr	paknum			; packet_number := 0  (must do this)
@@ -800,7 +800,7 @@ rem.$$:	inc	numtry			; add this try to the retry count
 
 rem.x:	mov	sp	,xmode		; set a global flag for this
 	mov	sp	,xgottn		; we already have the "X" packet
-	calls	rec.sw	,^/#sta.fil/	; yes, switch to receive data
+	calls	thunk_rec.sw	,^/#sta.fil/	; yes, switch to receive data
 	clr	xmode			; no longer want output to TT
 	clr	xgottn			; we don't have any "X" packets
 	tst	r0			; did the receive succeed?
@@ -809,11 +809,11 @@ rem.x:	mov	sp	,xmode		; set a global flag for this
 	calls	error	,^/#1,#rem.01/	; /63/ receive data failed
 	br	rem.xt			; /63/
 
-rem.s:	calls	rpar	,^/#packet,r2/	; handle the sinit now
-	calls	spar	,^/#packet/	; and send my init things over
+rem.s:	calls	thunk_rpar	,^/#packet,r2/	; handle the sinit now
+	calls	thunk_spar	,^/#packet/	; and send my init things over
 	spack	#msg$ack,paknum,sparsz,#packet
 	incm64	paknum			; bump the packet number up mod 64
-	calls	rec.sw	,^/#sta.fil/	; switch to get fileheader state
+	calls	thunk_rec.sw	,^/#sta.fil/	; switch to get fileheader state
 rem.tag:.newline			; /62/ shared .newline exit
 rem.xt:	clr	r0			; /63/ or exit without one
 	return
@@ -824,7 +824,7 @@ rem.y:	mov	sp	,rem.ack	; /63/ set ACK rec'd flag for c$fin
 	calls	printm	,^/#2,#rem.ak,#packet/ ; /62/ print the packet
 	br	rem.tag			; /62/
 
-rem.e:	calls	prerrp	,^/#packet/	; /63/ print error text
+rem.e:	calls	thunk_prerrp	,^/#packet/	; /63/ print error text
 	br	rem.xt			; /63/
 
 	.page
@@ -845,7 +845,7 @@ xreply:	strcpy	#srcnam	,r0		; /62/ copy the file name to be sent
 	tst	r0			; well, did the lookup work out?
 	bne	20$			; /62/ no, getnxt has sent error pak
 10$:	mov	sp	,xmode		; flag this is an extended reply
-	calls	sensw	,^/#sta.fil/	; go send the extended reply text
+	calls	thunk_sensw	,^/#sta.fil/	; go send the extended reply text
 20$:	clr	xmode			; no longer extended reply mode
 	clr	xgottn			; we don't have any "X" packets
 	clr	r0			; success
@@ -881,7 +881,7 @@ sinfo:	save				; save ALL registers please
 	clr	numtry			; send info packets before any
 	clr	paknum			; extended server response please
 	movb	#msg$ser,-(sp)		; packet type "I"
-	call	.sinit			; do it
+	call	thunk_.sinit			; do it
 	unsave				; restore ALL registers now
 	return
 

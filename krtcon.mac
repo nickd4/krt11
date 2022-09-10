@@ -156,7 +156,7 @@ doconn::call	opentt			; /63/ open the link device
 
 10$:	.scca	#scca	,#scca+4	; kill ^C, this is reset by setcc
 	.cmkt	#cancel	,#40		; then dump setcc's mark timer
-	calls	t.ttyini,^/#-1/		; init terminal (w/flag for ^W)
+	calls	thunk_t.ttyini,^/#-1/		; init terminal (w/flag for ^W)
 
 	tst	conmsg			; display sign-on text?
 	bne	40$			; nope..

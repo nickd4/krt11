@@ -523,7 +523,7 @@ rpakst:	cmpb	.typ(r4),#'A&137	; count the packet types for stats
 	bne	60$			; /BBS/ ya
 	bit	#log$de	,trace		; /62/ TT debugging?
 	beq	70$			; /BBS/ no
-60$:	calls	dskdmp	,^/#pak.02,.seq(r4),.typ(r4),.len(r4),@r5/ ; /62/
+60$:	calls	thunk_dskdmp	,^/#pak.02,.seq(r4),.typ(r4),.len(r4),@r5/ ; /62/
 70$:	return
 
 	.page
@@ -746,7 +746,7 @@ spakin:	bit	#log$pa	,trace		; packet debugging today?
 	bne	10$			; /BBS/ ya
 	bit	#log$de	,trace		; /62/ no, maybe TT debugging?
 	beq	20$			; /BBS/ no
-10$:	calls	dskdmp	,^/#pak.08,2(r5),@r5,4(r5),6(r5)/ ; /62/ ya
+10$:	calls	thunk_dskdmp	,^/#pak.08,2(r5),@r5,4(r5),6(r5)/ ; /62/ ya
 
 20$:	tst	pauset			; wait a moment?
 	beq	30$			; no
@@ -1156,7 +1156,7 @@ error::	save	^/r1,r2,r3,r4,r5/
 	return
 
 	.page
-	.sbttl	Print message if not remote, and copy to logfile
+	.sbttl	Print message if not remote, and thunk_copy to logfile
 
 ;	P R I N T M			; /62/ major revision
 ;
@@ -1229,11 +1229,11 @@ printm::save				; save r0 - r5, inclusive
 	.page
 	.sbttl	Logfile error handler	; /62/ all new
 
-logerr::calls	syserr	,^/r0,#errtxt/	; enter with r0=whatever_the_error_was
+logerr::calls	thunk_syserr	,^/r0,#errtxt/	; enter with r0=whatever_the_error_was
 	.close	#lun.lo			; save what did make it to logfile..
 	bic	#^/log$op!log$al!log$io/,trace ; kill all disk-based debugging
 	mov	#er$lwe	,r0		; this is some logfile write error..
-	calls	syserr	,^/r0,#spare1/	; generate an error message saying so
+	calls	thunk_syserr	,^/r0,#spare1/	; generate an error message saying so
 	strcat	#spare1	,#pak.07	; /62/ now insert a ^/cr/^/lf/ after it
 	strcat	#spare1	,#errtxt	; then include the reported error too
 	tst	inserv			; skip TT stuff
