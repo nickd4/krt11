@@ -268,17 +268,17 @@ segment_000024_words = (segment_000024_size + 1) >> 1
 
 		; jsr r5 *#$ovrh, segment * 6, address
 thunk_t.ttyini::.word	004537,$ovrh,000001 * 6,t.ttyini	; 045106
-thunk_t.XBINREAD::.word	004537,$ovrh,000001 * 6,t.XBINREAD	; 045374
 thunk_t.BINREAD::.word	004537,$ovrh,000001 * 6,t.BINREAD	; 045374
+thunk_t.XBINREAD::.word	004537,$ovrh,000001 * 6,t.XBINREAD	; 045374
 thunk_t.BINWRITE::.word	004537,$ovrh,000001 * 6,t.BINWRITE	; 045502
 thunk_t.TTXON::	.word	004537,$ovrh,000001 * 6,t.TTXON		; 045572
-thunk_t.HOSE::	.word	004537,$ovrh,000001 * 6,t.HOSE		; 046024
 thunk_t.CANTYP::.word	004537,$ovrh,000001 * 6,t.CANTYP	; 046024
+thunk_t.HOSE::	.word	004537,$ovrh,000001 * 6,t.HOSE		; 046024
 thunk_t.TTSPEED::.word	004537,$ovrh,000001 * 6,t.TTSPEED	; 046034
 thunk_t.DCDTST::.word	004537,$ovrh,000001 * 6,t.DCDTST	; 046034
-thunk_t.TTYFIN::.word	004537,$ovrh,000001 * 6,t.TTYFIN	; 046040
-thunk_t.INQCD::	.word	004537,$ovrh,000001 * 6,t.INQCD		; 046040
 thunk_t.INQDTR::.word	004537,$ovrh,000001 * 6,t.INQDTR	; 046040
+thunk_t.INQCD::	.word	004537,$ovrh,000001 * 6,t.INQCD		; 046040
+thunk_t.TTYFIN::.word	004537,$ovrh,000001 * 6,t.TTYFIN	; 046040
 thunk_t.SETSPD::.word	004537,$ovrh,000001 * 6,t.SETSPD	; 046046
 thunk_t.TTYHANG::.word	004537,$ovrh,000001 * 6,t.TTYHANG	; 046054
 thunk_x.assdev::.word	004537,$ovrh,000002 * 6,x.assdev	; 045106

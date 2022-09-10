@@ -88,6 +88,6 @@ hex2bin.py --pad=0 --range=7dea:83c9 krt_segment_000022.ihx krt_segment_000022.b
 hex2bin.py --pad=0 --range=7dea:8513 krt_segment_000023.ihx krt_segment_000023.bin
 hex2bin.py --pad=0 --range=7dea:86e7 krt_segment_000024.ihx krt_segment_000024.bin
 
-od -b --output-duplicates <krt/krt.sav |head --lines=1189 >good
-od -b --output-duplicates <krt.bin >bad
+od --output-duplicates -w2 <krt/krt.sav |head --lines=9507 >good
+od --output-duplicates -w2 <krt.bin >bad
 diff --unified good bad >diff
