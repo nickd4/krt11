@@ -1,6 +1,6 @@
 krt.ihx: \
-overlay.rel \
 ohandl.rel \
+otable.rel \
 krtsj.rel \
 krtpak.rel \
 krtdat.rel \
@@ -41,10 +41,11 @@ ispy.rel \
 syslbv.rel
 	aslink -p0 -a '$$ohand=0o1000' -ilmuwqz -o $@ $^
 
-overlay.rel: overlay.mac
+ohandl.rel: syslib/ohandl.mac macro-11.mac
 	aspdp11 -glwqz -o $@ $<
 
-ohandl.rel: syslib/ohandl.mac macro-11.mac
+# this has to be linked right after ohandl.rel as it fills in $ovtab
+otable.rel: otable.mac
 	aspdp11 -glwqz -o $@ $<
 
 krtatr.rel: krtatr.mac macro-11.mac sysmac.mac krtnhd.mac
