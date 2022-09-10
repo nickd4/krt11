@@ -54,6 +54,37 @@
 	.restore
 	.endm	entry
 
+	; for aslink, we have longer symbols, so only output the first 6 chars
+	.macro	entry6	name ,type ,size
+	.save
+	.if  b	^/name/
+	.psect	$addr
+	.word	0
+	.iff
+	;.dsabl	lc
+	.psect	$name	,ro,d,lcl,rel,con
+	$$ = .
+	;.asciz	#name#
+	.irpc	c,^/name/
+	  .byte	''c
+	  .if eq ($$+6-.)
+	    .mexit
+	  .endc
+	.endr
+	.byte	0
+	.psect	$addr
+	.word	$$
+	.psect	$addr1
+	.word	name
+	.psect	$type
+	.word	type
+	.psect	$size
+	.word	size
+	;.enabl	lc
+	.endc
+	.restore
+	.endm	entry6
+
 	.page
 	.sbttl	Local data			; /63/ consolidated here..
 
@@ -89,118 +120,118 @@ symtyp:
 symsiz:
 	.psect	$code
 
-	entry	^/$image/, int, 1
-	entry	^/$limit/, int, 2
-	entry	^/albuff/, int, 1
-	entry	^/argbuf/, int, 1
-	entry	^/argpnt/, int, 1
-	entry	^/asname/, chr, ln$max
-	entry	^/at$len/, int, 1
-	entry	^/at$sys/, chr, 2
-	entry	^/b4speed/,int, 1
-	entry	^/blknum/, int, 5
-	entry	^/buflst/, int, 5
-	entry	^/bufp/,   int, 5
-	entry	^/bufs/,   int, 5
-	entry	^/cc$max/, int, 1
-	entry	^/chksiz/, int, 1
-	entry	^/chktyp/, chr, 1
-	entry	^/cl$line/,int, 1
-	entry	^/cl.line/,int, 1
-	entry	^/cl.pri/, int, 1
-	entry	^/cl.r50/, int, 4
-	entry	^/cl.unit/,int, 1
-	entry	^/clkflg/, int, 1
-	entry	^/cmdbuf/, int, 1
-	entry	^/conpar/, chr, 20
-	entry	^/context/,int, 1
-	entry	^/date.a/, int, 5
-	entry	^/do8bit/, int, 1
-	entry	^/doattr/, int, 1
-	entry	^/dorpt/ , int, 1
-;	entry	^/doslid/, int, 1
-	entry	^/edists/, int, 1
-	entry	^/ebquot/, chr, 1
-	entry	^/errtxt/, chr, erbfsiz
-	entry	^/fetpt/,  int, 1
-	entry	^/fetptmax/, int, 1
-	entry	^/filnam/, chr, ln$max
-	entry	^/filtyp/, int, 5
-	entry	^/freept/, int, 1
-	entry	^/hilimit/,int, 1
-	entry	^/image/,  int, 1
-	entry	^/imgtyp/, int, 1
-	entry	^/index/,  int, 1
-	entry	^/indnam/, chr, 16+2	; /63/
-	entry	^/ininam/, chr, 16+2	; /63/
-	entry	^/jobsts/, int, 10
-	entry	^/jobtype/, int, 1
-	entry	^/km.lock/,int, 1
-	entry	^/limits/, chr, 34.
-	entry	^/linksts/,int, 1
-	entry	^/logfil/, chr, 26+2	; /63/
-	entry	^/lokdate/,int, 1
-	entry	^/loklen/, int, 1
-	entry	^/lokstat/,int, 1
-	entry	^/loktime/,int, 1
-	entry	^/maxtop/, int, 1
-	entry	^/mcrcmd/, int, 1
-	entry	^/mode/,   int, 5
-	entry	^/modtype/,int, 1
-	entry	^/montyp/, int, 1
-	entry	^/mready/, int, 1
-	entry	^/numtry/, int, 1
-	entry	^/outlun/, int, 1
-	entry	^/outopn/, int, 1
-	entry	^/packet/, chr, $allsiz	; /BBS/
-	entry	^/paknum/, int, 1
-	entry	^/pcnt.r/, int, 2*34
-	entry	^/pcnt.s/, int, 2*34
-	entry	^/pnhead/, int, 1
-	entry	^/prexon/, int, 1
-	entry	^/prot.a/, int, 5
-	entry	^/qedtst/, int, 1	; /63/
-	entry	^/qu.ini/, int, 1
-	entry	^/r50dev/, int, 4
-	entry	^/r50out/, int, 4	; /63/
-	entry	^/remote/, int, 1
-	entry	^/restof/, int, 1
-	entry	^/rptlast/,chr, 2	; /63/
-	entry	^/rptquo/, chr, 2	; /63/
-	entry	^/rptsave/,chr, 2	; /63/
-	entry	^/rt11upd/,int, 1
-	entry	^/rt11ver/,int, 1
-	entry	^/rtwork/, int, 10
-	entry	^/senwin/, int, 1
-	entry	^/senpar/, chr, 20
-	entry	^/size/,   int, 1
-	entry	^/sizof/,  int, 5
-	entry	^/snd8bit/,int, 1
-	entry	^/spare1/, chr, 256.
-	entry	^/sparsz/, int, 1
-	entry	^/srcnam/, chr, ln$max
-	entry	^/stklim/, chr, stksiz	; /62/ dump the stack, backwards!
-	entry	^/time.a/, int, 5
-	entry	^/times/,  int, 10	; /BBS/ wuz 4
-	entry	^/totp.r/, int, 1	; pointer
-	entry	^/totp.s/, int, 1	; pointer
-	entry	^/tsxcl/,  int, 1
-	entry	^/tsxsave/, int, 1
-	entry	^/tsxver/, int, 1
-	entry	^/tt$io/,  int, 1
-	entry	^/ttbuf/,  int, ttbsiz+2
-	entry	^/ttparm/, int, 1
-	entry	^/ttpar2/, int, 1
-	entry	^/undchr/, chr, 2
-	entry	^/undlin/, chr, ln$max+2
-	entry	^/vbgexe/, int, 1
-	entry	^/xcdone/, int, 1
-	entry	^/xkbuff/, chr, ^/xksize+2/
-	entry	^/xklgbuf/, int, 1
-	entry	^/xkpoint/,int, 1
-	entry	^/xl.lock/,int, 1
-	entry	^/xmfetpt/, int, 1
-	entry	^/z.atch/, int, 1
+	entry	^/$IMAGE/, int, 1
+	entry	^/$LIMIT/, int, 2
+	entry	^/ALBUFF/, int, 1
+	entry	^/ARGBUF/, int, 1
+	entry	^/ARGPNT/, int, 1
+	entry	^/ASNAME/, chr, ln$max
+	entry	^/AT$LEN/, int, 1
+	entry	^/AT$SYS/, chr, 2
+	entry	^/B4SPEED/,int, 1
+	entry	^/BLKNUM/, int, 5
+	entry	^/BUFLST/, int, 5
+	entry	^/BUFP/,   int, 5
+	entry	^/BUFS/,   int, 5
+	entry	^/CC$MAX/, int, 1
+	entry	^/CHKSIZ/, int, 1
+	entry	^/CHKTYP/, chr, 1
+	entry	^/CL$LINE/,int, 1
+	entry	^/CL.LINE/,int, 1
+	entry	^/CL.PRI/, int, 1
+	entry	^/CL.R50/, int, 4
+	entry	^/CL.UNIT/,int, 1
+	entry	^/CLKFLG/, int, 1
+	entry	^/CMDBUF/, int, 1
+	entry	^/CONPAR/, chr, 20
+	entry	^/CONTEXT/,int, 1
+	entry	^/DATE.A/, int, 5
+	entry	^/DO8BIT/, int, 1
+	entry	^/DOATTR/, int, 1
+	entry	^/DORPT/ , int, 1
+;	entry	^/DOSLID/, int, 1
+	entry	^/EDISTS/, int, 1
+	entry	^/EBQUOT/, chr, 1
+	entry	^/ERRTXT/, chr, erbfsiz
+	entry	^/FETPT/,  int, 1
+	entry6	^/FETPTMAX/,int, 1
+	entry	^/FILNAM/, chr, ln$max
+	entry	^/FILTYP/, int, 5
+	entry	^/FREEPT/, int, 1
+	entry	^/HILIMIT/,int, 1
+	entry	^/IMAGE/,  int, 1
+	entry	^/IMGTYP/, int, 1
+	entry	^/INDEX/,  int, 1
+	entry	^/INDNAM/, chr, 16+2	; /63/
+	entry	^/ININAM/, chr, 16+2	; /63/
+	entry	^/JOBSTS/, int, 10
+	entry6	^/JOBTYPE/,int, 1
+	entry	^/KM.LOCK/,int, 1
+	entry	^/LIMITS/, chr, 34.
+	entry	^/LINKSTS/,int, 1
+	entry	^/LOGFIL/, chr, 26+2	; /63/
+	entry	^/LOKDATE/,int, 1
+	entry	^/LOKLEN/, int, 1
+	entry	^/LOKSTAT/,int, 1
+	entry	^/LOKTIME/,int, 1
+	entry	^/MAXTOP/, int, 1
+	entry	^/MCRCMD/, int, 1
+	entry	^/MODE/,   int, 5
+	entry	^/MODTYPE/,int, 1
+	entry	^/MONTYP/, int, 1
+	entry	^/MREADY/, int, 1
+	entry	^/NUMTRY/, int, 1
+	entry	^/OUTLUN/, int, 1
+	entry	^/OUTOPN/, int, 1
+	entry	^/PACKET/, chr, $allsiz	; /BBS/
+	entry	^/PAKNUM/, int, 1
+	entry	^/PCNT.R/, int, 2*34
+	entry	^/PCNT.S/, int, 2*34
+	entry	^/PNHEAD/, int, 1
+	entry	^/PREXON/, int, 1
+	entry	^/PROT.A/, int, 5
+	entry	^/QEDTST/, int, 1	; /63/
+	entry	^/QU.INI/, int, 1
+	entry	^/R50DEV/, int, 4
+	entry	^/R50OUT/, int, 4	; /63/
+	entry	^/REMOTE/, int, 1
+	entry	^/RESTOF/, int, 1
+	entry	^/RPTLAST/,chr, 2	; /63/
+	entry	^/RPTQUO/, chr, 2	; /63/
+	entry	^/RPTSAVE/,chr, 2	; /63/
+	entry	^/RT11UPD/,int, 1
+	entry	^/RT11VER/,int, 1
+	entry	^/RTWORK/, int, 10
+	entry	^/SENWIN/, int, 1
+	entry	^/SENPAR/, chr, 20
+	entry	^/SIZE/,   int, 1
+	entry	^/SIZOF/,  int, 5
+	entry	^/SND8BIT/,int, 1
+	entry	^/SPARE1/, chr, 256.
+	entry	^/SPARSZ/, int, 1
+	entry	^/SRCNAM/, chr, ln$max
+	entry	^/STKLIM/, chr, stksiz	; /62/ dump the stack, backwards!
+	entry	^/TIME.A/, int, 5
+	entry	^/TIMES/,  int, 10	; /BBS/ wuz 4
+	entry	^/TOTP.R/, int, 1	; pointer
+	entry	^/TOTP.S/, int, 1	; pointer
+	entry	^/TSXCL/,  int, 1
+	entry6	^/TSXSAVE/,int, 1
+	entry	^/TSXVER/, int, 1
+	entry	^/TT$IO/,  int, 1
+	entry	^/TTBUF/,  int, ttbsiz+2
+	entry	^/TTPARM/, int, 1
+	entry	^/TTPAR2/, int, 1
+	entry	^/UNDCHR/, chr, 2
+	entry	^/UNDLIN/, chr, ln$max+2
+	entry	^/VBGEXE/, int, 1
+	entry	^/XCDONE/, int, 1
+	entry	^/XKBUFF/, chr, ^/xksize+2/
+	entry6	^/XKLGBUF/,int, 1
+	entry	^/XKPOINT/,int, 1
+	entry	^/XL.LOCK/,int, 1
+	entry6	^/XMFETPT/,int, 1
+	entry	^/Z.ATCH/, int, 1
 	entry
 
 	.page

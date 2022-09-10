@@ -241,12 +241,12 @@ sh.125:	.asciz	" ("
 sh.126:	.asciz	"), applied to (0 = unprefixed, 1 = prefixed):"^/cr/^/lf/
 sh.127:	.asciz	": "
 sh.128:	.asciz	"         "	; 9 spaces
-sh.129:	.asciz	" thunk_renamed to "
-sh.130:	.asciz	" thunk_deleted"
+sh.129:	.asciz	" renamed to "
+sh.130:	.asciz	" deleted"
 sh.131:	.asciz	" block"
 sh.132:	.asciz	" copied to "
 sh.133:	.asciz	"_To: "
-sh.134:	.asciz	"No logical disks are thunk_mounted"^/cr/^/lf/
+sh.134:	.asciz	"No logical disks are mounted"^/cr/^/lf/
 dkslug:	.asciz	"DK  --> "
 hoslug:	.asciz	"HOME--> "
 lis.ctrl:.ascii	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]~?"

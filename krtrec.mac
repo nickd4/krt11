@@ -86,7 +86,7 @@ rec.12:	.asciz	"Received file name - "		; /63/
 rec.13:	.asciz	"Warning: "			; /63/
 rec.14:	.asciz	"REC.SW"
 rec.15:	.asciz	"Parity found in SOH byte"
-rec.16:	.asciz	" thunk_renamed to "
+rec.16:	.asciz	" renamed to "
 	.even
 
 	.page

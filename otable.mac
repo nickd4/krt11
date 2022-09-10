@@ -1,6 +1,18 @@
-; region/segment sizes and segment/psect order taken from krt/krt.map
-
 	.radix	o
+
+; for basepage below 1000, just insert values calculated by link-11
+
+	.area	asect (abs)
+	.org	000040
+	.word	007042,001000,001000
+	.org	000050
+	.word	107744
+	.org	000064
+	.word	001106
+	.org	000360
+	.word	177773,176777,000060
+
+; region/segment sizes and segment/psect order taken from krt/krt.map
 
 root_size = 045104
 
@@ -38,28 +50,28 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000001 (base=region_000001,fsfx=_segment_000001)
 	.area	segment_000001_id (rel,con,bank=segment_000001)
-	.word	000001
+	.word	000001 * 6
 	.area	segment_000001_$code (rel,con,bank=segment_000001)
 	.area	segment_000001_$pdata (rel,con,bank=segment_000001)
 	.area	segment_000001_$rwdata (rel,con,bank=segment_000001)
 
 	.bank	segment_000002 (base=region_000001,fsfx=_segment_000002)
 	.area	segment_000002_id (rel,con,bank=segment_000002)
-	.word	000002
+	.word	000002 * 6
 	.area	segment_000002_$code (rel,con,bank=segment_000002)
 	.area	segment_000002_$pdata (rel,con,bank=segment_000002)
 	.area	segment_000002_xcrw (rel,con,bank=segment_000002)
 
 	.bank	segment_000003 (base=region_000002,fsfx=_segment_000003)
 	.area	segment_000003_id (rel,con,bank=segment_000003)
-	.word	000003
+	.word	000003 * 6
 	.area	segment_000003_$code (rel,con,bank=segment_000003)
 	.area	segment_000003_$pdata (rel,con,bank=segment_000003)
 	.area	segment_000003_$rwdata (rel,con,bank=segment_000003)
 
 	.bank	segment_000004 (base=region_000002,fsfx=_segment_000004)
 	.area	segment_000004_id (rel,con,bank=segment_000004)
-	.word	000004
+	.word	000004 * 6
 	.area	segment_000004_$code (rel,con,bank=segment_000004)
 	.area	segment_000004_$pdata (rel,con,bank=segment_000004)
 	.area	segment_000004_mapwin (rel,con,bank=segment_000004)
@@ -67,34 +79,34 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000005 (base=region_000002,fsfx=_segment_000005)
 	.area	segment_000005_id (rel,con,bank=segment_000005)
-	.word	000005
+	.word	000005 * 6
 	.area	segment_000005_$code (rel,con,bank=segment_000005)
 	.area	segment_000005_$pdata (rel,con,bank=segment_000005)
 	.area	segment_000005_recpkt (rel,con,bank=segment_000005)
 
 	.bank	segment_000006 (base=region_000002,fsfx=_segment_000006)
 	.area	segment_000006_id (rel,con,bank=segment_000006)
-	.word	000006
+	.word	000006 * 6
 	.area	segment_000006_$code (rel,con,bank=segment_000006)
 	.area	segment_000006_$pdata (rel,con,bank=segment_000006)
 
 	.bank	segment_000007 (base=region_000002,fsfx=_segment_000007)
 	.area	segment_000007_id (rel,con,bank=segment_000007)
-	.word	000007
+	.word	000007 * 6
 	.area	segment_000007_$code (rel,con,bank=segment_000007)
 	.area	segment_000007_$pdata (rel,con,bank=segment_000007)
 	.area	segment_000007_$rwdata (rel,con,bank=segment_000007)
 
 	.bank	segment_000010 (base=region_000003,fsfx=_segment_000010)
 	.area	segment_000010_id (rel,con,bank=segment_000010)
-	.word	000010
+	.word	000010 * 6
 	.area	segment_000010_$code (rel,con,bank=segment_000010)
 	.area	segment_000010_$pdata (rel,con,bank=segment_000010)
 	.area	segment_000010_$rwdata (rel,con,bank=segment_000010)
 
 	.bank	segment_000011 (base=region_000003,fsfx=_segment_000011)
 	.area	segment_000011_id (rel,con,bank=segment_000011)
-	.word	000011
+	.word	000011 * 6
 	.area	segment_000011_$code (rel,con,bank=segment_000011)
 	.area	segment_000011_$pdata (rel,con,bank=segment_000011)
 	.area	segment_000011_$rwdata (rel,con,bank=segment_000011)
@@ -104,7 +116,7 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000012 (base=region_000003,fsfx=_segment_000012)
 	.area	segment_000012_id (rel,con,bank=segment_000012)
-	.word	000012
+	.word	000012 * 6
 	.area	segment_000012_$code (rel,con,bank=segment_000012)
 	.area	segment_000012_$pdata (rel,con,bank=segment_000012)
 	.area	segment_000012_cmdtxt (rel,con,bank=segment_000012)
@@ -114,7 +126,7 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000013 (base=region_000003,fsfx=_segment_000013)
 	.area	segment_000013_id (rel,con,bank=segment_000013)
-	.word	000013
+	.word	000013 * 6
 	.area	segment_000013_$code (rel,con,bank=segment_000013)
 	.area	segment_000013_$pdata (rel,con,bank=segment_000013)
 	.area	segment_000013_$rwdata (rel,con,bank=segment_000013)
@@ -123,13 +135,13 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000014 (base=region_000003,fsfx=_segment_000014)
 	.area	segment_000014_id (rel,con,bank=segment_000014)
-	.word	000014
+	.word	000014 * 6
 	.area	segment_000014_$code (rel,con,bank=segment_000014)
 	.area	segment_000014_$pdata (rel,con,bank=segment_000014)
 
 	.bank	segment_000015 (base=region_000003,fsfx=_segment_000015)
 	.area	segment_000015_id (rel,con,bank=segment_000015)
-	.word	000015
+	.word	000015 * 6
 	.area	segment_000015_$code (rel,con,bank=segment_000015)
 	.area	segment_000015_$pdata (rel,con,bank=segment_000015)
 	.area	segment_000015_$rwdata (rel,con,bank=segment_000015)
@@ -143,13 +155,13 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000016 (base=region_000004,fsfx=_segment_000016)
 	.area	segment_000016_id (rel,con,bank=segment_000016)
-	.word	000016
+	.word	000016 * 6
 	.area	segment_000016_$code (rel,con,bank=segment_000016)
 	.area	segment_000016_$pdata (rel,con,bank=segment_000016)
 
 	.bank	segment_000017 (base=region_000004,fsfx=_segment_000017)
 	.area	segment_000017_id (rel,con,bank=segment_000017)
-	.word	000017
+	.word	000017 * 6
 	.area	segment_000017_$code (rel,con,bank=segment_000017)
 	.area	segment_000017_$pdata (rel,con,bank=segment_000017)
 	.area	segment_000017_$rwdata (rel,con,bank=segment_000017)
@@ -158,14 +170,14 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000020 (base=region_000004,fsfx=_segment_000020)
 	.area	segment_000020_id (rel,con,bank=segment_000020)
-	.word	000020
+	.word	000020 * 6
 	.area	segment_000020_$code (rel,con,bank=segment_000020)
 	.area	segment_000020_$pdata (rel,con,bank=segment_000020)
 	.area	segment_000020_$rwdata (rel,con,bank=segment_000020)
 
 	.bank	segment_000021 (base=region_000004,fsfx=_segment_000021)
 	.area	segment_000021_id (rel,con,bank=segment_000021)
-	.word	000021
+	.word	000021 * 6
 	.area	segment_000021_$code (rel,con,bank=segment_000021)
 	.area	segment_000021_$pdata (rel,con,bank=segment_000021)
 	.area	segment_000021_cmdtxt (rel,con,bank=segment_000021)
@@ -173,7 +185,7 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000022 (base=region_000004,fsfx=_segment_000022)
 	.area	segment_000022_id (rel,con,bank=segment_000022)
-	.word	000022
+	.word	000022 * 6
 	.area	segment_000022_$code (rel,con,bank=segment_000022)
 	.area	segment_000022_$pdata (rel,con,bank=segment_000022)
 	.area	segment_000022_$rwdata (rel,con,bank=segment_000022)
@@ -183,13 +195,13 @@ segment_000024_size = 2 + 010772
 
 	.bank	segment_000023 (base=region_000004,fsfx=_segment_000023)
 	.area	segment_000023_id (rel,con,bank=segment_000023)
-	.word	000023
+	.word	000023 * 6
 	.area	segment_000023_$code (rel,con,bank=segment_000023)
 	.area	segment_000023_$pdata (rel,con,bank=segment_000023)
 
 	.bank	segment_000024 (base=region_000004,fsfx=_segment_000024)
 	.area	segment_000024_id (rel,con,bank=segment_000024)
-	.word	000024
+	.word	000024 * 6
 	.area	segment_000024_$code (rel,con,bank=segment_000024)
 	.area	segment_000024_modinf (rel,con,bank=segment_000024)
 	.area	segment_000024_string (rel,con,bank=segment_000024)

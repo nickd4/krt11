@@ -22,71 +22,71 @@
 # 076752 003452 segment_000023
 # 076752 004376 segment_000024
 
-# print(hex(0o000000), hex(0o000000 + 0o045104 - 1))
-# print(hex(0o045104), hex(0o045104 + 0o000400 - 1))
-# print(hex(0o045104), hex(0o045104 + 0o001653 - 1))
-# print(hex(0o050632), hex(0o050632 + 0o003044 - 1))
-# print(hex(0o050632), hex(0o050632 + 0o002175 - 1))
-# print(hex(0o050632), hex(0o050632 + 0o003154 - 1))
-# print(hex(0o050632), hex(0o050632 + 0o003244 - 1))
-# print(hex(0o050632), hex(0o050632 + 0o002530 - 1))
-# print(hex(0o057342), hex(0o057342 + 0o004057 - 1))
-# print(hex(0o057342), hex(0o057342 + 0o007055 - 1))
-# print(hex(0o057342), hex(0o057342 + 0o007201 - 1))
-# print(hex(0o057342), hex(0o057342 + 0o007604 - 1))
-# print(hex(0o057342), hex(0o057342 + 0o005440 - 1))
-# print(hex(0o057342), hex(0o057342 + 0o007056 - 1))
-# print(hex(0o076752), hex(0o076752 + 0o003050 - 1))
-# print(hex(0o076752), hex(0o076752 + 0o002665 - 1))
-# print(hex(0o076752), hex(0o076752 + 0o002203 - 1))
-# print(hex(0o076752), hex(0o076752 + 0o003047 - 1))
-# print(hex(0o076752), hex(0o076752 + 0o002740 - 1))
-# print(hex(0o076752), hex(0o076752 + 0o003452 - 1))
-# print(hex(0o076752), hex(0o076752 + 0o004376 - 1))
+# print(hex(0o000000), hex(0o000000 + 0o045104 * 2 - 1))
+# print(hex(0o045104), hex(0o045104 + 0o000400 * 2 - 1))
+# print(hex(0o045104), hex(0o045104 + 0o001653 * 2 - 1))
+# print(hex(0o050632), hex(0o050632 + 0o003044 * 2 - 1))
+# print(hex(0o050632), hex(0o050632 + 0o002175 * 2 - 1))
+# print(hex(0o050632), hex(0o050632 + 0o003154 * 2 - 1))
+# print(hex(0o050632), hex(0o050632 + 0o003244 * 2 - 1))
+# print(hex(0o050632), hex(0o050632 + 0o002530 * 2 - 1))
+# print(hex(0o057342), hex(0o057342 + 0o004057 * 2 - 1))
+# print(hex(0o057342), hex(0o057342 + 0o007055 * 2 - 1))
+# print(hex(0o057342), hex(0o057342 + 0o007201 * 2 - 1))
+# print(hex(0o057342), hex(0o057342 + 0o007604 * 2 - 1))
+# print(hex(0o057342), hex(0o057342 + 0o005440 * 2 - 1))
+# print(hex(0o057342), hex(0o057342 + 0o007056 * 2 - 1))
+# print(hex(0o076752), hex(0o076752 + 0o003050 * 2 - 1))
+# print(hex(0o076752), hex(0o076752 + 0o002665 * 2 - 1))
+# print(hex(0o076752), hex(0o076752 + 0o002203 * 2 - 1))
+# print(hex(0o076752), hex(0o076752 + 0o003047 * 2 - 1))
+# print(hex(0o076752), hex(0o076752 + 0o002740 * 2 - 1))
+# print(hex(0o076752), hex(0o076752 + 0o003452 * 2 - 1))
+# print(hex(0o076752), hex(0o076752 + 0o004376 * 2 - 1))
 
-# 0x0 0x4a43
-# 0x4a44 0x4b43
-# 0x4a44 0x4dee
-# 0x519a 0x57bd
-# 0x519a 0x5616
-# 0x519a 0x5805
-# 0x519a 0x583d
-# 0x519a 0x56f1
-# 0x5ee2 0x6710
-# 0x5ee2 0x6d0e
-# 0x5ee2 0x6d62
-# 0x5ee2 0x6e65
-# 0x5ee2 0x6a01
-# 0x5ee2 0x6d0f
-# 0x7dea 0x8411
-# 0x7dea 0x839e
-# 0x7dea 0x826c
-# 0x7dea 0x8410
-# 0x7dea 0x83c9
-# 0x7dea 0x8513
-# 0x7dea 0x86e7
+# 0x0 0x9487
+# 0x4a44 0x4c43
+# 0x4a44 0x5199
+# 0x519a 0x5de1
+# 0x519a 0x5a93
+# 0x519a 0x5e71
+# 0x519a 0x5ee1
+# 0x519a 0x5c49
+# 0x5ee2 0x6f3f
+# 0x5ee2 0x7b3b
+# 0x5ee2 0x7be3
+# 0x5ee2 0x7de9
+# 0x5ee2 0x7521
+# 0x5ee2 0x7b3d
+# 0x7dea 0x8a39
+# 0x7dea 0x8953
+# 0x7dea 0x86ef
+# 0x7dea 0x8a37
+# 0x7dea 0x89a9
+# 0x7dea 0x8c3d
+# 0x7dea 0x8fe5
 
 hex2bin.py --pad=0 --range=0:4a43 krt.ihx krt.bin
-hex2bin.py --pad=0 --range=4a44:4b43 krt_segment_000001.ihx krt_segment_000001.bin
-hex2bin.py --pad=0 --range=4a44:4dee krt_segment_000002.ihx krt_segment_000002.bin
-hex2bin.py --pad=0 --range=519a:57bd krt_segment_000003.ihx krt_segment_000003.bin
-hex2bin.py --pad=0 --range=519a:5616 krt_segment_000004.ihx krt_segment_000004.bin
-hex2bin.py --pad=0 --range=519a:5805 krt_segment_000005.ihx krt_segment_000005.bin
-hex2bin.py --pad=0 --range=519a:583d krt_segment_000006.ihx krt_segment_000006.bin
-hex2bin.py --pad=0 --range=519a:56f1 krt_segment_000007.ihx krt_segment_000007.bin
-hex2bin.py --pad=0 --range=5ee2:6710 krt_segment_000010.ihx krt_segment_000010.bin
-hex2bin.py --pad=0 --range=5ee2:6d0e krt_segment_000011.ihx krt_segment_000011.bin
-hex2bin.py --pad=0 --range=5ee2:6d62 krt_segment_000012.ihx krt_segment_000012.bin
-hex2bin.py --pad=0 --range=5ee2:6e65 krt_segment_000013.ihx krt_segment_000013.bin
-hex2bin.py --pad=0 --range=5ee2:6a01 krt_segment_000014.ihx krt_segment_000014.bin
-hex2bin.py --pad=0 --range=5ee2:6d0f krt_segment_000015.ihx krt_segment_000015.bin
-hex2bin.py --pad=0 --range=7dea:8411 krt_segment_000016.ihx krt_segment_000016.bin
-hex2bin.py --pad=0 --range=7dea:839e krt_segment_000017.ihx krt_segment_000017.bin
-hex2bin.py --pad=0 --range=7dea:826c krt_segment_000020.ihx krt_segment_000020.bin
-hex2bin.py --pad=0 --range=7dea:8410 krt_segment_000021.ihx krt_segment_000021.bin
-hex2bin.py --pad=0 --range=7dea:83c9 krt_segment_000022.ihx krt_segment_000022.bin
-hex2bin.py --pad=0 --range=7dea:8513 krt_segment_000023.ihx krt_segment_000023.bin
-hex2bin.py --pad=0 --range=7dea:86e7 krt_segment_000024.ihx krt_segment_000024.bin
+hex2bin.py --pad=0 --range=4a44:4c43 krt_segment_000001.ihx krt_segment_000001.bin
+hex2bin.py --pad=0 --range=4a44:5199 krt_segment_000002.ihx krt_segment_000002.bin
+hex2bin.py --pad=0 --range=519a:5de1 krt_segment_000003.ihx krt_segment_000003.bin
+hex2bin.py --pad=0 --range=519a:5a93 krt_segment_000004.ihx krt_segment_000004.bin
+hex2bin.py --pad=0 --range=519a:5e71 krt_segment_000005.ihx krt_segment_000005.bin
+hex2bin.py --pad=0 --range=519a:5ee1 krt_segment_000006.ihx krt_segment_000006.bin
+hex2bin.py --pad=0 --range=519a:5c49 krt_segment_000007.ihx krt_segment_000007.bin
+hex2bin.py --pad=0 --range=5ee2:6f3f krt_segment_000010.ihx krt_segment_000010.bin
+hex2bin.py --pad=0 --range=5ee2:7b3b krt_segment_000011.ihx krt_segment_000011.bin
+hex2bin.py --pad=0 --range=5ee2:7be3 krt_segment_000012.ihx krt_segment_000012.bin
+hex2bin.py --pad=0 --range=5ee2:7de9 krt_segment_000013.ihx krt_segment_000013.bin
+hex2bin.py --pad=0 --range=5ee2:7521 krt_segment_000014.ihx krt_segment_000014.bin
+hex2bin.py --pad=0 --range=5ee2:7b3d krt_segment_000015.ihx krt_segment_000015.bin
+hex2bin.py --pad=0 --range=7dea:8a39 krt_segment_000016.ihx krt_segment_000016.bin
+hex2bin.py --pad=0 --range=7dea:8953 krt_segment_000017.ihx krt_segment_000017.bin
+hex2bin.py --pad=0 --range=7dea:86ef krt_segment_000020.ihx krt_segment_000020.bin
+hex2bin.py --pad=0 --range=7dea:8a37 krt_segment_000021.ihx krt_segment_000021.bin
+hex2bin.py --pad=0 --range=7dea:89a9 krt_segment_000022.ihx krt_segment_000022.bin
+hex2bin.py --pad=0 --range=7dea:8c3d krt_segment_000023.ihx krt_segment_000023.bin
+hex2bin.py --pad=0 --range=7dea:8fe5 krt_segment_000024.ihx krt_segment_000024.bin
 
 (
   dd ibs=512 conv=sync if=krt.bin
@@ -108,9 +108,13 @@ hex2bin.py --pad=0 --range=7dea:86e7 krt_segment_000024.ihx krt_segment_000024.b
   dd ibs=512 conv=sync if=krt_segment_000020.bin
   dd ibs=512 conv=sync if=krt_segment_000021.bin
   dd ibs=512 conv=sync if=krt_segment_000022.bin
-  dd ibs=512 conv=sync if=krt_segment_000023.bin
+  # segment 000023 is only 3744 bytes rather than 4096
+  # maybe krt/krt.sav was corrupted by ANSI tape stuff
+  dd ibs=512 conv=sync if=krt_segment_000023.bin |dd count=3744 bs=1
+  dd ibs=512 conv=sync if=krt_segment_000024.bin
 ) >krt.sav
 
-od --output-duplicates -w2 <krt/krt.sav |head --lines=9507 >good
-od --output-duplicates -w2 <krt.sav >bad
+# use -b for byte output
+od $1 --output-duplicates -w2 <krt/krt.sav >good
+od $1 --output-duplicates -w2 <krt.sav >bad
 diff --unified good bad >diff

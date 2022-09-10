@@ -191,3 +191,6 @@ sed -e 's/\(;.*\)thunk_/\1/' -i krt*.mac
 sed -e 's/thunk_spare/spare/g' -i krt*.mac
 sed -e 's/thunk_sparsz/sparsz/g' -i krt*.mac
 sed -e 's/thunk_copyz/copyz/g' -i krt*.mac
+sed -e 's/thunk_deleted/deleted/g' -i krt*.mac
+sed -e 's/thunk_mounted/mounted/g' -i krt*.mac
+sed -e 's/thunk_renamed/renamed/g' -i krt*.mac

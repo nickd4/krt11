@@ -92,7 +92,7 @@ basedsp:
 	.sbttl	Local data
 
 	.psect	$pdata			; /62/ consolidated this stuff here..
-delmsg:	.asciz	" thunk_deleted"
+delmsg:	.asciz	" deleted"
 exitxt:	.asciz	^/cr/^/lf/"%KRTSER-I-Server stopped"^/cr/^/lf/
 	.blkb	ln$max			; /63/ buffer to prepend version data
 htxt:	.ascii	^/cr/^/lf/"       Server REMOTE commands:"^/cr/^/lf/^/cr/^/lf/
@@ -118,7 +118,7 @@ rem.04:	.asciz	" got invalid response"
 rem.05:	.asciz	" checksum failed"
 rem.06:	.asciz	" was NAKed"
 rem.07:	.asciz	" timed out"
-rem.08:	.asciz	"1 file thunk_renamed"	; /BBS/
+rem.08:	.asciz	"1 file renamed"	; /BBS/
 rem.ak:	.asciz	"Remote ACK:"^/cr/^/lf/
 ser.01:	.asciz	^/bell/"Get completed"
 ser.02:	.asciz	^/bell/"Get failed"
