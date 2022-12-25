@@ -1,6 +1,6 @@
 	.include "./macro-11.mac"
 	.include "./sysmac.mac"
-	.module	ohandl,3
+	_.module	ohandl,3
 	.globl	$ovdf1
 	.globl	$ovdf2
 	.area	$ohand (rel,con)

@@ -1,6 +1,6 @@
 	.include "./macro-11.mac"
 	.include "./sysmac.mac"
-	.module	ispy,1
+	_.module	ispy,1
 	.globl	$syslb
 	.area	sys$i (rel,con)
 ispy::	.word	017500,000002			; 000000

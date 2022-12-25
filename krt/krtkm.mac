@@ -140,12 +140,12 @@
 
 	.sbttl	Local macros
 
-.macro	.assume	a1 ,cnd ,a2 ,msg
+.macro	_.assume	a1 ,cnd ,a2 ,msg
 .if cnd <a1>-<a2>
 .iff
 .error	<; 'a1 is not 'cnd 'a2  'msg>
 .endc
-.endm	.assume
+.endm	_.assume
 
 .macro	.br to			; /63/ added..
 .if df	to
@@ -393,7 +393,7 @@
 o.bad:	sec				; something failed, set carry
 	rts	pc
 
-	.assume	. le 400 msg=<;*** INSTALL CODE IS TOO LARGE ***>
+	_.assume	. le 400 msg=<;*** INSTALL CODE IS TOO LARGE ***>
 
 
 	.if eq km$pro			; these are not settable on PRO-series
@@ -426,7 +426,7 @@ o.vec:	bit	#3	,r0		; multiple of 4?
 	rts	pc
 	.endc	; eq km$pro
 
-	.assume	. le 1000 msg=<;*** SET CODE IS TOO LARGE ***>
+	_.assume	. le 1000 msg=<;*** SET CODE IS TOO LARGE ***>
 
 
 	.sbttl	Driver entry
@@ -494,7 +494,7 @@ sts$r5:	.word	w5.txe!tcl.8		; status reg 5  tx enable, 8-bit chars
 	.drvtb	,km$vec+4,kmint		; dispatches everything..
 	.endc	; eq km$pro
 
-	.assume	. le kmstrt+1000 msg=<;*** BLOCK 1 CODE IS TOO LARGE ***>
+	_.assume	. le kmstrt+1000 msg=<;*** BLOCK 1 CODE IS TOO LARGE ***>
 
 
 	.sbttl	Break request		; here so everything else can branch..

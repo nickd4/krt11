@@ -1,6 +1,6 @@
 	.include "./macro-11.mac"
 	.include "./sysmac.mac"
-	.module	syslbv,16
+	_.module	syslbv,16
 $sysv$	==	16.
 	.area	sys$s (rel,con)
 $syslb::.word	000000				; 000000
